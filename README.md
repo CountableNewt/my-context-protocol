@@ -45,8 +45,8 @@ Set the frontend `NEXT_PUBLIC_API_URL` to the backend origin, usually `http://lo
 
 ## MyContextCLI
 
-MyContextCLI (`myctx`), written in Go, exposes the complete account, project, release, skill, runtime, billing,
-and administrator API with JSON output for agents. Requires Go 1.23+.
+MyContextCLI (`myctx`), written in Swift, exposes the complete account, project, release, skill, runtime, billing,
+and administrator API with JSON output for agents. Requires Swift 6+ on macOS or Linux.
 
 ```bash
 cd apps/context
@@ -80,7 +80,7 @@ GitHub Actions is the source of truth for CI. The single workflow at `.github/wo
 bash scripts/ci.sh
 ```
 
-The workflow runs Go CLI format, vet, tests, and build, the Bun/Turbo workspace checks, and the Swift tests/builds for `services/mcp-gateway`. Railway's GitHub integration deploys `dev` to Development and `main` to Production once those checks pass.
+The workflow runs Swift CLI formatting, unit and HTTP integration tests, and build, the Bun/Turbo workspace checks, and the Swift tests/builds for `services/mcp-gateway`. Railway's GitHub integration deploys `dev` to Development and `main` to Production once those checks pass.
 
 ### Deployment
 
