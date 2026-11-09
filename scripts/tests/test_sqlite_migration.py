@@ -1,5 +1,6 @@
 """Offline transfer regressions; run: python3 -m unittest discover -s scripts/tests -v."""
 import contextlib
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -233,6 +234,32 @@ class SQLiteMigrationTests(unittest.TestCase):
         for value, kind in [(1, "bool"), (1 << 63, "int8"), (float("nan"), "float8"), ({}, "text")]:
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 migration.convert(value, kind)
+
+    def test_postgres_timestamp_fraction_lengths_preserve_microseconds_on_python_310(self):
+        zones = [
+            ("", dt.timezone.utc),
+            ("Z", dt.timezone.utc),
+            ("+00:00", dt.timezone.utc),
+            ("+05:30", dt.timezone(dt.timedelta(hours=5, minutes=30))),
+            ("-07:00", dt.timezone(dt.timedelta(hours=-7))),
+        ]
+        for fraction in ["", "1", "12", "123", "1234", "12345", "123456", "00001", "999999"]:
+            microseconds = int(fraction.ljust(6, "0")) if fraction else 0
+            fractional_seconds = "." + fraction if fraction else ""
+            for suffix, zone in zones:
+                expected = dt.datetime(2026, 11, 9, 12, 30, 1, microseconds, tzinfo=zone).timestamp()
+                for separator in ["T", " "]:
+                    value = f"2026-11-09{separator}12:30:01{fractional_seconds}{suffix}"
+                    for kind in ["timestamp", "timestamptz"]:
+                        with self.subTest(fraction=fraction, suffix=suffix, separator=separator, kind=kind):
+                            self.assertEqual(migration.convert(value, kind), expected)
+
+    def test_malformed_and_overprecise_timestamps_are_rejected(self):
+        for value in ["2026-11-09T12:30:01.", "2026-11-09T12:30:01.1234567Z",
+                      "2026-11-09T12:30:01.12garbage", "2026-11-09T12:30:61.1Z",
+                      "2026-11-09T12:30:01.1+25:00", "infinity"]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                migration.convert(value, "timestamptz")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import sqlite3
 import subprocess
 import tempfile
@@ -83,6 +84,13 @@ def export_snapshot(output: Path, schema: str) -> None:
         raise
 
 
+def pad_timestamp_fraction(match: re.Match[str]) -> str:
+    fraction = match[1]
+    if len(fraction) > 6:
+        raise ValueError("timestamp precision exceeds PostgreSQL microseconds")
+    return "." + fraction.ljust(6, "0")
+
+
 def convert(value: object, pg_type: str) -> object:
     if value is None:
         return None
@@ -95,7 +103,10 @@ def convert(value: object, pg_type: str) -> object:
     if pg_type in {"timestamp", "timestamptz"}:
         if not isinstance(value, str):
             raise ValueError("invalid timestamp")
-        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # PostgreSQL trims trailing fractional zeros. Python 3.10 accepts only
+        # three or six digits; pad to microseconds without rounding or truncation.
+        normalized = re.sub(r"(?<=\d{2}:\d{2}:\d{2})\.(\d+)", pad_timestamp_fraction, value.replace("Z", "+00:00"))
+        parsed = dt.datetime.fromisoformat(normalized)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=dt.timezone.utc)
         # SQLiteKit stores Foundation Date as seconds since the Unix epoch.
