@@ -41,6 +41,8 @@ def export_sql(schema: str) -> str:
     return f"""\\set ON_ERROR_STOP on
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL TIME ZONE 'UTC';
+SET LOCAL row_security = off;
+SET LOCAL bytea_output = 'hex';
 SET LOCAL extra_float_digits = 3;
 SELECT json_build_object('format', '{FORMAT}', 'schema', {literal(schema)});
 SELECT format(

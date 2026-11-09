@@ -156,6 +156,9 @@ class SQLiteMigrationTests(unittest.TestCase):
         args, kwargs = run.call_args
         self.assertEqual(args[0], ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1"])
         self.assertIn("REPEATABLE READ READ ONLY", kwargs["input"])
+        self.assertIn("SET LOCAL row_security = off", kwargs["input"])
+        self.assertIn("SET LOCAL bytea_output = 'hex'", kwargs["input"])
+        self.assertEqual(kwargs["env"]["PGCLIENTENCODING"], "UTF8")
         self.assertNotIn("PGPASSWORD", " ".join(args[0]))
 
     def test_existing_export_is_not_overwritten(self):
@@ -188,6 +191,24 @@ class SQLiteMigrationTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT display FROM accounts").fetchone()[0], "private\n‘quoted’ Ω")
                 self.assertEqual(db.execute("SELECT secret FROM accounts").fetchone()[0], bytes.fromhex("00ff4142"))
                 self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+            # A restricted export must fail instead of producing a consistent but partial copy.
+            reader = "migration_reader_" + uuid.uuid4().hex
+            policies = f"""
+                CREATE ROLE {reader};
+                GRANT USAGE ON SCHEMA {schema} TO {reader};
+                GRANT SELECT ON ALL TABLES IN SCHEMA {schema} TO {reader};
+                ALTER TABLE {schema}.accounts ENABLE ROW LEVEL SECURITY;
+                CREATE POLICY hidden ON {schema}.accounts USING (false);
+            """
+            subprocess.run(["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1"], input=policies, text=True, check=True, capture_output=True)
+            restricted = self.root / "restricted.jsonl"
+            try:
+                with patch.dict(os.environ, {"PGUSER": reader}):
+                    with self.assertRaisesRegex(ValueError, "Postgres export failed"):
+                        migration.export_snapshot(restricted, schema)
+                self.assertFalse(restricted.exists())
+            finally:
+                subprocess.run(["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1"], input=f"DROP OWNED BY {reader}; DROP ROLE {reader};", text=True, check=True, capture_output=True)
         finally:
             subprocess.run(["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1"], input=f"DROP SCHEMA {schema} CASCADE;", text=True, check=True, capture_output=True)
 
