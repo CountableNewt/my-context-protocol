@@ -38,6 +38,8 @@ def json_line(value: object) -> str:
 
 def export_sql(schema: str) -> str:
     # All generated queries execute in this same read-only repeatable-read snapshot.
+    # Each gexec result cell must contain one statement: older psql clients only
+    # print the last result of a multi-statement cell, silently omitting metadata.
     return f"""\\set ON_ERROR_STOP on
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL TIME ZONE 'UTC';
@@ -46,8 +48,11 @@ SET LOCAL bytea_output = 'hex';
 SET LOCAL extra_float_digits = 3;
 SELECT json_build_object('format', '{FORMAT}', 'schema', {literal(schema)});
 SELECT format(
-  'SELECT json_build_object(''table'', %L, ''count'', (SELECT count(*) FROM %I.%I), ''columns'', (SELECT json_agg(json_build_object(''name'', column_name, ''type'', udt_name) ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = %L AND table_name = %L)); SELECT json_build_object(''row'', %L, ''values'', row_to_json(t)) FROM %I.%I t;',
-  table_name, table_schema, table_name, table_schema, table_name, table_name, table_schema, table_name)
+  'SELECT json_build_object(''table'', %L, ''count'', (SELECT count(*) FROM %I.%I), ''columns'', (SELECT json_agg(json_build_object(''name'', column_name, ''type'', udt_name) ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = %L AND table_name = %L))',
+  table_name, table_schema, table_name, table_schema, table_name) AS metadata_sql,
+  format(
+    'SELECT json_build_object(''row'', %L, ''values'', row_to_json(t)) FROM %I.%I t',
+    table_name, table_schema, table_name) AS rows_sql
 FROM information_schema.tables
 WHERE table_schema = {literal(schema)} AND table_type = 'BASE TABLE'
 ORDER BY table_name

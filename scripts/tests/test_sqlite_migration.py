@@ -178,15 +178,30 @@ class SQLiteMigrationTests(unittest.TestCase):
         CREATE TABLE {schema}.accounts (id UUID PRIMARY KEY, enabled BOOLEAN NOT NULL, created_at TIMESTAMPTZ,
             profile JSONB, secret BYTEA, display TEXT);
         CREATE TABLE {schema}.app_sessions (id UUID PRIMARY KEY, account_id UUID REFERENCES {schema}.accounts(id), payload TEXT);
+        CREATE TABLE {schema}.empty_records (id UUID PRIMARY KEY, note TEXT);
         INSERT INTO {schema}.accounts VALUES ('{ID}', true, '2026-11-09T12:30:01.123456Z',
             '{{"tags":["one","two"]}}', decode('00ff4142','hex'), E'private\\n‘quoted’ Ω');
         INSERT INTO {schema}.app_sessions VALUES ('{ID}', '{ID}', '{{"private":"session"}}');
         """
         subprocess.run(["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1"], input=ddl, text=True, check=True, capture_output=True)
         try:
+            with contextlib.closing(sqlite3.connect(self.template)) as db:
+                db.execute("CREATE TABLE empty_records (id TEXT PRIMARY KEY, note TEXT)")
             migration.export_snapshot(self.snapshot, schema)
+            # Exercise actual psql output, including empty-table metadata. psql 14
+            # drops the first result if one gexec cell contains multiple SELECTs.
+            metadata = {}
+            for entry in map(json.loads, self.snapshot.read_text().splitlines()):
+                if "table" in entry:
+                    metadata[entry["table"]] = entry
+                elif "row" in entry:
+                    self.assertIn(entry["row"], metadata, "table metadata must precede its rows")
+            self.assertEqual(set(metadata), {"_fluent_migrations", "accounts", "app_sessions", "empty_records"})
+            self.assertEqual(metadata["empty_records"]["count"], 0)
+            self.assertEqual([column["name"] for column in metadata["empty_records"]["columns"]], ["id", "note"])
             report = migration.import_snapshot(self.snapshot, self.template, self.output)
             self.assertEqual(report["tables"]["accounts"]["rows"], 1)
+            self.assertEqual(report["tables"]["empty_records"]["rows"], 0)
             with contextlib.closing(sqlite3.connect(self.output)) as db:
                 self.assertEqual(db.execute("SELECT display FROM accounts").fetchone()[0], "private\n‘quoted’ Ω")
                 self.assertEqual(db.execute("SELECT secret FROM accounts").fetchone()[0], bytes.fromhex("00ff4142"))
