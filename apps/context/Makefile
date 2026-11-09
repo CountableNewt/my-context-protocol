@@ -12,7 +12,7 @@ test:
 	$(SWIFT) build $(SWIFT_FLAGS)
 	MYCTX_BINARY="$$($(SWIFT) build $(SWIFT_FLAGS) --show-bin-path)/myctx" python3 -m unittest discover -s Tests -v
 check:
-	swift-format lint --strict --recursive Sources Tests Package.swift
+	$(SWIFT) format lint --strict --recursive Sources Tests Package.swift
 	$(SWIFT) build $(SWIFT_FLAGS) -Xswiftc -warnings-as-errors
 install:
 	sh scripts/install.sh "$(BINDIR)" "$(VERSION)"
