@@ -59,6 +59,27 @@ GET /auth/github/callback?code=<code>&state=<state>
 
 ---
 
+### CLI browser login
+
+`GET /auth/cli/github?return_to=<url>` starts the same GitHub authorization
+flow for native CLI clients. Unlike the web login route, it accepts only the exact
+canonical shape `http://127.0.0.1:PORT/callback?state=NONCE`, with an explicit port
+from 1 through 65535 and a 43–128 character base64url nonce. No other query
+parameters, user information, fragments, or alternate loopback spellings are
+accepted in the callback URL. Optional `prompt=select_account` is supported on
+the initiation request. Web `/auth/github` origin restrictions remain unchanged.
+
+The CLI must bind its listener before opening the initiation URL, verify its
+nonce on callback, and exchange the returned `auth_token` using
+`GET /auth/confirm?token=<one-time-token>`. With no `redirect` parameter, confirm
+returns the user JSON and account session cookie. It also returns
+`X-Context-Frontend-Origin` when a frontend origin is configured, so native
+clients can supply the existing required `Origin` header on session-authenticated
+mutations. The confirm JSON response has `Cache-Control: no-store`.
+
+CLI users authenticate as accounts; tenant MCP API keys do not grant management
+API access. See [`apps/context/README.md`](../../apps/context/README.md).
+
 ### 3. Current user (session check)
 
 **Request**

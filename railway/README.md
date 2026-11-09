@@ -3,6 +3,14 @@
 Railway hosts both active environments. Development cut over on 2026-08-09, and production cut over
 on 2026-08-10. Each environment has its own Web, Gateway, and Postgres instances.
 
+The Gateway now supports SQLite WAL as its primary database. Existing environments stay on Postgres
+until the [SQLite migration runbook](../docs/runbooks/sqlite-migration.md) is completed. The prepared
+configuration adds a dedicated `gateway-data` volume at `/data` and keeps one Gateway replica.
+Both Postgres and its volume remain declared for rollback. Do not change `DATABASE_DRIVER` until
+the imported SQLite file is validated on that volume; use `DATABASE_DRIVER=sqlite` and
+`SQLITE_PATH=/data/mycontext.sqlite` for cutover. Remove `SQLITE_ALLOW_CREATE` afterward so a missing
+database fails startup. Configure scheduled volume backups before accepting writes on SQLite.
+
 | Service | Development branch | Production branch |
 | --- | --- | --- |
 | Gateway | `dev` | `main` |

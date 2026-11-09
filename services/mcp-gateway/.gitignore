@@ -9,6 +9,9 @@ xcuserdata/
 # Local SQLite when USE_SQLITE=1 (default db.sqlite)
 db.sqlite
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
 *.log
 .cursor/
 .worktrees/

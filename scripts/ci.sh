@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs frontend checks (typecheck, lint, test, build) and Swift checks (test, release build)
-# in parallel. If either side fails its checks, the whole script exits non-zero immediately.
+# Runs Swift CLI checks, then frontend checks (typecheck, lint, test, build) and gateway
+# checks (test, release build) in parallel. Any failed check makes the script fail.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,8 +39,14 @@ run_logged() {
 # Install (serial — both sides need this done first)
 # ---------------------------------------------------------------------------
 
+header "Swift CLI format, test, and build"
+make -C "$ROOT/apps/context" check test build
+
 header "Bun workspace install"
 bun install --frozen-lockfile
+
+header "SQLite migration tests"
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -v
 
 # ---------------------------------------------------------------------------
 # Frontend checks (parallel sub-jobs)

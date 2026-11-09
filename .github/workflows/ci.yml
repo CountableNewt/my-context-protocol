@@ -29,3 +29,14 @@ jobs:
 
       - name: Run CI script
         run: bash scripts/ci.sh
+
+  cli-linux:
+    name: Swift CLI Linux
+    runs-on: ubuntu-latest
+    container: swift:6.2-jammy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test runner
+        run: apt-get update && apt-get install -y python3 make
+      - name: Test and build Swift CLI
+        run: make -C apps/context test build

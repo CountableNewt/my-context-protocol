@@ -1,0 +1,5 @@
+/bin/
+/.build/
+/.swiftpm/
+/__pycache__/
+/Tests/__pycache__/

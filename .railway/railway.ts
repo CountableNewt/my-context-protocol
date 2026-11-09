@@ -15,6 +15,8 @@ const gatewayVariables = [
   "SAAS_MCP_BASE_DOMAIN", "SAAS_MCP_PATH", "SAAS_MCP_URL_SCHEME", "SESSION_COOKIE_DOMAIN",
   "STRIPE_PRICE_PRO_MONTHLY", "STRIPE_PRICE_PRO_YEARLY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
   "WEBHOOK_BASE_URL",
+  // Stage these before the SQLite cutover. Preserve existing Postgres credentials for rollback.
+  "DATABASE_DRIVER", "USE_SQLITE", "SQLITE_PATH", "SQLITE_ALLOW_CREATE",
 ];
 const productionOnlyGatewayVariables = [
   "DATABASE_SSLROOTCERT_PEM", "DATABASE_TLS_PINNED_CA", "INTERNAL_PRO_GITHUB_LOGINS",
@@ -35,6 +37,13 @@ export default defineRailway((ctx, project) => {
     region: "sfo",
     sizeMB: 50000,
   });
+  // Attached before switching drivers; never put the live database in the container filesystem.
+  const gatewayVolume = volume("gateway-data", {
+    alerts: { usage: { "100": {}, "80": {}, "95": {} } },
+    allowOnlineResize: true,
+    region: "sfo",
+    sizeMB: 50000,
+  });
 
   // Both services build from the monorepo root: the Gateway Dockerfile copies services/mcp-gateway/*
   // and Web's build runs Turbo across the Bun workspace.
@@ -46,6 +55,8 @@ export default defineRailway((ctx, project) => {
 
   const Gateway = service("Gateway", {
     source,
+    replicas: 1,
+    volumeMounts: { "/data": gatewayVolume },
     build: {
       builder: "DOCKERFILE",
       dockerfilePath: "/services/mcp-gateway/Dockerfile.railway",
@@ -79,5 +90,6 @@ export default defineRailway((ctx, project) => {
     env: preserved(webVariables),
   });
 
-  return project("MyContextProtocol", { resources: [Postgres, postgresVolume, Gateway, Web] });
+  // Keep Postgres and its volume until the SQLite migration and rollback window are complete.
+  return project("MyContextProtocol", { resources: [Postgres, postgresVolume, gatewayVolume, Gateway, Web] });
 });

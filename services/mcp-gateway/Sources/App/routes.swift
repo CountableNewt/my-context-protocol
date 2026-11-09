@@ -40,6 +40,9 @@ func routes(_ app: Application) throws {
     app.get("auth", "github") { req in
         try await AuthController.githubInitiate(req: req)
     }
+    app.get("auth", "cli", "github") { req in
+        try await AuthController.cliGithubInitiate(req: req)
+    }
     app.get("auth", "github", "mcp-oauth-start") { req in
         try await McpOAuthController.githubMcpOauthStart(req: req)
     }

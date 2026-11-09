@@ -7,6 +7,7 @@ Stygian-style monorepo for MyContextProtocol: a hosted MCP gateway that ingests 
 ```text
 .
 ├── apps/
+│   ├── context/                     # MyContextCLI (myctx) for agents and account management
 │   └── web/                         # Next.js 16 / Bun dashboard
 ├── packages/
 │   ├── mycontext-api-contract/      # Backend API contract docs
@@ -32,7 +33,7 @@ bun install
 # Backend (port 8080 by default)
 cd services/mcp-gateway
 cp .env.example .env
-swift run App
+APP_ENV=local swift run App
 
 # Frontend (port 3000 by default)
 cd ../../apps/web
@@ -42,6 +43,35 @@ bun dev
 
 Set the frontend `NEXT_PUBLIC_API_URL` to the backend origin, usually `http://localhost:8080`.
 
+## MyContextCLI
+
+MyContextCLI (`myctx`), written in Swift, exposes the complete account, project, release, skill, runtime, billing,
+and administrator API with JSON output for agents. Requires Swift 6+ on macOS or Linux.
+
+```bash
+cd apps/context
+make install
+myctx auth login
+myctx projects list
+myctx commands
+```
+
+The CLI defaults to the hosted account API at `https://api.mycontextprotocol.dev`.
+For self-hosting or an explicit Development environment, override it with `--url`,
+`MYCTX_URL`, or a saved profile URL. Precedence is flags, environment, profile,
+then hosted default; existing profiles retain their explicit URL. A personal
+tenant MCP endpoint is separate from the account API.
+
+Install produces `~/.local/bin/myctx`; `make build` produces `bin/myctx`.
+Environment variables use `MYCTX_*`, with legacy `CONTEXT_*` fallbacks. Existing
+default `context/config.json` profiles remain usable automatically when the new
+`myctx/config.json` file does not exist.
+
+See [the CLI guide](apps/context/README.md) for profiles, automation, all command
+groups, request payloads, and installation. Browser login requires the accompanying
+gateway changes to be deployed; the CLI detects missing authentication support
+before opening a browser.
+
 ## CI / CD
 
 GitHub Actions is the source of truth for CI. The single workflow at `.github/workflows/ci.yml` calls local scripts so checks can be reproduced outside Actions:
@@ -50,7 +80,7 @@ GitHub Actions is the source of truth for CI. The single workflow at `.github/wo
 bash scripts/ci.sh
 ```
 
-The workflow runs the Bun/Turbo workspace checks and the Swift tests/builds for `services/mcp-gateway`. Railway's GitHub integration deploys `dev` to Development and `main` to Production once those checks pass.
+The workflow runs Swift CLI formatting, unit and HTTP integration tests, and build, the Bun/Turbo workspace checks, and the Swift tests/builds for `services/mcp-gateway`. Railway's GitHub integration deploys `dev` to Development and `main` to Production once those checks pass.
 
 ### Deployment
 
@@ -58,6 +88,11 @@ The workflow runs the Bun/Turbo workspace checks and the Swift tests/builds for 
 - **Production**: Railway hosts Web, Gateway, and Postgres in an isolated `production` environment. See `railway/README.md` and `docs/runbooks/supabase-to-railway-production.md`.
 - **Retired infrastructure**: the previous Fly gateway, Supabase database, and Vercel frontend were permanently removed after the Railway cutover was verified. They are not rollback targets.
 - **Optional self-hosting**: `services/mcp-gateway/docker-compose.yml` remains as a Portainer/Compose reference.
+
+SQLite WAL is the primary Gateway database for new installations. Existing hosted Postgres
+configuration remains active until an explicit cutover. The [SQLite migration runbook](docs/runbooks/sqlite-migration.md)
+covers snapshot verification, persistent Gateway storage, backups, and rollback. Preparing the
+configuration does not migrate the hosted environments.
 
 ## History
 

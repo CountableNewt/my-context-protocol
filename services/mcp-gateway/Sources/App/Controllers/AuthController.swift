@@ -52,11 +52,6 @@ struct AuthController {
         if let prompt, prompt != "select_account" {
             throw Abort(.badRequest, reason: "Unsupported GitHub sign-in prompt")
         }
-        guard let clientId = Environment.get("GITHUB_CLIENT_ID"), !clientId.isEmpty else {
-            throw Abort(.internalServerError, reason: "GITHUB_CLIENT_ID not configured")
-        }
-        let redirectUri = try GitHubOAuthLoginConfig.redirectURI(logger: req.logger)
-
         let returnTo: String
         if let q = req.query[String.self, at: "return_to"], !q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             returnTo = try AppFrontendURL.validateReturnTo(q, for: req)
@@ -69,6 +64,50 @@ struct AuthController {
             )
         }
 
+        return try githubAuthorizeResponse(req: req, returnTo: returnTo, prompt: prompt)
+    }
+
+    /// A separate entry point keeps browser redirects restricted to frontend origins.
+    /// The CLI binds this numeric loopback address before opening the authorization URL.
+    static func cliGithubInitiate(req: Request) async throws -> Response {
+        let prompt = req.query[String.self, at: "prompt"]
+        if let prompt, prompt != "select_account" {
+            throw Abort(.badRequest, reason: "Unsupported GitHub sign-in prompt")
+        }
+        guard let raw = req.query[String.self, at: "return_to"] else {
+            throw Abort(.badRequest, reason: "return_to is required")
+        }
+        let returnTo = try validateCliReturnTo(raw)
+        return try githubAuthorizeResponse(req: req, returnTo: returnTo, prompt: prompt)
+    }
+
+    static func validateCliReturnTo(_ raw: String) throws -> String {
+        let invalid = Abort(.badRequest, reason: "CLI return_to must be http://127.0.0.1:PORT/callback with a single random state parameter")
+        guard raw.utf8.count <= 512,
+              let url = URLComponents(string: raw),
+              url.scheme == "http", url.host == "127.0.0.1",
+              url.user == nil, url.password == nil, url.fragment == nil,
+              let port = url.port, (1 ... 65535).contains(port),
+              url.percentEncodedPath == "/callback",
+              let query = url.queryItems, query.count == 1,
+              query[0].name == "state", let nonce = query[0].value,
+              (43 ... 128).contains(nonce.utf8.count),
+              nonce.utf8.allSatisfy({ byte in
+                  (65 ... 90).contains(byte) || (97 ... 122).contains(byte)
+                      || (48 ... 57).contains(byte) || byte == 45 || byte == 95
+              }),
+              // Require the canonical spelling: no encoded host/path/query tricks or controls.
+              raw == "http://127.0.0.1:\(port)/callback?state=\(nonce)" else {
+            throw invalid
+        }
+        return raw
+    }
+
+    private static func githubAuthorizeResponse(req: Request, returnTo: String, prompt: String?) throws -> Response {
+        guard let clientId = Environment.get("GITHUB_CLIENT_ID"), !clientId.isEmpty else {
+            throw Abort(.internalServerError, reason: "GITHUB_CLIENT_ID not configured")
+        }
+        let redirectUri = try GitHubOAuthLoginConfig.redirectURI(logger: req.logger)
         let state: String
         do {
             state = try SignedOAuthState.signGitHubOAuth(returnTo: returnTo)
@@ -332,7 +371,13 @@ struct AuthController {
 
         let suggest = try await Self.suggestedGithubAppMe(account: account, db: req.db)
         let needsProjectSelection = try await Self.computeNeedsProjectSelection(account: account, db: req.db)
-        return try await userResponse(for: account, suggestedGithubAppInstall: suggest, needsProjectSelection: needsProjectSelection).encodeResponse(for: req)
+        let response = try await userResponse(for: account, suggestedGithubAppInstall: suggest, needsProjectSelection: needsProjectSelection).encodeResponse(for: req)
+        // Native clients need the server's configured frontend origin for cookie-authenticated writes.
+        if let origin = AppFrontendURL.allowedOriginBases().first {
+            response.headers.replaceOrAdd(name: "X-Context-Frontend-Origin", value: origin)
+        }
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        return response
     }
 
     /// Pro users with GitHub repos missing App installation, when slug + webhook base URL are configured.
