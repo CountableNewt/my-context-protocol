@@ -118,12 +118,11 @@ public func configure(_ app: Application) async throws {
 
     if app.environment == .testing, !usePostgresInTests {
         app.databases.use(.sqlite(.memory, sqlLogLevel: sqlLiteLevel), as: .sqlite)
-    } else if isTruthyEnv("USE_SQLITE") {
-        // Local dev: file-backed SQLite (leave DATABASE_URL empty). Path is relative to the process working directory.
-        let rawPath = Environment.get("SQLITE_PATH") ?? "db.sqlite"
-        let sqlitePath = rawPath.hasPrefix("/") ? rawPath : app.directory.workingDirectory + rawPath
-        app.databases.use(.sqlite(.file(sqlitePath), sqlLogLevel: sqlLiteLevel), as: .sqlite)
-        app.logger.info("Using SQLite database at \(sqlitePath)")
+    } else if try SQLiteBootstrap.driver() == .sqlite {
+        let path = try SQLiteBootstrap.path(
+            raw: Environment.get("SQLITE_PATH"), deployKind: deploy, workingDirectory: app.directory.workingDirectory
+        )
+        try await SQLiteBootstrap.install(on: app, path: path, deployKind: deploy, allowCreate: isTruthyEnv("SQLITE_ALLOW_CREATE"))
     } else if let databaseURL = Environment.get("DATABASE_URL"), !databaseURL.isEmpty {
         let useInsecureTLS = Environment.get("DATABASE_INSECURE_TLS").map { $0.lowercased() }.map { $0 == "1" || $0 == "true" } ?? false
         try DatabaseBootstrap.assertInsecurePostgresTLSAllowed(useInsecureTLS, deployKind: deploy)

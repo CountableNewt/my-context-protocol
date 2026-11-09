@@ -5,7 +5,7 @@ Swift/Vapor backend for MyContextProtocol. It syncs Git repositories containing 
 ## Stack
 
 - Swift 6 / Vapor
-- Fluent with Postgres in hosted environments and SQLite for local development/tests
+- Fluent with SQLite WAL as the primary database and Postgres compatibility during migration
 - GitHub OAuth and GitHub App installation flows
 - Stripe billing webhooks
 - `mcp-server-kit` for reusable MCP protocol models and schema primitives
@@ -14,10 +14,18 @@ Swift/Vapor backend for MyContextProtocol. It syncs Git repositories containing 
 
 ```bash
 cp .env.example .env
-swift run App
+APP_ENV=local swift run App
 ```
 
-By default the app listens on `0.0.0.0:8080`. For local SQLite, set `USE_SQLITE=1` and leave `DATABASE_URL` / `SUPABASE_DB_URL` empty. For hosted-like local development, set `APP_ENV=dev` plus `DATABASE_URL` or `SUPABASE_DB_URL`.
+By default the app listens on `0.0.0.0:8080`. Set `APP_ENV=local` for local development;
+SQLite uses `db.sqlite` in the service directory unless `SQLITE_PATH` is set. File databases use
+WAL and enforce foreign keys on every pooled connection. SQLiteNIO handles lock contention;
+the driver does not expose a configurable per-connection busy timeout.
+
+`DATABASE_DRIVER=sqlite` selects SQLite explicitly. Without a driver, existing Postgres URLs or
+discrete connection fields retain Postgres behavior; an unconfigured database defaults to SQLite.
+`DATABASE_DRIVER=postgres` selects Postgres explicitly. Legacy `USE_SQLITE=1` still selects SQLite
+when `DATABASE_DRIVER` is unset.
 
 ## Tests
 
@@ -44,16 +52,24 @@ Sources/App/
 
 ## Hosted environments
 
-Development and production run on isolated Railway environments with Railway Postgres. See the
+Development and production run on isolated Railway environments. For SQLite, attach a persistent
+volume to the Gateway, keep one Gateway replica, and set `DATABASE_DRIVER=sqlite` plus
+`SQLITE_PATH=/data/mycontext.sqlite`. Deployed environments reject relative paths and missing files.
+Import and verify the existing database before switching the driver. `SQLITE_ALLOW_CREATE=1`
+permits intentional empty-database initialization; remove it afterward so a missing volume fails closed.
+Back up through SQLite's online backup API or a stopped/checkpointed database; copying only the main
+file while WAL writes are active can lose committed data. Keep the database and its WAL/SHM files
+on the same local persistent volume. See the
 root `railway/README.md` and the runbooks under `docs/runbooks/`. The former Fly production app,
 Supabase database, and Vercel frontend were permanently removed after the Railway production
 cutover and are not rollback resources.
 
-Set production variables on the Railway Gateway service:
+For temporary Postgres compatibility, configure the Railway Gateway service:
 
 ```bash
 railway variable set --environment production --service Gateway \
   APP_ENV=prod \
+  DATABASE_DRIVER=postgres \
   DATABASE_HOST='postgres.railway.internal' \
   DATABASE_PORT=5432 \
   DATABASE_USERNAME='postgres' \
@@ -125,9 +141,10 @@ Common startup failures:
   Railway Postgres presents a self-signed certificate that only names `localhost`, so production
   sets `DATABASE_SSLROOTCERT_PEM` to that database's `root.crt` plus `DATABASE_TLS_PINNED_CA=1`:
   the pinned CA becomes the only trust root and hostname matching is skipped.
-- **Missing database config** — hosted Railway environments require all discrete
-  `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `DATABASE_NAME`
-  fields. `USE_SQLITE=1` is only for local file-backed SQLite.
+- **Missing SQLite file** — confirm the persistent Gateway volume is mounted and `SQLITE_PATH`
+  points to the migrated database. Do not enable `SQLITE_ALLOW_CREATE` to bypass a missing volume.
+- **Missing Postgres config** — when Postgres is selected, set a connection URL or all discrete
+  `DATABASE_HOST`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `DATABASE_NAME` fields.
 
 ## Docker / Compose
 
