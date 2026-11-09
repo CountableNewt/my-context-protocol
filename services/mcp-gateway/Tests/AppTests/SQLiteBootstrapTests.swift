@@ -47,6 +47,9 @@ struct SQLiteBootstrapTests {
                 try await SQLiteBootstrap.install(on: app, path: root.appendingPathComponent("db.sqlite").path, deployKind: .prod)
             }
             #expect(!FileManager.default.fileExists(atPath: root.path))
+            try await SQLiteBootstrap.install(on: app, path: root.appendingPathComponent("db.sqlite").path,
+                deployKind: .prod, allowCreate: true)
+            #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("db.sqlite").path))
             try await app.asyncShutdown()
         } catch {
             try await app.asyncShutdown()
@@ -61,7 +64,7 @@ struct SQLiteBootstrapTests {
             let path = root.appendingPathComponent("db.sqlite").path
             defer { try? FileManager.default.removeItem(at: root) }
             let overrides = [
-                "APP_ENV": "local", "DATABASE_DRIVER": "sqlite", "SQLITE_PATH": path,
+                "APP_ENV": "local", "DATABASE_DRIVER": "sqlite", "SQLITE_PATH": path, "SQLITE_ALLOW_CREATE": "0",
                 "USE_MEMORY_SESSIONS": "0", "LOG_LEVEL": "critical",
                 "DISABLE_ADMIN_ANALYTICS_ROLLUP_SCHEDULER": "1", "DISABLE_STRIPE_RECONCILIATION_SCHEDULER": "1",
                 "DISABLE_SKILL_USAGE_RETENTION_SCHEDULER": "1", "SEED_LOCAL_FIXTURES": "0",
@@ -93,11 +96,18 @@ struct SQLiteBootstrapTests {
                 compiled.canonicalJson = canonicalJSON
                 try await compiled.save(on: first.db)
                 try await AppSessionRecord(sessionKey: "durability-session", payload: "{\"account_id\":\"\(accountId)\"}").save(on: first.db)
+                for suffix in ["", "-wal", "-shm"] {
+                    let attributes = try FileManager.default.attributesOfItem(atPath: path + suffix)
+                    let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+                    #expect(permissions.intValue & 0o777 == 0o600)
+                }
                 try await first.asyncShutdown()
             } catch {
                 try await first.asyncShutdown()
                 throw error
             }
+            // Reopening through the deployed bootstrap also proves migration history is recognized.
+            setenv("APP_ENV", "prod", 1)
             let second = try await Application.make(.development)
             do {
                 try await configure(second)
@@ -123,6 +133,65 @@ struct SQLiteBootstrapTests {
                 try await second.asyncShutdown()
                 throw error
             }
+        }
+    }
+
+    @Test("Deployed boot rejects empty files and unrelated SQLite databases before migrations")
+    func deployedRejectsUninitializedFiles() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("sqlite-uninitialized-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for content in [Data(), Data("unrelated text file".utf8)] {
+            let path = root.appendingPathComponent("not-a-database.sqlite").path
+            try content.write(to: URL(fileURLWithPath: path))
+            let app = try await Application.make(.testing)
+            do {
+                await #expect(throws: SQLiteBootstrapError.uninitializedDeployedDatabase) {
+                    try await SQLiteBootstrap.install(on: app, path: path, deployKind: .prod)
+                }
+                #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == content)
+                try await app.asyncShutdown()
+            } catch {
+                try await app.asyncShutdown()
+                throw error
+            }
+        }
+        let path = root.appendingPathComponent("unrelated.sqlite").path
+        let creator = try await Application.make(.testing)
+        do {
+            try await SQLiteBootstrap.install(on: creator, path: path)
+            let sql = try #require(creator.db as? any SQLDatabase)
+            try await sql.raw("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)").run()
+            try await creator.asyncShutdown()
+        } catch {
+            try await creator.asyncShutdown()
+            throw error
+        }
+        let deployed = try await Application.make(.testing)
+        do {
+            await #expect(throws: SQLiteBootstrapError.uninitializedDeployedDatabase) {
+                try await SQLiteBootstrap.install(on: deployed, path: path, deployKind: .prod)
+            }
+            let sql = try #require(deployed.db as? any SQLDatabase)
+            #expect(try await sql.raw("SELECT name FROM sqlite_master WHERE name = '_fluent_migrations'").all().isEmpty)
+            try await sql.raw("CREATE TABLE accounts (id TEXT)").run()
+            try await sql.raw("CREATE TABLE projects (id TEXT)").run()
+            try await sql.raw("CREATE TABLE _fluent_migrations (name TEXT)").run()
+            try await sql.raw("INSERT INTO _fluent_migrations (name) VALUES ('OtherApp.CreateAccounts')").run()
+            try await deployed.asyncShutdown()
+        } catch {
+            try await deployed.asyncShutdown()
+            throw error
+        }
+        let foreignHistory = try await Application.make(.testing)
+        do {
+            await #expect(throws: SQLiteBootstrapError.uninitializedDeployedDatabase) {
+                try await SQLiteBootstrap.install(on: foreignHistory, path: path, deployKind: .prod)
+            }
+            try await foreignHistory.asyncShutdown()
+        } catch {
+            try await foreignHistory.asyncShutdown()
+            throw error
         }
     }
 }

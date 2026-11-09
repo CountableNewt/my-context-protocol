@@ -54,7 +54,8 @@ Sources/App/
 
 Development and production run on isolated Railway environments. For SQLite, attach a persistent
 volume to the Gateway, keep one Gateway replica, and set `DATABASE_DRIVER=sqlite` plus
-`SQLITE_PATH=/data/mycontext.sqlite`. Deployed environments reject relative paths and missing files.
+`SQLITE_PATH=/data/mycontext.sqlite`. Deployed environments require a regular SQLite file containing
+the application's tables and migration history; missing, empty, and unrelated databases fail closed.
 Import and verify the existing database before switching the driver. `SQLITE_ALLOW_CREATE=1`
 permits intentional empty-database initialization; remove it afterward so a missing volume fails closed.
 Back up through SQLite's online backup API or a stopped/checkpointed database; copying only the main
