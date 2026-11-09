@@ -45,6 +45,9 @@ make -C "$ROOT/apps/context" check test build
 header "Bun workspace install"
 bun install --frozen-lockfile
 
+header "SQLite migration tests"
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -v
+
 # ---------------------------------------------------------------------------
 # Frontend checks (parallel sub-jobs)
 # ---------------------------------------------------------------------------

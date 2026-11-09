@@ -1,4 +1,7 @@
-# Runs the API only. No bundled Postgres — use Supabase or set DATABASE_URL / SUPABASE_DB_URL (or all DATABASE_* for dev/prod; see DatabaseBootstrap.swift).
+# Runs one API replica with persistent SQLite storage at /data. Set DATABASE_DRIVER=sqlite,
+# SQLITE_PATH=/data/mycontext.sqlite, and import the database before starting in dev/prod.
+# For an intentionally empty installation only, initialize with SQLITE_ALLOW_CREATE=1, then remove it.
+# Postgres remains available by selecting DATABASE_DRIVER=postgres and setting its connection fields.
 #
 # Portainer / stack env injection
 # --------------------------------
@@ -34,6 +37,8 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+    volumes:
+      - gateway-data:/data
     # --- Uncomment if using Traefik ---
     # labels:
     #   - "traefik.enable=true"
@@ -54,6 +59,7 @@ services:
       - APP_ENV
       - CORS_ORIGIN
       - DATABASE_ALLOW_LOOPBACK
+      - DATABASE_DRIVER
       - DATABASE_HOST
       - DATABASE_INSECURE_TLS
       - DATABASE_NAME
@@ -101,6 +107,7 @@ services:
       - SAAS_MCP_URL_SCHEME
       - SEED_LOCAL_FIXTURES
       - SESSION_COOKIE_DOMAIN
+      - SQLITE_ALLOW_CREATE
       - SQLITE_PATH
       - STRICT_PRO_GATING
       - STRIPE_PRICE_PRO
@@ -118,3 +125,6 @@ services:
       - USE_MEMORY_SESSIONS
       - USE_SQLITE
       - WEBHOOK_BASE_URL
+
+volumes:
+  gateway-data:

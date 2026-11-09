@@ -33,7 +33,7 @@ bun install
 # Backend (port 8080 by default)
 cd services/mcp-gateway
 cp .env.example .env
-swift run App
+APP_ENV=local swift run App
 
 # Frontend (port 3000 by default)
 cd ../../apps/web
@@ -88,6 +88,11 @@ The workflow runs Swift CLI formatting, unit and HTTP integration tests, and bui
 - **Production**: Railway hosts Web, Gateway, and Postgres in an isolated `production` environment. See `railway/README.md` and `docs/runbooks/supabase-to-railway-production.md`.
 - **Retired infrastructure**: the previous Fly gateway, Supabase database, and Vercel frontend were permanently removed after the Railway cutover was verified. They are not rollback targets.
 - **Optional self-hosting**: `services/mcp-gateway/docker-compose.yml` remains as a Portainer/Compose reference.
+
+SQLite WAL is the primary Gateway database for new installations. Existing hosted Postgres
+configuration remains active until an explicit cutover. The [SQLite migration runbook](docs/runbooks/sqlite-migration.md)
+covers snapshot verification, persistent Gateway storage, backups, and rollback. Preparing the
+configuration does not migrate the hosted environments.
 
 ## History
 
