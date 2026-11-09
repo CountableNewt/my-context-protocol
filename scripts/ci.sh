@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs Go CLI checks, then frontend checks (typecheck, lint, test, build) and Swift
+# Runs Swift CLI checks, then frontend checks (typecheck, lint, test, build) and gateway
 # checks (test, release build) in parallel. Any failed check makes the script fail.
 set -euo pipefail
 
@@ -39,14 +39,8 @@ run_logged() {
 # Install (serial — both sides need this done first)
 # ---------------------------------------------------------------------------
 
-header "Go CLI format, vet, test, and build"
-(
-  cd "$ROOT/apps/context"
-  test -z "$(gofmt -l cmd internal)"
-  go vet ./...
-  go test -race -cover ./...
-  go build -trimpath -o bin/myctx ./cmd/myctx
-)
+header "Swift CLI format, test, and build"
+make -C "$ROOT/apps/context" check test build
 
 header "Bun workspace install"
 bun install --frozen-lockfile

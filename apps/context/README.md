@@ -1,13 +1,13 @@
 # MyContextCLI
 
-MyContextCLI (`myctx`) is the Go CLI for MyContextProtocol. It exposes every current account,
+MyContextCLI (`myctx`) is the Swift CLI for MyContextProtocol. It exposes every current account,
 project, and administrator management route to people and agents. Success output
 is JSON on stdout; errors are readable text on stderr by default. Add `--json`
-for structured errors in agent scripts. It uses only the Go standard library.
+for structured errors in agent scripts. It uses Swift Foundation and platform socket APIs, with no third-party packages.
 
 ## Install
 
-Requires Go 1.23 or newer. From this repository:
+Requires Swift 6 or newer on macOS or Linux. Tests also require Python 3. From this repository:
 
 ```sh
 cd apps/context
@@ -24,12 +24,7 @@ automatically. A custom destination is supported with `make install BINDIR=/path
 or `PREFIX=/prefix` (installs into `/prefix/bin`); use an absolute destination
 whose exact spelling appears as a `PATH` entry.
 
-`go install ./cmd/myctx` remains available for Go users who already have
-`GOBIN` or `GOPATH/bin` on their `PATH`.
-
-Build a versioned binary with `make build VERSION=0.1.0`. Cross compilation uses
-normal Go tooling, for example `GOOS=linux GOARCH=amd64 go build -o bin/myctx-linux-amd64 ./cmd/myctx`.
-No Node or Swift runtime is needed to run the CLI.
+Build a versioned binary with `make build VERSION=0.1.0`. Build on each target platform with its Swift toolchain. The installed executable needs no Node or Go runtime; Linux hosts require the Swift runtime libraries supplied by their Swift installation.
 
 ## Authenticate
 
@@ -89,8 +84,8 @@ Environment variables use the `MYCTX_*` prefix: `MYCTX_URL`, `MYCTX_WEB_URL`,
 `MYCTX_SESSION`, `MYCTX_PROFILE`, `MYCTX_PROJECT`, and `MYCTX_CONFIG`. The previous
 `CONTEXT_*` names remain supported as fallbacks when their corresponding
 `MYCTX_*` variable is unset or empty. In particular, `MYCTX_CONFIG` takes priority
-over `CONTEXT_CONFIG`. The repository folder and Go module remain `apps/context`;
-the executable and command package are now `myctx` and `cmd/myctx`.
+over `CONTEXT_CONFIG`. The repository folder and Swift package remain `apps/context`;
+the executable is `myctx`.
 
 ## Profiles and defaults
 
@@ -219,7 +214,10 @@ make test
 make build
 ```
 
-The route-coverage test reads `services/mcp-gateway/Sources/App/routes.swift` and
+The Swift route-coverage test reads `services/mcp-gateway/Sources/App/routes.swift` and
 fails when a management endpoint is missing from the registry. Tests therefore
-run from the monorepo checkout. The root CI script runs Go format, vet, race tests,
-and build alongside existing Web and Swift checks.
+run from the monorepo checkout. The CLI checks run Swift formatting and warnings-as-errors builds, native Swift tests,
+and executable integration tests against isolated loopback HTTP servers. The latter cover
+browser authentication, session storage, credential isolation, redirects, JSON precision,
+request handling and error output. `make build VERSION=...` embeds the version into the
+standalone executable. Concurrent versioned builds in the same checkout are unsupported.

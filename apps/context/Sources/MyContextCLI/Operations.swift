@@ -1,0 +1,138 @@
+public struct Operation: Sendable {
+  public let name, method, path, description: String
+}
+
+public let operations: [Operation] = [
+  Operation(name: "health", method: "GET", path: "/health", description: "Check Gateway health"),
+  Operation(
+    name: "auth me", method: "GET", path: "/auth/me", description: "Show the authenticated account"),
+  Operation(
+    name: "auth logout", method: "POST", path: "/auth/logout",
+    description: "Invalidate the current session"),
+  Operation(
+    name: "dashboard summary", method: "GET", path: "/dashboard/summary",
+    description: "Show account dashboard summary"),
+  Operation(
+    name: "dashboard timeseries", method: "GET", path: "/dashboard/timeseries",
+    description: "Show account dashboard timeseries"),
+  Operation(
+    name: "projects list", method: "GET", path: "/projects", description: "List owned projects"),
+  Operation(
+    name: "projects create", method: "POST", path: "/projects",
+    description: "Create a project with name and slug"),
+  Operation(
+    name: "projects get", method: "GET", path: "/projects/:id", description: "Show a project"),
+  Operation(
+    name: "projects update", method: "PATCH", path: "/projects/:id",
+    description: "Update a project display name"),
+  Operation(
+    name: "projects set-active", method: "POST", path: "/projects/:id/set-active",
+    description: "Select the active project for the account"),
+  Operation(
+    name: "projects summary", method: "GET", path: "/projects/:id/dashboard/summary",
+    description: "Show project dashboard summary"),
+  Operation(
+    name: "projects timeseries", method: "GET", path: "/projects/:id/dashboard/timeseries",
+    description: "Show project dashboard timeseries"),
+  Operation(
+    name: "catalog get", method: "GET", path: "/projects/:id/catalog",
+    description: "Show active release capabilities and catalog markdown"),
+  Operation(
+    name: "catalog update", method: "PATCH", path: "/projects/:id/catalog-markdown",
+    description: "Update custom catalog markdown"),
+  Operation(
+    name: "repos connection", method: "GET", path: "/projects/:id/repo-connection",
+    description: "Show the project repository connection"),
+  Operation(
+    name: "repos connect", method: "POST", path: "/projects/:id/connect-repo",
+    description: "Connect a GitHub repository and branch"),
+  Operation(
+    name: "projects sync", method: "POST", path: "/projects/:id/sync",
+    description: "Trigger repository synchronization"),
+  Operation(
+    name: "releases list", method: "GET", path: "/projects/:id/releases",
+    description: "List project releases"),
+  Operation(
+    name: "releases activate", method: "POST", path: "/projects/:id/releases/:releaseId/activate",
+    description: "Activate a project release"),
+  Operation(
+    name: "releases validation", method: "GET",
+    path: "/projects/:id/releases/:releaseId/validation",
+    description: "Show release validation results"),
+  Operation(
+    name: "skills list", method: "GET", path: "/projects/:id/releases/:releaseId/compiled-skills",
+    description: "List compiled release skills"),
+  Operation(
+    name: "skills update", method: "PATCH",
+    path: "/projects/:id/releases/:releaseId/compiled-skills/:compiledSkillId",
+    description: "Update compiled skill content, MCP metadata, routing, and runtime overrides"),
+  Operation(
+    name: "skills writeback", method: "POST",
+    path: "/projects/:id/releases/:releaseId/compiled-skills/:compiledSkillId/writeback",
+    description: "Create a branch and draft GitHub pull request for skill metadata"),
+  Operation(
+    name: "skills usage", method: "GET", path: "/projects/:id/skill-usage",
+    description: "Show paginated retained per-skill usage analytics"),
+  Operation(
+    name: "runtime get", method: "GET", path: "/projects/:id/skill-runtime",
+    description: "Show runtime settings, assignments, and recent events"),
+  Operation(
+    name: "runtime update", method: "PATCH", path: "/projects/:id/skill-runtime",
+    description: "Update runtime settings, assignments, feedback permissions, and telemetry consent"
+  ),
+  Operation(
+    name: "keys list", method: "GET", path: "/projects/:id/api-keys",
+    description: "List active API keys, optionally including revoked keys"),
+  Operation(
+    name: "keys create", method: "POST", path: "/projects/:id/api-keys",
+    description: "Create an MCP API key; the full key is returned once"),
+  Operation(
+    name: "keys update", method: "PATCH", path: "/projects/:id/api-keys/:keyId",
+    description: "Rename an active API key"),
+  Operation(
+    name: "keys revoke", method: "DELETE", path: "/projects/:id/api-keys/:keyId",
+    description: "Revoke an MCP API key"),
+  Operation(
+    name: "logs list", method: "GET", path: "/projects/:id/request-logs",
+    description: "List request logs using limit and offset pagination"),
+  Operation(
+    name: "domains get", method: "GET", path: "/projects/:id/custom-domain",
+    description: "Show custom domain DNS and TLS status"),
+  Operation(
+    name: "domains set", method: "POST", path: "/projects/:id/custom-domain",
+    description: "Provision a custom domain"),
+  Operation(
+    name: "domains verify", method: "POST", path: "/projects/:id/custom-domain/verify",
+    description: "Verify project ownership, routing DNS, and TLS status"),
+  Operation(
+    name: "billing checkout", method: "POST", path: "/billing/checkout-session",
+    description: "Create a Pro billing checkout URL"),
+  Operation(
+    name: "billing portal", method: "POST", path: "/billing/portal-session",
+    description: "Create a billing portal URL"),
+  Operation(
+    name: "github repos", method: "GET", path: "/github/repos",
+    description: "List accessible GitHub repositories"),
+  Operation(
+    name: "github install", method: "GET", path: "/auth/github/app/install",
+    description: "Start GitHub App installation for a project"),
+  Operation(
+    name: "admin metrics", method: "GET", path: "/admin/metrics",
+    description: "Show aggregate platform metrics (administrator required)"),
+  Operation(
+    name: "admin timeseries", method: "GET", path: "/admin/timeseries",
+    description: "Show platform analytics timeseries (administrator required)"),
+  Operation(
+    name: "admin rollup-refresh", method: "POST", path: "/admin/analytics/rollup-refresh",
+    description: "Refresh analytics rollups (administrator required)"),
+  Operation(
+    name: "admin lookup", method: "POST", path: "/admin/lookup",
+    description:
+      "Look up account flags by GitHub login, GitHub ID, or email (administrator required)"),
+  Operation(
+    name: "admin privileged-accounts", method: "GET", path: "/admin/privileged-accounts",
+    description: "List privileged accounts (administrator required)"),
+  Operation(
+    name: "admin account-flags", method: "POST", path: "/admin/account-flags",
+    description: "Update account administrator and paywall bypass flags (administrator required)"),
+]
