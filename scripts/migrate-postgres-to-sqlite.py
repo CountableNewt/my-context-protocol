@@ -14,6 +14,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import sqlite3
 import subprocess
 import tempfile
@@ -38,6 +39,8 @@ def json_line(value: object) -> str:
 
 def export_sql(schema: str) -> str:
     # All generated queries execute in this same read-only repeatable-read snapshot.
+    # Each gexec result cell must contain one statement: older psql clients only
+    # print the last result of a multi-statement cell, silently omitting metadata.
     return f"""\\set ON_ERROR_STOP on
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL TIME ZONE 'UTC';
@@ -46,8 +49,11 @@ SET LOCAL bytea_output = 'hex';
 SET LOCAL extra_float_digits = 3;
 SELECT json_build_object('format', '{FORMAT}', 'schema', {literal(schema)});
 SELECT format(
-  'SELECT json_build_object(''table'', %L, ''count'', (SELECT count(*) FROM %I.%I), ''columns'', (SELECT json_agg(json_build_object(''name'', column_name, ''type'', udt_name) ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = %L AND table_name = %L)); SELECT json_build_object(''row'', %L, ''values'', row_to_json(t)) FROM %I.%I t;',
-  table_name, table_schema, table_name, table_schema, table_name, table_name, table_schema, table_name)
+  'SELECT json_build_object(''table'', %L, ''count'', (SELECT count(*) FROM %I.%I), ''columns'', (SELECT json_agg(json_build_object(''name'', column_name, ''type'', udt_name) ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = %L AND table_name = %L))',
+  table_name, table_schema, table_name, table_schema, table_name) AS metadata_sql,
+  format(
+    'SELECT json_build_object(''row'', %L, ''values'', row_to_json(t)) FROM %I.%I t',
+    table_name, table_schema, table_name) AS rows_sql
 FROM information_schema.tables
 WHERE table_schema = {literal(schema)} AND table_type = 'BASE TABLE'
 ORDER BY table_name
@@ -78,6 +84,13 @@ def export_snapshot(output: Path, schema: str) -> None:
         raise
 
 
+def pad_timestamp_fraction(match: re.Match[str]) -> str:
+    fraction = match[1]
+    if len(fraction) > 6:
+        raise ValueError("timestamp precision exceeds PostgreSQL microseconds")
+    return "." + fraction.ljust(6, "0")
+
+
 def convert(value: object, pg_type: str) -> object:
     if value is None:
         return None
@@ -90,7 +103,10 @@ def convert(value: object, pg_type: str) -> object:
     if pg_type in {"timestamp", "timestamptz"}:
         if not isinstance(value, str):
             raise ValueError("invalid timestamp")
-        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # PostgreSQL trims trailing fractional zeros. Python 3.10 accepts only
+        # three or six digits; pad to microseconds without rounding or truncation.
+        normalized = re.sub(r"(?<=\d{2}:\d{2}:\d{2})\.(\d+)", pad_timestamp_fraction, value.replace("Z", "+00:00"))
+        parsed = dt.datetime.fromisoformat(normalized)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=dt.timezone.utc)
         # SQLiteKit stores Foundation Date as seconds since the Unix epoch.

@@ -1,5 +1,6 @@
 """Offline transfer regressions; run: python3 -m unittest discover -s scripts/tests -v."""
 import contextlib
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -178,15 +179,30 @@ class SQLiteMigrationTests(unittest.TestCase):
         CREATE TABLE {schema}.accounts (id UUID PRIMARY KEY, enabled BOOLEAN NOT NULL, created_at TIMESTAMPTZ,
             profile JSONB, secret BYTEA, display TEXT);
         CREATE TABLE {schema}.app_sessions (id UUID PRIMARY KEY, account_id UUID REFERENCES {schema}.accounts(id), payload TEXT);
+        CREATE TABLE {schema}.empty_records (id UUID PRIMARY KEY, note TEXT);
         INSERT INTO {schema}.accounts VALUES ('{ID}', true, '2026-11-09T12:30:01.123456Z',
             '{{"tags":["one","two"]}}', decode('00ff4142','hex'), E'private\\n‘quoted’ Ω');
         INSERT INTO {schema}.app_sessions VALUES ('{ID}', '{ID}', '{{"private":"session"}}');
         """
         subprocess.run(["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1"], input=ddl, text=True, check=True, capture_output=True)
         try:
+            with contextlib.closing(sqlite3.connect(self.template)) as db:
+                db.execute("CREATE TABLE empty_records (id TEXT PRIMARY KEY, note TEXT)")
             migration.export_snapshot(self.snapshot, schema)
+            # Exercise actual psql output, including empty-table metadata. psql 14
+            # drops the first result if one gexec cell contains multiple SELECTs.
+            metadata = {}
+            for entry in map(json.loads, self.snapshot.read_text().splitlines()):
+                if "table" in entry:
+                    metadata[entry["table"]] = entry
+                elif "row" in entry:
+                    self.assertIn(entry["row"], metadata, "table metadata must precede its rows")
+            self.assertEqual(set(metadata), {"_fluent_migrations", "accounts", "app_sessions", "empty_records"})
+            self.assertEqual(metadata["empty_records"]["count"], 0)
+            self.assertEqual([column["name"] for column in metadata["empty_records"]["columns"]], ["id", "note"])
             report = migration.import_snapshot(self.snapshot, self.template, self.output)
             self.assertEqual(report["tables"]["accounts"]["rows"], 1)
+            self.assertEqual(report["tables"]["empty_records"]["rows"], 0)
             with contextlib.closing(sqlite3.connect(self.output)) as db:
                 self.assertEqual(db.execute("SELECT display FROM accounts").fetchone()[0], "private\n‘quoted’ Ω")
                 self.assertEqual(db.execute("SELECT secret FROM accounts").fetchone()[0], bytes.fromhex("00ff4142"))
@@ -218,6 +234,32 @@ class SQLiteMigrationTests(unittest.TestCase):
         for value, kind in [(1, "bool"), (1 << 63, "int8"), (float("nan"), "float8"), ({}, "text")]:
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 migration.convert(value, kind)
+
+    def test_postgres_timestamp_fraction_lengths_preserve_microseconds_on_python_310(self):
+        zones = [
+            ("", dt.timezone.utc),
+            ("Z", dt.timezone.utc),
+            ("+00:00", dt.timezone.utc),
+            ("+05:30", dt.timezone(dt.timedelta(hours=5, minutes=30))),
+            ("-07:00", dt.timezone(dt.timedelta(hours=-7))),
+        ]
+        for fraction in ["", "1", "12", "123", "1234", "12345", "123456", "00001", "999999"]:
+            microseconds = int(fraction.ljust(6, "0")) if fraction else 0
+            fractional_seconds = "." + fraction if fraction else ""
+            for suffix, zone in zones:
+                expected = dt.datetime(2026, 11, 9, 12, 30, 1, microseconds, tzinfo=zone).timestamp()
+                for separator in ["T", " "]:
+                    value = f"2026-11-09{separator}12:30:01{fractional_seconds}{suffix}"
+                    for kind in ["timestamp", "timestamptz"]:
+                        with self.subTest(fraction=fraction, suffix=suffix, separator=separator, kind=kind):
+                            self.assertEqual(migration.convert(value, kind), expected)
+
+    def test_malformed_and_overprecise_timestamps_are_rejected(self):
+        for value in ["2026-11-09T12:30:01.", "2026-11-09T12:30:01.1234567Z",
+                      "2026-11-09T12:30:01.12garbage", "2026-11-09T12:30:61.1Z",
+                      "2026-11-09T12:30:01.1+25:00", "infinity"]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                migration.convert(value, "timestamptz")
 
 
 if __name__ == "__main__":
