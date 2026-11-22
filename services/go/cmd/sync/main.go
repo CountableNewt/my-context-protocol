@@ -50,17 +50,35 @@ func main() {
 		log.Fatal(err)
 	}
 	syncHandler = service
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/webhooks/github-app" {
-			app.ServeHTTP(w, r)
-			return
-		}
-		service.ServeHTTP(w, r)
-	})
+	handler := newSyncRouter(service, app)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8083"
 	}
 	server := &http.Server{Addr: ":" + port, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 80 * time.Second, IdleTimeout: 60 * time.Second}
 	log.Fatal(server.ListenAndServe())
+}
+
+// Existing GitHub App registrations may share /webhooks/github with repository
+// hooks. Dispatch only known App lifecycle events; the App handler still checks
+// its own raw-body signature before any state mutation.
+func newSyncRouter(syncHandler, appHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/webhooks/github-app" {
+			appHandler.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == "/webhooks/github" {
+			switch r.Header.Get("X-GitHub-Event") {
+			case "installation", "installation_repositories", "github_app_authorization":
+				clone := r.Clone(r.Context())
+				target := *r.URL
+				target.Path = "/webhooks/github-app"
+				clone.URL = &target
+				appHandler.ServeHTTP(w, clone)
+				return
+			}
+		}
+		syncHandler.ServeHTTP(w, r)
+	})
 }

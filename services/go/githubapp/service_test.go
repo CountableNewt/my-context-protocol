@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -449,5 +450,220 @@ func TestBFFOriginMetadataCannotAuthorizeOrIntroduceUntrustedReturns(t *testing.
 		if w.Code != 401 && w.Code != 404 {
 			t.Fatalf("origin header granted access cookie=%q status%d", cookie, w.Code)
 		}
+	}
+}
+
+func TestSharedOAuthCallbackResolvesCodeOnlyInstallationSecurely(t *testing.T) {
+	s, db := setup(t)
+	s.config.Client.ClientSecret = "client-secret"
+	s.config.Client.SetupCallback = "https://app.example/auth/github/callback"
+	calls := []string{}
+	s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+		calls = append(calls, r.URL.Host+r.URL.Path)
+		switch r.URL.Host + r.URL.Path {
+		case "github.com/login/oauth/access_token":
+			var input map[string]any
+			json.NewDecoder(r.Body).Decode(&input)
+			if input["redirect_uri"] != "https://app.example/auth/github/callback" {
+				t.Fatal("install exchange used different callback", input)
+			}
+			return reply(200, `{"access_token":"installed-user-token"}`), nil
+		case "api.github.com/user":
+			return reply(200, `{"id":101}`), nil
+		case "api.github.com/user/installations":
+			if r.Header.Get("Authorization") != "Bearer installed-user-token" {
+				t.Fatal("not using verified App user token")
+			}
+			return reply(200, `{"total_count":1,"installations":[{"id":7,"account":{"id":101,"type":"User"}}]}`), nil
+		case "api.github.com/app/installations/7":
+			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ey") {
+				t.Fatal("installation not independently JWT-verified")
+			}
+			return reply(200, `{"id":7,"account":{"id":101,"type":"User"}}`), nil
+		default:
+			t.Fatalf("unexpected endpoint %s", r.URL)
+			return nil, nil
+		}
+	})}
+	state := intent(t, s)
+	target := "https://app.example/auth/github/callback?code=installation-code&state=" + state
+	w := request(s, target, "session")
+	if w.Code != 302 || len(calls) != 4 {
+		t.Fatalf("code-only install %d %s calls%v", w.Code, w.Body, calls)
+	}
+	r, err := db.Execute(context.Background(), sql("SELECT github_app_installation_id,github_token_encrypted FROM accounts WHERE id='account'"))
+	if err != nil || col(r.Rows[0], 0) != "7" {
+		t.Fatalf("installation not saved %+v %v", r, err)
+	}
+	token, err := s.config.Cipher.Decrypt(col(r.Rows[0], 1))
+	if err != nil || token != "installed-user-token" {
+		t.Fatal("OAuth token not stored encrypted")
+	}
+	w = request(s, target, "session")
+	if w.Code != 400 || len(calls) != 4 {
+		t.Fatalf("callback replay accepted %d calls%v", w.Code, calls)
+	}
+}
+func TestSharedInstallCallbackNeverUsesAnotherUserOrUnownedIntent(t *testing.T) {
+	s, db := setup(t)
+	s.config.Client.ClientSecret = "client-secret"
+	s.config.Client.SetupCallback = "https://app.example/auth/github/callback"
+	calls := 0
+	s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Host == "github.com" {
+			return reply(200, `{"access_token":"foreign-user-token"}`), nil
+		}
+		if r.URL.Path == "/user" {
+			return reply(200, `{"id":202}`), nil
+		}
+		t.Fatal("unverified user reached installation API")
+		return nil, nil
+	})}
+	state := intent(t, s)
+	target := "https://app.example/auth/github/callback?code=code&state=" + state
+	if w := request(s, target, "other-session"); w.Code != 400 || calls != 0 {
+		t.Fatal("wrong session exchanged code", w.Code, calls)
+	}
+	if w := request(s, target, "session"); w.Code != 403 || calls != 2 {
+		t.Fatal("foreign GitHub OAuth user attached", w.Code, calls)
+	}
+	r, err := db.Execute(context.Background(), sql("SELECT github_app_installation_id FROM accounts WHERE id='account'"))
+	if err != nil || col(r.Rows[0], 0) != "" {
+		t.Fatal("foreign installation persisted", r, err)
+	}
+	r, err = db.Execute(context.Background(), sql("SELECT id FROM github_app_install_intents WHERE id=?", turso.Text(state)))
+	if err != nil || len(r.Rows) != 1 {
+		t.Fatal("failed authorization consumed intent")
+	}
+}
+
+func TestInstallationOAuthCallbackCrossesAliasWithoutLosingIntentBinding(t *testing.T) {
+	for _, withID := range []bool{false, true} {
+		t.Run(fmt.Sprint("installation_id=", withID), func(t *testing.T) {
+			s, db := setup(t)
+			s.config.FrontendOrigins = []string{"https://app.example", "https://immutable-preview.example"}
+			s.config.Client.ClientSecret = "client-secret"
+			s.config.Client.SetupCallback = "https://app.example/auth/github/callback"
+			calls := 0
+			s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+				calls++
+				switch r.URL.Host + r.URL.Path {
+				case "github.com/login/oauth/access_token":
+					var input map[string]any
+					json.NewDecoder(r.Body).Decode(&input)
+					if input["redirect_uri"] != "https://app.example/auth/github/callback" {
+						t.Fatal("wrong callback exchange")
+					}
+					return reply(200, `{"access_token":"verified-install-user"}`), nil
+				case "api.github.com/user":
+					return reply(200, `{"id":101}`), nil
+				case "api.github.com/user/installations":
+					return reply(200, `{"installations":[{"id":7,"account":{"id":101,"type":"User"}}]}`), nil
+				case "api.github.com/app/installations/7":
+					return reply(200, `{"id":7,"account":{"id":101,"type":"User"}}`), nil
+				default:
+					t.Fatalf("unexpected API %s", r.URL)
+					return nil, nil
+				}
+			})}
+			begin := httptest.NewRequest("GET", "https://identity.internal/auth/github/app/install?project_id=project&return_to=%2Fprojects%2Fproject", nil)
+			begin.Header.Set("X-Context-Frontend-Origin", "https://immutable-preview.example")
+			begin.AddCookie(&http.Cookie{Name: "vapor-session", Value: "session"})
+			started := httptest.NewRecorder()
+			s.ServeHTTP(started, begin)
+			if started.Code != 302 {
+				t.Fatalf("begin %d %s", started.Code, started.Body)
+			}
+			location, _ := url.Parse(started.Header().Get("Location"))
+			state := location.Query().Get("state")
+			callback := "https://app.example/auth/github/callback?code=code&state=" + state
+			if withID {
+				callback += "&installation_id=7"
+			}
+			// Host-only cookie on immutable-preview.example is absent on app.example.
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, httptest.NewRequest("GET", callback, nil))
+			if w.Code != 302 {
+				t.Fatalf("callback %d %s", w.Code, w.Body)
+			}
+			target, _ := url.Parse(w.Header().Get("Location"))
+			if target.Scheme != "https" || target.Host != "immutable-preview.example" || target.Path != "/projects/project" || target.Query().Get("github_app_installed") != "1" || w.Header().Get("Set-Cookie") != "" {
+				t.Fatalf("unexpected callback return %s", target)
+			}
+			rows, err := db.Execute(context.Background(), sql("SELECT github_app_installation_id,github_token_encrypted FROM accounts WHERE id='account'"))
+			if err != nil || col(rows.Rows[0], 0) != "7" {
+				t.Fatalf("attachment %+v %v", rows, err)
+			}
+			token, err := s.config.Cipher.Decrypt(col(rows.Rows[0], 1))
+			if err != nil || token != "verified-install-user" {
+				t.Fatal("unverified token persisted")
+			}
+			before := calls
+			replay := httptest.NewRecorder()
+			s.ServeHTTP(replay, httptest.NewRequest("GET", callback, nil))
+			if replay.Code != 400 || calls != before {
+				t.Fatalf("callback replay accepted %d calls%d", replay.Code, calls)
+			}
+		})
+	}
+}
+func TestCookieFreeInstallStillRejectsMissingCodeWrongIdentityAndPresentWrongSession(t *testing.T) {
+	for _, mode := range []string{"missing-code", "wrong-user", "wrong-session", "invalid-session", "unknown-intent", "expired-intent", "wrong-installation-owner"} {
+		t.Run(mode, func(t *testing.T) {
+			s, db := setup(t)
+			s.config.Client.ClientSecret = "client-secret"
+			s.config.Client.SetupCallback = "https://app.example/auth/github/callback"
+			calls := 0
+			s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+				calls++
+				switch r.URL.Host + r.URL.Path {
+				case "github.com/login/oauth/access_token":
+					return reply(200, `{"access_token":"candidate-user"}`), nil
+				case "api.github.com/user":
+					if mode == "wrong-user" {
+						return reply(200, `{"id":202}`), nil
+					}
+					return reply(200, `{"id":101}`), nil
+				case "api.github.com/app/installations/7":
+					return reply(200, `{"id":7,"account":{"id":202,"type":"User"}}`), nil
+				default:
+					t.Fatalf("unexpected API %s", r.URL)
+					return nil, nil
+				}
+			})}
+			state := intent(t, s)
+			if mode == "unknown-intent" {
+				state = "11111111-1111-4111-8111-111111111111"
+			}
+			if mode == "expired-intent" {
+				if _, err := db.Execute(context.Background(), sql("UPDATE github_app_install_intents SET expires_at=0 WHERE id=?", turso.Text(state))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			target := "https://app.example/auth/github/callback?state=" + state + "&installation_id=7"
+			if mode != "missing-code" {
+				target += "&code=code"
+			}
+			r := httptest.NewRequest("GET", target, nil)
+			if mode == "wrong-session" {
+				r.AddCookie(&http.Cookie{Name: "vapor-session", Value: "other-session"})
+			}
+			if mode == "invalid-session" {
+				r.AddCookie(&http.Cookie{Name: "vapor-session", Value: "missing-session"})
+			}
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, r)
+			if w.Code != 400 && w.Code != 401 && w.Code != 403 {
+				t.Fatalf("unsafe callback mode%s status%d", mode, w.Code)
+			}
+			if mode != "wrong-user" && mode != "wrong-installation-owner" && calls != 0 {
+				t.Fatalf("invalid state/session exchanged code mode%s calls%d", mode, calls)
+			}
+			rows, err := db.Execute(context.Background(), sql("SELECT github_app_installation_id FROM accounts WHERE id='account'"))
+			if err != nil || col(rows.Rows[0], 0) != "" {
+				t.Fatal("rejected callback mutated account")
+			}
+		})
 	}
 }

@@ -187,3 +187,16 @@ func TestRepositoryPaginationAndPermissionFields(t *testing.T) {
 		t.Fatalf("%+v %v calls%d", repos, err, calls)
 	}
 }
+
+func TestCodeOnlyInstallRejectsAmbiguousOrOrganizationInstallations(t *testing.T) {
+	for _, body := range []string{
+		`{"installations":[{"id":7,"account":{"id":101,"type":"Organization"}}]}`,
+		`{"installations":[{"id":7,"account":{"id":202,"type":"User"}}]}`,
+		`{"installations":[{"id":7,"account":{"id":101,"type":"User"}},{"id":8,"account":{"id":101,"type":"User"}}]}`,
+	} {
+		client := Client{HTTP: &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) { return reply(200, body), nil })}}
+		if _, err := client.UserInstallation(context.Background(), "user-token", 101); err == nil {
+			t.Fatal("unverified or ambiguous installation accepted", body)
+		}
+	}
+}

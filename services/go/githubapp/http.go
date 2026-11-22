@@ -2,6 +2,7 @@ package githubapp
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +19,20 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
+
+var installStatePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// IsInstallationCallback selects the App's database-intent flow on a shared
+// GitHub callback URL. UUID shape is routing only, never authorization: the App
+// handler still requires the matching session, owner and live one-use intent.
+// General browser/CLI OAuth uses signed dotted states and stays on identity.
+func IsInstallationCallback(r *http.Request) bool {
+	if r.Method != "GET" || r.URL.Path != "/auth/github/callback" {
+		return false
+	}
+	state := strings.Trim(strings.TrimSpace(r.URL.Query().Get("state")), "\"'")
+	return installStatePattern.MatchString(state)
+}
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -32,17 +48,27 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Session service unavailable", 503)
 		return
 	}
-	cookie, err := r.Cookie("vapor-session")
-	if err != nil {
+	account := ""
+	if cookie, err := r.Cookie("vapor-session"); err == nil {
+		stored, readErr := s.config.Sessions.ReadSession(r.Context(), cookie.Value)
+		if readErr != nil || stored["accountId"] == "" {
+			http.Error(w, "Not authenticated", 401)
+			return
+		}
+		account = stored["accountId"]
+	}
+	installationCallback := r.URL.Path == "/auth/github/app/callback" || r.URL.Path == "/auth/github/callback"
+	if account == "" {
+		// A code-bearing install callback can arrive at a different allowlisted alias
+		// than the initial host-only session. OAuth identity plus the live DB nonce
+		// authenticates it; no other route gains a cookie-free authentication path.
+		if installationCallback && r.URL.Query().Get("code") != "" {
+			s.finishInstall(w, r, "")
+			return
+		}
 		http.Error(w, "Not authenticated", 401)
 		return
 	}
-	session, err := s.config.Sessions.ReadSession(r.Context(), cookie.Value)
-	if err != nil || session["accountId"] == "" {
-		http.Error(w, "Not authenticated", 401)
-		return
-	}
-	account := session["accountId"]
 	switch r.URL.Path {
 	case "/github/repos":
 		token, _, err := s.accountToken(r.Context(), account)
@@ -66,7 +92,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, items)
 	case "/auth/github/app/install":
 		s.beginInstall(w, r, account)
-	case "/auth/github/app/callback":
+	case "/auth/github/app/callback", "/auth/github/callback":
 		s.finishInstall(w, r, account)
 	default:
 		http.NotFound(w, r)
@@ -183,18 +209,35 @@ func (s *Service) beginInstall(w http.ResponseWriter, r *http.Request, account s
 	http.Redirect(w, r, "https://github.com/apps/"+url.PathEscape(s.config.Slug)+"/installations/new?state="+url.QueryEscape(state), 302)
 }
 func (s *Service) finishInstall(w http.ResponseWriter, r *http.Request, account string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
 	state := strings.Trim(strings.TrimSpace(r.URL.Query().Get("state")), "\"'")
 	installation := r.URL.Query().Get("installation_id")
 	if state == "" || len(state) > 128 {
 		httpError(w, &PublicError{400, "Invalid or expired installation state", nil})
 		return
 	}
-	id, err := idPath(installation)
-	if err != nil {
-		httpError(w, &PublicError{400, "Invalid installation id", nil})
+	var id string
+	var err error
+	if installation != "" {
+		id, err = idPath(installation)
+		if err != nil {
+			httpError(w, &PublicError{400, "Invalid installation id", nil})
+			return
+		}
+	}
+	if account == "" && r.URL.Query().Get("code") == "" {
+		httpError(w, &PublicError{401, "A session or verified installation OAuth code is required", nil})
 		return
 	}
-	row, err := s.config.DB.Execute(r.Context(), sql("SELECT i.project_id,i.return_to,i.owner,i.repo,a.github_id FROM github_app_install_intents i JOIN projects p ON p.id=i.project_id AND p.account_id=i.account_id JOIN accounts a ON a.id=i.account_id WHERE i.id=? AND i.account_id=? AND i.expires_at>?", turso.Text(state), turso.Text(account), turso.Integer(time.Now().Unix())))
+	query := `SELECT i.project_id,i.return_to,i.owner,i.repo,a.github_id,i.account_id FROM github_app_install_intents i JOIN projects p ON p.id=i.project_id AND p.account_id=i.account_id JOIN accounts a ON a.id=i.account_id WHERE i.id=? AND i.expires_at>?`
+	args := []turso.Value{turso.Text(state), turso.Integer(time.Now().Unix())}
+	if account != "" {
+		query += " AND i.account_id=?"
+		args = append(args, turso.Text(account))
+	}
+	row, err := s.config.DB.Execute(r.Context(), sql(query, args...))
 	if err != nil {
 		httpError(w, err)
 		return
@@ -204,6 +247,12 @@ func (s *Service) finishInstall(w http.ResponseWriter, r *http.Request, account 
 		return
 	}
 	intent := row.Rows[0]
+	intentAccount := col(intent, 5)
+	if intentAccount == "" || (account != "" && account != intentAccount) {
+		httpError(w, &PublicError{403, "Installation state belongs to a different account", nil})
+		return
+	}
+	account = intentAccount
 	project := col(intent, 0)
 	returnTo, err := s.returnTo(col(intent, 1), project, "")
 	if err != nil {
@@ -215,16 +264,7 @@ func (s *Service) finishInstall(w http.ResponseWriter, r *http.Request, account 
 		httpError(w, err)
 		return
 	}
-	meta, err := s.config.Client.Installation(r.Context(), id)
-	if err != nil {
-		httpError(w, err)
-		return
-	}
-	if strconv.FormatInt(meta.ID, 10) != id || meta.Account.Type != "User" || meta.Account.ID != githubID {
-		httpError(w, &PublicError{403, "Installation does not belong to the signed-in GitHub account", nil})
-		return
-	}
-	var encrypted string
+	var encrypted, userToken string
 	if code := r.URL.Query().Get("code"); code != "" {
 		token, userID, err := s.config.Client.ExchangeInstallOAuth(r.Context(), code)
 		if err != nil {
@@ -235,15 +275,39 @@ func (s *Service) finishInstall(w http.ResponseWriter, r *http.Request, account 
 			httpError(w, &PublicError{403, "GitHub authorization belongs to a different user", nil})
 			return
 		}
+		userToken = token
 		encrypted, err = s.config.Cipher.Encrypt(token)
 		if err != nil {
 			httpError(w, err)
 			return
 		}
 	}
+	// OAuth-on-install guarantees a code at the App's first callback URL, not
+	// an installation_id. Resolve an omitted id only from that verified App user
+	// token, then independently verify the installation using the App JWT.
+	if id == "" {
+		if userToken == "" {
+			httpError(w, &PublicError{400, "Installation id or authorization code is required", nil})
+			return
+		}
+		id, err = s.config.Client.UserInstallation(r.Context(), userToken, githubID)
+		if err != nil {
+			httpError(w, err)
+			return
+		}
+	}
+	meta, err := s.config.Client.Installation(r.Context(), id)
+	if err != nil {
+		httpError(w, err)
+		return
+	}
+	if strconv.FormatInt(meta.ID, 10) != id || meta.Account.Type != "User" || meta.Account.ID != githubID {
+		httpError(w, &PublicError{403, "Installation does not belong to the signed-in GitHub account", nil})
+		return
+	}
 	guard := `EXISTS(SELECT 1 FROM github_app_install_intents i JOIN projects p ON p.id=i.project_id AND p.account_id=i.account_id WHERE i.id=? AND i.account_id=? AND i.expires_at>?)`
 	now := time.Now().Unix()
-	args := []turso.Value{nullableInstallation(id), turso.Text(account), turso.Text(state), turso.Text(account), turso.Integer(now)}
+	args = []turso.Value{nullableInstallation(id), turso.Text(account), turso.Text(state), turso.Text(account), turso.Integer(now)}
 	accountSQL := "UPDATE accounts SET github_app_installation_id=? WHERE id=? AND " + guard
 	statements := []turso.Statement{sql(accountSQL, args...), sql("UPDATE repo_connections SET github_installation_id=? WHERE project_id=? AND "+guard, nullableInstallation(id), turso.Text(project), turso.Text(state), turso.Text(account), turso.Integer(now))}
 	if encrypted != "" {

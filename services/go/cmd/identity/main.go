@@ -100,21 +100,27 @@ func main() {
 			log.Fatal(e)
 		}
 	}
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if authorization != nil && oauth.Handles(r.URL.Path) {
-			authorization.ServeHTTP(w, r)
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/github/") || strings.HasPrefix(r.URL.Path, "/auth/github/app/") {
-			github.ServeHTTP(w, r)
-			return
-		}
-		login.ServeHTTP(w, r)
-	})
+	handler := newIdentityRouter(login, github, authorization)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
 	server := &http.Server{Addr: ":" + port, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second}
 	log.Fatal(server.ListenAndServe())
+}
+
+// The GitHub App may use the same user-authorization callback for ordinary
+// sign-in and OAuth-on-install. Separate their state protocols before exchange.
+func newIdentityRouter(login, github http.Handler, authorization *oauth.Service) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if authorization != nil && oauth.Handles(r.URL.Path) {
+			authorization.ServeHTTP(w, r)
+			return
+		}
+		if githubapp.IsInstallationCallback(r) || strings.HasPrefix(r.URL.Path, "/github/") || strings.HasPrefix(r.URL.Path, "/auth/github/app/") {
+			github.ServeHTTP(w, r)
+			return
+		}
+		login.ServeHTTP(w, r)
+	})
 }

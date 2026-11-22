@@ -305,3 +305,23 @@ func TestRetainedCompilationBudgetDoesNotPublishPartialCatalog(t *testing.T) {
 		t.Fatalf("job %+v err%v store%+v", job, err, store)
 	}
 }
+
+func TestRepositoryPingVerifiesOwnSecretWithoutStartingSync(t *testing.T) {
+	s, store, fetcher := setup(t)
+	s.config.WebhookSecret = "separate-app-secret"
+	body := `{"zen":"test","repository":{"name":"repo","owner":{"login":"owner"}}}`
+	for _, secret := range []string{"secret", "wrong"} {
+		r := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader(body))
+		r.Header.Set("X-GitHub-Event", "ping")
+		r.Header.Set("X-Hub-Signature-256", sign(secret, []byte(body)))
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		want := 200
+		if secret == "wrong" {
+			want = 401
+		}
+		if w.Code != want || store.claimCalls != 0 || fetcher.calls != 0 {
+			t.Fatalf("ping secret%q status%d claims%d fetch%d", secret, w.Code, store.claimCalls, fetcher.calls)
+		}
+	}
+}

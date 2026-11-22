@@ -385,3 +385,45 @@ func (c *Client) ExchangeInstallOAuth(ctx context.Context, code string) (string,
 	}
 	return result.AccessToken, user.ID, nil
 }
+
+// UserInstallation resolves OAuth-on-install callbacks that provide only code
+// and state. The token has already been verified through /user; candidate
+// personal installations must belong to that same GitHub identity. The caller
+// independently validates the selected installation with the App JWT.
+func (c *Client) UserInstallation(ctx context.Context, token string, githubID int64) (string, error) {
+	if token == "" || githubID <= 0 {
+		return "", ErrForbidden
+	}
+	found := map[int64]bool{}
+	for page := 1; page <= 10; page++ {
+		var result struct {
+			Installations []Installation `json:"installations"`
+			Total         int            `json:"total_count"`
+		}
+		target := "https://api.github.com/user/installations?per_page=100&page=" + strconv.Itoa(page)
+		if err := c.api(ctx, "GET", target, token, "user installation lookup", nil, &result, 200); err != nil {
+			return "", err
+		}
+		if len(result.Installations) > 100 || result.Total > 1000 {
+			return "", &PublicError{409, "GitHub installation list exceeds supported bounds", nil}
+		}
+		for _, candidate := range result.Installations {
+			if candidate.ID > 0 && candidate.Account.Type == "User" && candidate.Account.ID == githubID {
+				found[candidate.ID] = true
+			}
+		}
+		if len(result.Installations) < 100 {
+			break
+		}
+		if page == 10 {
+			return "", &PublicError{409, "GitHub installation list is incomplete", nil}
+		}
+	}
+	if len(found) != 1 {
+		return "", &PublicError{409, "Could not identify one personal GitHub App installation for the signed-in user", nil}
+	}
+	for id := range found {
+		return strconv.FormatInt(id, 10), nil
+	}
+	return "", ErrForbidden
+}

@@ -352,7 +352,7 @@ func (s *Service) webhook(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]string{"status": "verified"})
 		return
 	}
-	if r.Header.Get("X-GitHub-Event") != "push" {
+	if event := r.Header.Get("X-GitHub-Event"); event != "push" && event != "ping" {
 		write(w, 422, map[string]string{"error": "unsupported_event"})
 		return
 	}
@@ -378,6 +378,10 @@ func (s *Service) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	if !authenticated {
 		write(w, 401, map[string]string{"error": "invalid_signature"})
+		return
+	}
+	if r.Header.Get("X-GitHub-Event") == "ping" {
+		write(w, 200, map[string]string{"status": "verified"})
 		return
 	}
 	delivery := r.Header.Get("X-GitHub-Delivery")
