@@ -70,3 +70,21 @@ func TestRestoreLocalRequiresNewOutputAndNoCredentials(t *testing.T) {
 		t.Fatal("existing output reached credentials or source read")
 	}
 }
+
+func TestStagedRepairFlagsAndExactHostRunBeforeCredentials(t *testing.T) {
+	t.Setenv("TURSO_DATABASE_URL", "libsql://db-owner.turso.io")
+	t.Setenv("TURSO_AUTH_TOKEN", "")
+	for _, args := range [][]string{{"repair-staged-floats"}, {"repair-staged-floats", "--apply", "--snapshot", "/missing"}} {
+		if e := run(args); e == nil || !strings.Contains(e.Error(), "writers-paused") {
+			t.Fatal("repair opt-in did not fail before credentials")
+		}
+	}
+	args := []string{"repair-staged-floats", "--apply", "--writers-paused", "--expected-float-cells", "12", "--snapshot", "/missing"}
+	if e := run(args); e == nil || !strings.Contains(e.Error(), "expected-host") {
+		t.Fatal("repair target guard did not run")
+	}
+	args = append(args, "--expected-host", "wrong.turso.io")
+	if e := run(args); e == nil || !strings.Contains(e.Error(), "does not match") {
+		t.Fatal("repair wrong target reached credentials")
+	}
+}

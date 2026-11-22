@@ -120,3 +120,23 @@ Remote export accepts only the exact baseline schema plus shipped owned Go addit
 The tool does **not** upload the restored database to Railway, stop/start services, change routes or resume writers. Keep the original and post-write artifacts private. Separately review and authorize replacing the stopped Swift backend's SQLite file, ensure the original signing/encryption secrets remain configured, then validate authenticated Chrome/CLI/MCP/OAuth/sync behavior before reopening ingress. Keep Go writers stopped after switching back so the two databases cannot diverge. This local restore is a concrete data-preserving rollback artifact, not an automatic cutover.
 
 The opt-in private rehearsal above now also edits a project in the temporary Go database, exports it with writers paused, restores it locally, and verifies that the edit survives while the original source and artifact hashes stay unchanged. Its private report includes only manifests, aggregate acceptance results and fingerprints.
+
+### Recover a proven float transport fault in an unfinalized import
+
+A remote JSON floating-point parameter parser can round a finite REAL argument by one IEEE-754 ULP. The importer now constructs REAL values from an exact signed integer significand and power-of-two arithmetic, avoiding JSON float parameters. Strict typed verification remains unchanged.
+
+For an already loaded staging import that failed strict verification, `repair-staged-floats` is a narrowly scoped operator recovery tool. Keep the target unrouted and **all writers paused**. It requires the exact original artifact, an owned `loading` checkpoint, every table fully loaded with matching progress manifests, exact schema, matching counts/IDs/types/non-float values across every baseline table, and an independently supplied exact number of changed cells (maximum 32). Only one-ULP REAL drift qualifies. For every proposed cell, read-only SQL must reproduce the current stored value from the old JSON float binding and independently prove the new integer-based expression produces the source bits. Arbitrary one-ULP user edits that do not reproduce the transport fault are rejected.
+
+```sh
+go run ./cmd/import repair-staged-floats \
+  --snapshot /private/tmp/mcp-sqlite-transfer/final-snapshot.jsonl \
+  --expected-host mycontext-production-OWNER.turso.io \
+  --writers-paused --apply --expected-float-cells 12
+
+# Repair preserves loading status; strict normal resume verifies and finalizes.
+go run ./cmd/import load \
+  --snapshot /private/tmp/mcp-sqlite-transfer/final-snapshot.jsonl \
+  --expected-host mycontext-production-OWNER.turso.io --resume
+```
+
+Do not copy the example count without independently auditing the target. All planned updates execute in one bounded transaction, guarded by original primary identity, REAL storage type, the exact observed SQLite decimal rendering, loading snapshot identity and the full completed progress manifest. A CHECK guard aborts the entire batch on a failed compare-and-swap; no partial repair is committed. Strict count/hash/FK verification follows, and the tool leaves the checkpoint loading until ordinary resume finalizes it. It never resets tables, changes non-REAL values or loosens verification. A lost transaction response is ambiguous: keep traffic and writers stopped, run strict verify, and review the result before retrying. This tool performs no deployment or routing actions.

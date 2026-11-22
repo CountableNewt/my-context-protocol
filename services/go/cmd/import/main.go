@@ -25,15 +25,17 @@ func main() {
 }
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: import export|export-remote|restore-local|inspect|load|verify [options]")
+		return fmt.Errorf("usage: import export|export-remote|restore-local|inspect|load|verify|repair-staged-floats [options]")
 	}
 	mode := args[0]
 	flags := flag.NewFlagSet("import "+mode, flag.ContinueOnError)
 	source := flags.String("source", "", "standalone SQLite backup (export only)")
 	output := flags.String("output", "", "new private artifact or SQLite database (export/export-remote/restore-local)")
 	path := flags.String("snapshot", "", "typed JSONL snapshot artifact")
-	expectedHost := flags.String("expected-host", "", "required exact database hostname for load/verify/export-remote; independently reviewed")
-	writersPaused := flags.Bool("writers-paused", false, "export-remote only: all database writers are stopped and drained")
+	expectedHost := flags.String("expected-host", "", "required exact database hostname for load/verify/export-remote/repair; independently reviewed")
+	writersPaused := flags.Bool("writers-paused", false, "export-remote/repair only: all database writers are stopped and drained")
+	applyRepair := flags.Bool("apply", false, "repair-staged-floats only: explicitly permit bounded proven transport repair")
+	expectedFloatCells := flags.Int("expected-float-cells", 0, "repair only: exact independently audited changed REAL cell count, 1..32")
 	initialize := flags.Bool("initialize", false, "load only into a new empty destination")
 	resume := flags.Bool("resume", false, "resume this exact snapshot's existing staged import")
 	rows := flags.Int("batch-rows", 100, "maximum rows per import transaction, capped at 120")
@@ -97,6 +99,25 @@ func run(args []string) error {
 			return e
 		}
 		result = snapshot
+	case "repair-staged-floats":
+		if !*applyRepair || !*writersPaused || *expectedFloatCells < 1 || *expectedFloatCells > 32 {
+			return fmt.Errorf("repair-staged-floats requires --apply --writers-paused --expected-float-cells 1..32")
+		}
+		if *path == "" {
+			return fmt.Errorf("repair-staged-floats requires --snapshot")
+		}
+		if e := validateExpectedHost(*expectedHost, os.Getenv("TURSO_DATABASE_URL")); e != nil {
+			return e
+		}
+		db, e := turso.New(os.Getenv("TURSO_DATABASE_URL"), os.Getenv("TURSO_AUTH_TOKEN"))
+		if e != nil {
+			return e
+		}
+		report, e := snapshotimport.RepairStagedFloats(ctx, db, *path, snapshotimport.FloatRepairOptions{Apply: *applyRepair, WritersPaused: *writersPaused, ExpectedFloatCells: *expectedFloatCells})
+		if e != nil {
+			return e
+		}
+		result = report
 	case "load", "verify":
 		if *path == "" {
 			return fmt.Errorf("load/verify requires --snapshot")
@@ -125,7 +146,7 @@ func run(args []string) error {
 			result = report
 		}
 	default:
-		return fmt.Errorf("unknown import mode; use export, export-remote, restore-local, inspect, load or verify")
+		return fmt.Errorf("unknown import mode; use export, export-remote, restore-local, inspect, load, verify or repair-staged-floats")
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
@@ -136,7 +157,7 @@ func run(args []string) error {
 // constructing a destination client. This function never performs network I/O.
 func validateExpectedHost(expected, rawURL string) error {
 	if expected == "" {
-		return fmt.Errorf("load/verify/export-remote requires --expected-host")
+		return fmt.Errorf("load/verify/export-remote/repair requires --expected-host")
 	}
 	if len(expected) > 253 || strings.ContainsAny(expected, "/:@?#\\* []\t\r\n") || strings.TrimSpace(expected) != expected {
 		return fmt.Errorf("expected-host must be one exact hostname, without a URL, port, wildcard or credentials")
