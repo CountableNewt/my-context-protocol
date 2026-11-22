@@ -101,3 +101,11 @@ The backend retains the original repo history. The frontend was merged in via `g
 ## License
 
 This repository is released under the [MIT License](LICENSE).
+
+## Go and Vercel migration
+
+The migration to Go services, one Vercel project with branch previews, and Turso
+Free is in progress. See [the migration record](docs/migrations/go-vercel-turso.md)
+for acceptance and current status. The Go module lives in `services/go`; Railway
+remains the live deployment until cutover is verified. Every account now has full
+feature access, with no paid tier or project-count payment limits.

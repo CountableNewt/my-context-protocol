@@ -35,7 +35,9 @@ export async function GET(request: NextRequest) {
   if (isBackendRedirect && location) {
     const requestUrl = new URL(request.url);
     // Use 302 to the browser even when Vapor returns 303 — avoids rare clients mishandling Set-Cookie on 303.
-    const response = NextResponse.redirect(location, 302);
+    // Keep host-only cookies on the origin that consumed the handoff. A preview
+    // deployment URL and its branch alias are different cookie hosts.
+    const response = NextResponse.redirect(new URL(redirectTo, requestUrl), 302);
     forwardBackendResponseCookies(res, response, requestUrl);
     return response;
   }

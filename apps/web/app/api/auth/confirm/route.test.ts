@@ -113,6 +113,22 @@ describe("GET /api/auth/confirm", () => {
     expect(c.toLowerCase()).not.toMatch(/;\s*secure\b/);
   });
 
+  it("keeps a deployment-link login on that host even when backend uses a branch alias", async () => {
+    vi.stubEnv("IDENTITY_SERVICE_URL", "https://identity.internal");
+    const { GET } = await loadRoute();
+    fetchMock.mockResolvedValueOnce(new Response(null, {
+      status: 303,
+      headers: {
+        location: "https://branch-preview.vercel.app/projects",
+        "set-cookie": "vapor-session=opaque; Domain=branch-preview.vercel.app; Path=/; Secure; HttpOnly",
+      },
+    }));
+    const res = await GET(request("https://deployment-preview.vercel.app/api/auth/confirm?token=t&redirect=%2Fprojects"));
+    expect(res.headers.get("location")).toBe("https://deployment-preview.vercel.app/projects");
+    expect(res.headers.get("set-cookie")).toContain("vapor-session=opaque");
+    expect(res.headers.get("set-cookie")).not.toContain("Domain=");
+  });
+
   it("returns JSON when backend responds 200 with body", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "http://api.test");
     const { GET } = await loadRoute();

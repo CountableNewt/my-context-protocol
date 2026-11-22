@@ -50,3 +50,24 @@ Sources: [Services](https://vercel.com/docs/services), [Go runtime](https://verc
 - Linear: plugin discovered but not connected; issue updates pending connection.
 - Vercel: connected account has no existing project matching `context` at initial inspection.
 - Railway retirement: pending all acceptance above.
+
+## 2026-11-22 implementation waypoint
+
+- Payment gates removed from Swift backend, dashboard and Swift CLI. Legacy billing columns remain compatible; no external subscriptions were canceled by these changes.
+- Swift gateway: 235 tests pass serially, with warnings-as-errors compilation.
+- Frontend: 206 tests pass, typecheck and lint pass (two existing navigation warnings); Next.js upgraded to 16.4.6 and production Turbopack build passes.
+- Swift CLI: format check, warnings-as-errors build, 8 Swift tests, 15 HTTP/CLI tests and release build pass with the installed Xcode beta toolchain.
+- Existing SQLite migration tests: 17 pass, one external Postgres fixture test skipped.
+- Go module now has token/session/Turso primitives, GitHub browser/CLI identity routes, and bounded repository archive fetch/extraction. These are not full gateway parity.
+- Runtime Next API forwarding supports identity/control/sync bindings with an explicit route allowlist, same-origin cookies, uncached account data, and fail-closed missing preview bindings. `VERCEL_SERVICE_MODE=1` must only be enabled when those services are deployed and ready.
+- Created empty `mcp-migration-preview` on the existing Turso Free account after explicit owner approval, default `aws-us-east-2` group. No production data imported. URL: `libsql://mcp-migration-preview-countablenewt.aws-us-east-2.turso.io`.
+- Account dashboard displayed 82% shared embedded-sync quota used. Use stateless remote HTTP queries for this migration; do not create embedded replicas or run bulk sync rehearsals against that remaining quota.
+- No Vercel deployment or domain cutover has occurred. Railway remains live.
+
+### Remaining identity acceptance
+
+A single production GitHub OAuth callback cannot create a handoff in production storage and have it redeemed from an isolated preview database. Before hosted branch login, implement and validate a deliberate callback broker or use separately configured preview OAuth credentials/callbacks. Origin allowlisting alone does not solve this. Route `/auth/github/callback` explicitly to identity; the dashboard API proxy alone only owns `/api/*`.
+
+Remaining backend port includes MCP OAuth/consent/token registration, GitHub App install and repository listing, control API, compiler/runtime, sync publication and webhooks, shared revision/subscription/rate-limit state, maintenance scheduling, custom domains, controlled schema migration and data verification. The current Go identity slice must not receive unsupported routes.
+
+Go verification: race-enabled tests, `go vet`, and `go build ./...` pass for the implemented packages. Final frontend regression also preserves host-only sessions on deployment-specific preview URLs when backend defaults use a branch alias.

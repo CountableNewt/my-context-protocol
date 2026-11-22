@@ -48,6 +48,15 @@ bun install --frozen-lockfile
 header "SQLite migration tests"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -v
 
+header "Go service checks"
+(
+  cd "$ROOT/services/go"
+  test -z "$(gofmt -l .)"
+  go vet ./...
+  go test -race ./...
+  go build ./...
+)
+
 # ---------------------------------------------------------------------------
 # Frontend checks (parallel sub-jobs)
 # ---------------------------------------------------------------------------
