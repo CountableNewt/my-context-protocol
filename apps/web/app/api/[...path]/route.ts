@@ -31,6 +31,9 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       const value = request.headers.get(name);
       if (value) headers.set(name, value);
     }
+    // This is request metadata for redirect resolution, never authentication.
+    // Stamp it from the app request; an incoming caller value is never forwarded.
+    headers.set("x-context-frontend-origin", new URL(request.url).origin);
     const upstream = await fetch(url, {
       method: request.method,
       headers,

@@ -408,3 +408,46 @@ func TestRelativeInstallRejectsSpoofedHostsAndOtherProjectReturns(t *testing.T) 
 		}
 	}
 }
+
+func TestBoundInstallerUsesAllowlistedBFFBrowserOrigin(t *testing.T) {
+	s, db := setup(t)
+	s.config.FrontendOrigins = []string{"https://branch-preview.example", "https://deployment-immutable.example"}
+	r := httptest.NewRequest("GET", "https://identity.internal/auth/github/app/install?project_id=project&return_to=%2Fprojects%2Fproject", nil)
+	r.AddCookie(&http.Cookie{Name: "vapor-session", Value: "session"})
+	r.Header.Set("X-Context-Frontend-Origin", "https://deployment-immutable.example")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 302 {
+		t.Fatalf("binding host rejected trusted BFF origin %d %s", w.Code, w.Body)
+	}
+	location, _ := url.Parse(w.Header().Get("Location"))
+	rows, err := db.Execute(context.Background(), sql("SELECT return_to FROM github_app_install_intents WHERE id=?", turso.Text(location.Query().Get("state"))))
+	if err != nil || len(rows.Rows) != 1 || col(rows.Rows[0], 0) != "https://deployment-immutable.example/projects/project" {
+		t.Fatalf("wrong origin persisted %+v %v", rows, err)
+	}
+}
+func TestBFFOriginMetadataCannotAuthorizeOrIntroduceUntrustedReturns(t *testing.T) {
+	s, _ := setup(t)
+	for _, origin := range []string{"https://attacker.example", "https://app.example.attacker.example", "https://app.example/path", "https://app.example?query=1", "https://user@app.example", "https://app.example#fragment", "https://app.example,https://attacker.example", "http://app.example"} {
+		r := httptest.NewRequest("GET", "https://identity.internal/auth/github/app/install?project_id=project&return_to=%2Fprojects%2Fproject", nil)
+		r.AddCookie(&http.Cookie{Name: "vapor-session", Value: "session"})
+		r.Header.Set("X-Context-Frontend-Origin", origin)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		if w.Code != 400 {
+			t.Fatalf("untrusted origin %q status%d", origin, w.Code)
+		}
+	}
+	for _, cookie := range []string{"", "other-session"} {
+		r := httptest.NewRequest("GET", "https://identity.internal/auth/github/app/install?project_id=project", nil)
+		if cookie != "" {
+			r.AddCookie(&http.Cookie{Name: "vapor-session", Value: cookie})
+		}
+		r.Header.Set("X-Context-Frontend-Origin", "https://app.example")
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		if w.Code != 401 && w.Code != 404 {
+			t.Fatalf("origin header granted access cookie=%q status%d", cookie, w.Code)
+		}
+	}
+}

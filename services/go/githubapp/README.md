@@ -32,7 +32,10 @@ HTTP routes:
 - `GET /github/repos`: signed-in user's accessible repositories.
 - `GET /auth/github/app/install`: requires session, owned project, allowlisted
   return origin; relative project returns resolve against the actual allowlisted
-  request host, ignoring forwarded-host/protocol headers. Stores a one-hour,
+  request origin. The Next BFF stamps `X-Context-Frontend-Origin` from its actual
+  request URL, overwriting caller input; Go accepts only exact configured frontend
+  origins. This header grants no authentication or project access. Direct requests
+  can use an allowlisted Host; forwarded-host/protocol headers are ignored. Stores a one-hour,
   random, database-backed install intent.
 - `GET /auth/github/app/callback`: requires matching session/account/project,
   unexpired unused intent, and GitHub-verified installation ownership. Optional
@@ -66,3 +69,15 @@ JWT signatures, PEM normalization, token identity, scoped permissions/access,
 credential-safe pagination, webhook secrets/signatures/lifecycle, encrypted OAuth
 storage, session binding, expiry/replay, ownership checks, real connection SQL and
 sidecar-only draft PR creation. No external network is required.
+
+## Provisioning evidence (2026-11-22)
+
+Read-only Railway Gateway variable-name inventories for both Development and
+Production contained the GitHub OAuth client id/secret and callback variables,
+but **no `GITHUB_APP_*` variables**. Existing OAuth sign-in credentials do not
+provision an App. App installation/token/webhook acceptance therefore still needs
+an actual GitHub App plus `GITHUB_APP_CLIENT_ID`, private key (raw or base64),
+`GITHUB_APP_SLUG`, `GITHUB_APP_WEBHOOK_SECRET`, and registered Setup callback.
+`GITHUB_APP_CLIENT_SECRET` is also required when installation requests user OAuth
+authorization. No secret values were displayed and no provider settings changed
+for this inventory.

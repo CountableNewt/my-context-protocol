@@ -81,3 +81,24 @@ describe("deployment-bound API routing", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+it("stamps the browser origin for a bound GitHub installer and overwrites caller metadata", async () => {
+  fetchMock.mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://github.com/apps/example/installations/new" } }));
+  const request = new NextRequest("https://immutable-preview.vercel.app/api/auth/github/app/install?project_id=project&return_to=%2Fprojects%2Fproject", {
+    headers: {
+      cookie: "vapor-session=opaque",
+      "x-context-frontend-origin": "https://attacker.example",
+      "x-forwarded-host": "attacker.example",
+      "x-forwarded-proto": "http",
+    },
+  });
+  const response = await GET(request, context("auth", "github", "app", "install"));
+  const [url, options] = fetchMock.mock.calls[0];
+  expect(String(url)).toBe("https://identity.internal/auth/github/app/install?project_id=project&return_to=%2Fprojects%2Fproject");
+  const headers = new Headers(options?.headers);
+  expect(headers.get("x-context-frontend-origin")).toBe("https://immutable-preview.vercel.app");
+  expect(headers.get("cookie")).toBe("vapor-session=opaque");
+  expect(headers.has("x-forwarded-host")).toBe(false);
+  expect(headers.has("x-forwarded-proto")).toBe(false);
+  expect(response.status).toBe(302);
+});

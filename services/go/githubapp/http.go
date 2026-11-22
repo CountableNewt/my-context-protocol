@@ -73,10 +73,23 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// requestOrigin trusts only the request Host when it exactly matches a
-// configured deployment/frontend origin. Forwarded headers cannot introduce
-// arbitrary redirect hosts or select a different configured deployment.
+// requestOrigin uses the BFF-stamped browser origin only when it exactly names
+// a configured frontend. The header grants no authentication or project access;
+// sessions and ownership checks remain mandatory. Forwarded host/proto headers
+// cannot introduce arbitrary return origins.
 func (s *Service) requestOrigin(r *http.Request) (string, error) {
+	if origin := r.Header.Get("X-Context-Frontend-Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || u.User != nil || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
+			return "", &PublicError{400, "Invalid frontend origin", nil}
+		}
+		for _, allowed := range s.config.FrontendOrigins {
+			if origin == strings.TrimRight(allowed, "/") {
+				return origin, nil
+			}
+		}
+		return "", &PublicError{400, "Frontend origin is not allowed", nil}
+	}
 	host := r.Host
 	if host == "" || strings.ContainsAny(host, "/@\\?#, \r\n\t") {
 		return "", &PublicError{400, "Untrusted installation request host", nil}
@@ -89,6 +102,7 @@ func (s *Service) requestOrigin(r *http.Request) (string, error) {
 	}
 	return "", &PublicError{400, "Installation request host is not allowed", nil}
 }
+
 func (s *Service) returnTo(raw, project, requestOrigin string) (string, error) {
 	expected := "/projects/" + url.PathEscape(project)
 	if raw == "" {
