@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs Swift CLI checks, then frontend checks (typecheck, lint, test, build) and gateway
-# checks (test, release build) in parallel. Any failed check makes the script fail.
+# Runs Swift CLI and SQLite migration checks, then the frontend, Go services,
+# and temporary Swift gateway parity checks in parallel. Any failed check fails CI.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,15 +47,6 @@ bun install --frozen-lockfile
 
 header "SQLite migration tests"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -v
-
-header "Go service checks"
-(
-  cd "$ROOT/services/go"
-  test -z "$(gofmt -l .)"
-  go vet ./...
-  go test -race ./...
-  go build ./...
-)
 
 # ---------------------------------------------------------------------------
 # Frontend checks (parallel sub-jobs)
@@ -109,11 +100,21 @@ swift_checks() {
 }
 
 # ---------------------------------------------------------------------------
-# Run both sides in parallel; abort everything if either fails
+# Go checks (parallel with frontend and the temporary Swift gateway)
+# ---------------------------------------------------------------------------
+
+go_checks() {
+  header "Go format, vet, race tests, and build"
+  run_logged go-checks bash "$ROOT/scripts/check-go.sh"
+}
+
+# ---------------------------------------------------------------------------
+# Run independent checks in parallel and report every failure
 # ---------------------------------------------------------------------------
 
 FRONTEND_PID=""
 SWIFT_PID=""
+GO_PID=""
 FAILED=0
 
 frontend_checks &
@@ -122,7 +123,10 @@ FRONTEND_PID=$!
 swift_checks &
 SWIFT_PID=$!
 
-# Wait for both, capturing exit codes.
+go_checks &
+GO_PID=$!
+
+# Wait for all three, capturing exit codes.
 wait_pid() {
   local name="$1" pid="$2"
   if wait "$pid"; then
@@ -135,6 +139,7 @@ wait_pid() {
 
 wait_pid "frontend" "$FRONTEND_PID"
 wait_pid "swift"    "$SWIFT_PID"
+wait_pid "go"       "$GO_PID"
 
 if [[ $FAILED -ne 0 ]]; then
   echo ""
