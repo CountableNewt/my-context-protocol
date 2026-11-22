@@ -54,6 +54,174 @@
   },
   "rewrites": [
     {
+      "source": "/auth/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/github/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/dashboard/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/projects/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/webhooks/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "sync"
+      }
+    },
+    {
+      "source": "/health",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/auth/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/github/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/dashboard/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/projects/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/webhooks/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "sync"
+      }
+    },
+    {
+      "source": "/health",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
       "source": "/internal/maintenance",
       "destination": {
         "service": "control"
