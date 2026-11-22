@@ -1,6 +1,6 @@
 # Go, Vercel, and Turso migration
 
-Requested 2026-11-22. This is a migration record, not evidence of a completed cutover.
+Requested and cut over on 2026-11-22. Production now runs on the single Vercel Hobby project and Turso Developer; all Railway compute is retired with storage and backups retained. The dated preparation entries below are historical; the final evidence section records the completed acceptance and rollback checks.
 
 ## Target
 
@@ -97,9 +97,9 @@ Vercel CLI initially classified a failed first deployment as Production; it neve
 - The approved temporary preview token file was deleted after remote rehearsal. The accidentally CLI-created automation bypass was revoked. Preview authentication remains enabled.
 - GitHub reported 12 existing default-branch dependency alerts (2 high, 10 moderate) during push; these are outside this migration's implementation and remain visible in repository security alerts.
 
-The owner subsequently approved the private production snapshot and development App migration; both are complete as recorded below. Production import, DNS changes and Railway retirement remain unperformed.
+The owner subsequently approved the private production snapshot and development App migration; both are complete as recorded below. At that preparation checkpoint, production import, DNS changes and Railway retirement had not yet occurred; all are completed in the final evidence below.
 
-## Latest verified state
+## Pre-cutover preparation record
 
 - Owner chose Turso Developer for now after the account-wide sync allowance warning. This migration uses stateless SQL and the MCP preview reports zero embedded-sync bytes. Investigation of other projects' cumulative sync usage was deferred at the owner's request. No further plan change or overage setting was enabled by this migration.
 - Created the approved empty classic SQLite database `my-context-protocol-production`, default `aws-us-east-2`, URL `libsql://my-context-protocol-production-countablenewt.aws-us-east-2.turso.io`. A database-scoped read/write token with no expiry is in Vercel Production and the specifically approved temporary mode-600 file `/private/tmp/mcp-production-rehearsal/production.env`; delete that credential file after migration. Read-only probe confirmed zero application tables. No production data imported.
@@ -112,7 +112,7 @@ The owner subsequently approved the private production snapshot and development 
 - Preserved root REST paths on existing API hostnames in `vercel.json`, alongside the unified `/api` route, so saved legacy CLI profiles remain compatible at cutover.
 - Added renewing short-lived Vercel integration authentication for custom domains. Owner approved an unlisted integration with project/domain read-write and only this project selected. The draft is prepared in the Integrations Console; no integration has yet been created or agreement accepted. Browser logo upload stalled and native picker access was denied. Finish the existing app-icon upload and obtain action-time approval for the required Marketplace Agreement before creation/install.
 
-Remaining before retirement: finish provider integration/install, hosted repository sync and signed-hook acceptance, actual tenant MCP OAuth/domain tests, final write freeze and fresh verified import, production DNS/deployment acceptance and rollback verification, then stop Railway compute while retaining recovery artifacts. The current private rehearsal snapshot is not a final cutover snapshot.
+The preparation gates were provider integration/install, hosted sync and signed hooks, tenant OAuth, final frozen import, production acceptance and rollback, followed by Railway retirement. The early private rehearsal snapshot was not the final cutover snapshot. These gates were subsequently completed as recorded below.
 
 ### Hosted repository acceptance: App webhook correction
 
@@ -158,7 +158,7 @@ Chrome opened the existing development GitHub App's delivery history and used Gi
 
 A separate read-only Turso UI query confirmed that exact job exists with `delivery_key = github:314ece2a-e6b7-11f1-9de3-f074599954a9`, the same release ID, `status = ready`, and `error_code IS NULL`. This verifies an actual provider-signed external push through ingress, signature validation, repository selection, sync and durable release publication. GitHub supplied its original payload/signature directly: no reconstructed request, extracted signing secret, OIDC replay or permanent bypass was used. Another actual push returned HTTP 200 with an empty jobs list, which only demonstrates accepted ingress without a matching target and is not the sync acceptance evidence.
 
-This completes the previously separate external signed-hook acceptance. Final production data import, production domain cutover and Railway retirement remain outstanding. Production Turso is still empty.
+This completed external signed-hook acceptance before the final production import, domain cutover and Railway retirement recorded below.
 
 Consent navigation also permits only the validated, registered callback origin in `form-action`, alongside `'self'`, because Chrome applies that directive to the successful 303 form redirect. It retains default-src none and framing/base restrictions; redirect hostnames containing CSP delimiters or wildcards are rejected. Tests cover the exact loopback callback allowance, absence of wildcard policy, unsafe redirect metadata rejection, and the unchanged form-Origin checks. This follows the [CSP form-action pre-navigation check](https://www.w3.org/TR/CSP/#directive-form-action).
 
@@ -167,3 +167,20 @@ Consent navigation also permits only the validated, registered callback origin i
 Corrected preview `95jx1blvr` (`dpl_GsbT8MU4DSoTtyr8GF3YxfAaAuWF`) served both testing tenants and the migration broker alias. The owner explicitly authorized the same temporary local public OAuth client for `mcp:invoke` on Migration acceptance one. Normal Chrome GitHub login reached consent, Approve returned to the originally registered loopback callback, and the S256 code exchange succeeded. MCP initialize succeeded with that token on its tenant. Cross-project client authorization and token exchange, wrong PKCE, wrong resource, code replay and cross-project bearer use were all rejected.
 
 The exact temporary public client and its three pending/code/access-token child sets were removed through the authenticated preview SQL UI. A separate query confirmed zero matching clients, and the still-running acceptance helper confirmed that MCP rejected the removed token before exiting successfully. The temporary CLI session was revoked; Chrome independently showed the broker session signed out at the login page. No replacement client, persistent bypass or production credential was created for this rerun. This completes the tenant OAuth acceptance gate before production freeze. Full GitHub CI passed for the consent-fix code.
+
+
+## Final production cutover and recovery evidence
+
+Production is live on Vercel/Turso. The production dashboard, API, MCP base, tenant wildcard and existing verified custom-domain routing were moved after certificates and Vercel domain configuration were ready. Marque remains authoritative for the apex zones; app-specific ACME challenge NS delegation supplies wildcard certificate renewal. Mail, AT Protocol and unrelated verification records were preserved. An initial custom-domain HTTP 502 was traced to a cached Railway DNS answer: a TLS-verified request to the assigned Vercel address returned the expected HTTP 401 and MCP metadata challenge, and subsequent ordinary-host acceptance passed.
+
+The final frozen source snapshot was imported and strictly verified across **30 original tables and 16,299 rows**, both before and after additive Go migrations. Typed multiset hashes matched the source exactly, including real-number bit patterns. Twelve timestamp cells initially differed by one ULP through SQL transport; the guarded staging repair restored their source values before strict verification passed. This was an exact import gate, not a relaxed float comparison. The private reports are `final-float-repair-report.json`, `final-verify-after-report.json` and `final-migration-report.json`; they contain no credentials in this repository. Original snapshot ID: `5bb7868a40fcc6151cf51591530b2f5811ca991109883e26d5c7517b50344c01`.
+
+Production acceptance used normal Chrome GitHub login and the public dashboard API with an isolated temporary CLI configuration. The authenticated account could read one existing project and 56 GitHub repositories. Its account-returned public MCP URL passed an unauthenticated HTTP 401/Vercel/resource-metadata preflight, then temporary-key initialize, tools/list, catalog and get_skill requests succeeded. One existing custom-domain status read also succeeded. The temporary key was revoked, the CLI session logged out and the private configuration removed. No production project/release was created or changed for acceptance, and no new OAuth client or consent grant was registered. Chrome had no authenticated pre-cutover cookie, so imported browser-session continuity was not verified. Fresh login updates the account GitHub token; repository listing proves the live encrypted-token/provider path, not independent preservation of untouched imported account ciphertext. Exact import checks and prior compatibility fixtures provide separate data/serialization evidence.
+
+A fresh **post-Go-write** destination export was restored into an offline SQLite database, then exported again and compared exactly: **30 original tables, 16,313 rows**, identical typed table hashes and snapshot ID `32f5707a161c427bb3ed1c3c162dc5dd44f7ed4c7742562bfc7462cf0dd8f5f0`. Private evidence is `post-go-roundtrip-report.json` and `post-go-local-restore-report.json`. The exporter uses setting-free source reads so the frozen source is not mutated while capturing a snapshot. This proves reverse transfer of the tested post-cutover dataset; it does not authorize restarting a stale Railway source after later writes. A future rollback must first pause destination writers and repeat the verified reverse transfer.
+
+At **2026-11-22 22:18 UTC**, all six Railway Development/Production Web, Gateway and Postgres deployments were terminally removed, with stopped/exited instances and zero active or queued compute. Service definitions, domains, variables, all four environment-specific volume instances and **25 existing backups** remain. GitHub auto-deploys and Postgres image auto-updates are disabled. Storage can still incur charges and backups retain their expiry policies. See [exact retirement inventory and rollback precautions](../runbooks/railway-compute-retirement-2026-11-22.md).
+
+After Railway removal, public checks returned dashboard HTTP 200, API health HTTP 200, authenticated-project routes HTTP 401 on both `/api/projects` and legacy `/projects`, custom MCP metadata HTTP 200 and MCP HTTP 401, all served by Vercel. The approved temporary Railway SSH registration was removed and independently confirmed absent; the temporary production credential file was deleted and confirmed absent. Private backup/recovery artifacts remain protected.
+
+The Swift gateway source remains legacy recovery/reference code. Default CI retains Go format/vet/race/build, frontend checks, Swift CLI format/test/build and SQLite migration tests; the former gateway suite is preserved as an explicit [manual recovery command](legacy-swift-gateway.md). The required GitHub check name remains Test and build. Final active CI must pass on the PR head before merge. The Vercel project remains Hobby; the owner's explicit Turso Developer choice supersedes the initial Free-tier target.
