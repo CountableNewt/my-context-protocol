@@ -100,6 +100,10 @@ func TestOAuthCodePKCEAndReplayAgainstSQLite(t *testing.T) {
 	if w.Header().Get("Referrer-Policy") != "same-origin" {
 		t.Fatal("consent must preserve same-origin browser form identity")
 	}
+	policy := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "form-action 'self' http://127.0.0.1:4321;") || strings.Contains(policy, "*") || !strings.Contains(policy, "default-src 'none'") {
+		t.Fatal("consent policy must permit only the registered callback origin")
+	}
 	if strings.Contains(w.Body.String(), "<My Project>") {
 		t.Fatal("project name was not escaped")
 	}
@@ -193,7 +197,7 @@ func TestOAuthConsentDoesNotAuthorizeOtherAccount(t *testing.T) {
 }
 func TestRegistrationRejectsUnsafeMetadata(t *testing.T) {
 	s, _ := setup(t)
-	for _, body := range []string{`{"redirect_uris":["http://example.com/cb"]}`, `{"redirect_uris":["https://user:secret@example.com/cb"]}`, `{"redirect_uris":["https://example.com/cb#fragment"]}`, `{"redirect_uris":[]}`, `{"redirect_uris":["https://example.com/cb"],"grant_types":["client_credentials"]}`, `{"redirect_uris":["https://example.com/cb"],"token_endpoint_auth_method":"client_secret_post"}`} {
+	for _, body := range []string{`{"redirect_uris":["http://example.com/cb"]}`, `{"redirect_uris":["https://user:secret@example.com/cb"]}`, `{"redirect_uris":["https://example.com/cb#fragment"]}`, `{"redirect_uris":["https://*.example/cb"]}`, `{"redirect_uris":["https://example.com;upgrade-insecure-requests/cb"]}`, `{"redirect_uris":["https://example.com,other/cb"]}`, `{"redirect_uris":[]}`, `{"redirect_uris":["https://example.com/cb"],"grant_types":["client_credentials"]}`, `{"redirect_uris":["https://example.com/cb"],"token_endpoint_auth_method":"client_secret_post"}`} {
 		r := httptest.NewRequest("POST", "https://tenant.example/register", strings.NewReader(body))
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)

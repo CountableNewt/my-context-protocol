@@ -228,7 +228,7 @@ func allowedRedirect(raw string) bool {
 		return false
 	}
 	u, e := url.Parse(raw)
-	if e != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
+	if e != nil || u.Host == "" || u.User != nil || u.Fragment != "" || strings.ContainsAny(u.Host, ";,'\"* \t") {
 		return false
 	}
 	if u.Scheme == "https" {
@@ -567,7 +567,16 @@ func (s *Service) consent(w http.ResponseWriter, r *http.Request, p *Project) {
 	// referrers from cross-origin GitHub and loopback redirects.
 	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	// Chrome applies form-action to the 303 navigation too. Allow only this
+	// already-registered callback origin, so successful consent can reach the
+	// public client's HTTPS or loopback redirect without a wildcard policy.
+	callback, parseErr := url.Parse(pending["redirect_uri"])
+	if parseErr != nil || !allowedRedirect(pending["redirect_uri"]) {
+		fail(w, 503, "server_error", "Invalid client callback")
+		return
+	}
+	callbackOrigin := callback.Scheme + "://" + callback.Host
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; form-action 'self' "+callbackOrigin+"; frame-ancestors 'none'; base-uri 'none'")
 	fmt.Fprintf(w, "<!doctype html><html><head><meta charset=\"utf-8\"><title>Authorize MCP Client</title></head><body><h1>Authorize MCP Client</h1><p>Project: <strong>%s</strong></p><p>Permissions: <code>%s</code></p><form method=\"post\" action=\"/oauth/consent\"><input type=\"hidden\" name=\"pending\" value=\"%s\"><input type=\"hidden\" name=\"consent_token\" value=\"%s\"><button name=\"decision\" value=\"approve\">Approve</button><button name=\"decision\" value=\"deny\">Deny</button></form></body></html>", html.EscapeString(p.Name), html.EscapeString(pending["scope"]), html.EscapeString(pending["id"]), html.EscapeString(token))
 }
 func readForm(w http.ResponseWriter, r *http.Request, limit int64) error {
