@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -450,14 +449,4 @@ func verifyTable(ctx context.Context, db Database, table *Table, count int64) er
 		return errors.New("destination typed row digest differs from snapshot")
 	}
 	return nil
-}
-
-// TableNames returns a stable list for operational reports without row contents.
-func TableNames(snapshot *Snapshot) []string {
-	names := make([]string, len(snapshot.Tables))
-	for i, table := range snapshot.Tables {
-		names[i] = table.Name
-	}
-	sort.Strings(names)
-	return names
 }
