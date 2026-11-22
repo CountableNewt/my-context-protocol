@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -34,5 +35,38 @@ func TestLoadAndVerifyRequireHostBeforeCredentialsOrFileAccess(t *testing.T) {
 		if e == nil || !strings.Contains(e.Error(), "does not match") {
 			t.Fatal("wrong target reached credentials/file access")
 		}
+	}
+}
+
+func TestRemoteExportRequiresIndependentHostAndPausedWriters(t *testing.T) {
+	t.Setenv("TURSO_DATABASE_URL", "libsql://db-owner.turso.io")
+	t.Setenv("TURSO_AUTH_TOKEN", "")
+	for _, tc := range []struct {
+		args    []string
+		message string
+	}{
+		{[]string{"export-remote", "--output", "/nonexistent/output"}, "writers-paused"},
+		{[]string{"export-remote", "--output", "/nonexistent/output", "--writers-paused"}, "expected-host"},
+		{[]string{"export-remote", "--output", "/nonexistent/output", "--writers-paused", "--expected-host", "wrong.turso.io"}, "does not match"},
+	} {
+		e := run(tc.args)
+		if e == nil || !strings.Contains(e.Error(), tc.message) {
+			t.Fatal("remote export guard did not run before credentials/network access")
+		}
+	}
+}
+func TestRestoreLocalRequiresNewOutputAndNoCredentials(t *testing.T) {
+	t.Setenv("TURSO_DATABASE_URL", "not a URL")
+	t.Setenv("TURSO_AUTH_TOKEN", "")
+	if e := run([]string{"restore-local", "--snapshot", "/nonexistent/artifact"}); e == nil || !strings.Contains(e.Error(), "--output") {
+		t.Fatal("missing local output accepted")
+	}
+	output := t.TempDir() + "/exists.sqlite"
+	if e := os.WriteFile(output, []byte("existing database"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	e := run([]string{"restore-local", "--snapshot", "/nonexistent/artifact", "--output", output})
+	if e == nil || !strings.Contains(e.Error(), "already exist") {
+		t.Fatal("existing output reached credentials or source read")
 	}
 }

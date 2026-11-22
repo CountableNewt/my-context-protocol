@@ -87,3 +87,36 @@ go test -race ./snapshotimport -run TestApprovedLocalSnapshotRehearsal -v
 ```
 
 Without the opt-in environment variable, this test skips. A passing local rehearsal does not change routing or perform a hosted transfer.
+
+### Roll back after Go has accepted writes
+
+The original pre-cutover backup cannot retain later writes. Before exporting a rollback snapshot, pause and drain **all** writers: dashboard/control mutations, MCP telemetry and key touches, OAuth/session callbacks, GitHub webhooks and sync, and maintenance/cron. Keep them stopped through export, restore, target verification and routing changes. Stop new ingress and let in-flight requests finish; changing only the frontend does not stop backend writers.
+
+`export-remote` uses independent bounded SELECT requests, not a long-lived database transaction. `--writers-paused` is an operator declaration, not a lock this tool installs. The second count-and-typed-digest pass detects observed drift, including equal-count edits, but neither matching counts nor matching passes prove coherence if writers are active. Abort and repeat after a complete pause if that precondition is uncertain.
+
+From `services/go`, using the independently reviewed exact source hostname and credentials provided securely in the environment:
+
+```sh
+# All application, webhook, callback and scheduled writers are stopped/drained.
+# TURSO_DATABASE_URL and TURSO_AUTH_TOKEN now identify the current Go database.
+go run ./cmd/import export-remote \
+  --expected-host mycontext-production-OWNER.turso.io \
+  --writers-paused \
+  --output /private/tmp/mcp-sqlite-transfer/post-go-writes.jsonl
+
+# This step is entirely offline and reads no database credentials.
+go run ./cmd/import restore-local \
+  --snapshot /private/tmp/mcp-sqlite-transfer/post-go-writes.jsonl \
+  --output /private/tmp/mcp-sqlite-transfer/rollback.sqlite
+
+# Independent offline inspection; should return the same snapshot_id/manifests.
+go run ./cmd/import export \
+  --source /private/tmp/mcp-sqlite-transfer/rollback.sqlite \
+  --output /private/tmp/mcp-sqlite-transfer/rollback-checked.jsonl
+```
+
+Remote export accepts only the exact baseline schema plus shipped owned Go additions. It retains all baseline application rows, IDs, tokens, sessions, BLOBs, timestamps and Fluent migration history, including changes written by Go. It deliberately omits Go-only transient state and its migration/checkpoint registries. Both export and restore require new output paths and publish 0600 files atomically after verification; they never overwrite a database. Restore uses a private unpublished SQLite database, deferred foreign keys within one data transaction, integrity/FK checks, and an independent full typed re-export. Schema, type, size, FK or digest failures publish no output.
+
+The tool does **not** upload the restored database to Railway, stop/start services, change routes or resume writers. Keep the original and post-write artifacts private. Separately review and authorize replacing the stopped Swift backend's SQLite file, ensure the original signing/encryption secrets remain configured, then validate authenticated Chrome/CLI/MCP/OAuth/sync behavior before reopening ingress. Keep Go writers stopped after switching back so the two databases cannot diverge. This local restore is a concrete data-preserving rollback artifact, not an automatic cutover.
+
+The opt-in private rehearsal above now also edits a project in the temporary Go database, exports it with writers paused, restores it locally, and verifies that the edit survives while the original source and artifact hashes stay unchanged. Its private report includes only manifests, aggregate acceptance results and fingerprints.

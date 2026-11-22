@@ -1,5 +1,6 @@
-// Command import performs explicit offline snapshot export, staged loading and
-// verification. Credentials are read only from destination environment variables.
+// Command import performs explicit offline and writers-paused remote export,
+// staged loading, local rollback restore and verification. Database credentials
+// are read only from environment variables, never CLI flags.
 package main
 
 import (
@@ -24,14 +25,15 @@ func main() {
 }
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: import export|inspect|load|verify [options]")
+		return fmt.Errorf("usage: import export|export-remote|restore-local|inspect|load|verify [options]")
 	}
 	mode := args[0]
 	flags := flag.NewFlagSet("import "+mode, flag.ContinueOnError)
 	source := flags.String("source", "", "standalone SQLite backup (export only)")
-	output := flags.String("output", "", "new private JSONL artifact (export only)")
+	output := flags.String("output", "", "new private artifact or SQLite database (export/export-remote/restore-local)")
 	path := flags.String("snapshot", "", "typed JSONL snapshot artifact")
-	expectedHost := flags.String("expected-host", "", "required exact destination hostname for load/verify; independently reviewed")
+	expectedHost := flags.String("expected-host", "", "required exact database hostname for load/verify/export-remote; independently reviewed")
+	writersPaused := flags.Bool("writers-paused", false, "export-remote only: all database writers are stopped and drained")
 	initialize := flags.Bool("initialize", false, "load only into a new empty destination")
 	resume := flags.Bool("resume", false, "resume this exact snapshot's existing staged import")
 	rows := flags.Int("batch-rows", 100, "maximum rows per import transaction, capped at 120")
@@ -54,6 +56,34 @@ func run(args []string) error {
 			return fmt.Errorf("export requires --source and --output")
 		}
 		snapshot, e := snapshotimport.Export(ctx, *source, *output)
+		if e != nil {
+			return e
+		}
+		result = snapshot
+	case "export-remote":
+		if !*writersPaused {
+			return fmt.Errorf("export-remote requires --writers-paused after stopping and draining every writer")
+		}
+		if *output == "" {
+			return fmt.Errorf("export-remote requires --output")
+		}
+		if e := validateExpectedHost(*expectedHost, os.Getenv("TURSO_DATABASE_URL")); e != nil {
+			return e
+		}
+		db, e := turso.New(os.Getenv("TURSO_DATABASE_URL"), os.Getenv("TURSO_AUTH_TOKEN"))
+		if e != nil {
+			return e
+		}
+		snapshot, e := snapshotimport.ExportRemote(ctx, db, *output, snapshotimport.RemoteExportOptions{WritersPaused: *writersPaused})
+		if e != nil {
+			return e
+		}
+		result = snapshot
+	case "restore-local":
+		if *path == "" || *output == "" {
+			return fmt.Errorf("restore-local requires --snapshot and new --output")
+		}
+		snapshot, e := snapshotimport.RestoreLocal(ctx, *path, *output)
 		if e != nil {
 			return e
 		}
@@ -95,7 +125,7 @@ func run(args []string) error {
 			result = report
 		}
 	default:
-		return fmt.Errorf("unknown import mode; use export, inspect, load or verify")
+		return fmt.Errorf("unknown import mode; use export, export-remote, restore-local, inspect, load or verify")
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
@@ -106,7 +136,7 @@ func run(args []string) error {
 // constructing a destination client. This function never performs network I/O.
 func validateExpectedHost(expected, rawURL string) error {
 	if expected == "" {
-		return fmt.Errorf("load/verify requires --expected-host")
+		return fmt.Errorf("load/verify/export-remote requires --expected-host")
 	}
 	if len(expected) > 253 || strings.ContainsAny(expected, "/:@?#\\* []\t\r\n") || strings.TrimSpace(expected) != expected {
 		return fmt.Errorf("expected-host must be one exact hostname, without a URL, port, wildcard or credentials")

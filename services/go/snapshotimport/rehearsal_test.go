@@ -74,6 +74,51 @@ func TestApprovedLocalSnapshotRehearsal(t *testing.T) {
 	if e != nil || len(projects.Rows) == 0 {
 		t.Fatal("imported projects unavailable")
 	}
+	// Model a Go-era application write before rollback. The snapshot files stay
+	// readonly; only this ephemeral local database is edited.
+	localProject, ok := projects.Rows[0][0].Value.(string)
+	if !ok {
+		t.Fatal("local rollback project unavailable")
+	}
+	if _, e = db.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name=? WHERE id=?", Args: []turso.Value{turso.Text("Local rollback acceptance edit"), turso.Text(localProject)}}); e != nil {
+		t.Fatal("local rollback edit failed")
+	}
+	rollbackDir := t.TempDir()
+	rollbackArtifact := filepath.Join(rollbackDir, "post-write.jsonl")
+	rollbackSnapshot, e := ExportRemote(ctx, db, rollbackArtifact, RemoteExportOptions{WritersPaused: true})
+	if e != nil || rollbackSnapshot.ID == report.SnapshotID {
+		t.Fatal("local post-write rollback export failed")
+	}
+	restored, e := RestoreLocal(ctx, rollbackArtifact, filepath.Join(rollbackDir, "restored.sqlite"))
+	if e != nil || restored.ID != rollbackSnapshot.ID {
+		t.Fatal("local post-write rollback restore failed")
+	}
+	editPreserved := false
+	for _, table := range restored.Tables {
+		if table.Name != "projects" {
+			continue
+		}
+		idColumn, nameColumn := -1, -1
+		for i, name := range table.Columns {
+			if name == "id" {
+				idColumn = i
+			}
+			if name == "name" {
+				nameColumn = i
+			}
+		}
+		if idColumn < 0 || nameColumn < 0 {
+			t.Fatal("local rollback columns unavailable")
+		}
+		for _, row := range table.Data {
+			if row[idColumn].Value == localProject && row[nameColumn].Value == "Local rollback acceptance edit" {
+				editPreserved = true
+			}
+		}
+	}
+	if !editPreserved {
+		t.Fatal("post-cutover edit lost in rollback")
+	}
 	store := mcp.SQLStore{DB: db}
 	service, e := mcp.New(mcp.Config{Path: "/mcp", BaseDomain: "mcp.local-rehearsal.invalid", RequireTenantHost: true}, store)
 	if e != nil {
@@ -190,7 +235,7 @@ func TestApprovedLocalSnapshotRehearsal(t *testing.T) {
 	for _, table := range report.Tables {
 		rows += table.Count
 	}
-	metadata := map[string]any{"status": "passed", "verified_at": time.Now().UTC(), "source_sha256": sourceHash, "artifact_sha256": artifactHash, "snapshot_id": report.SnapshotID, "tables": report.Tables, "table_count": len(report.Tables), "row_count": rows, "project_count": len(projects.Rows), "mcp_calls": calls, "ready_skills": skills, "capabilities": capabilities, "listed_tools": tools, "source_unchanged": true, "external_requests": 0}
+	metadata := map[string]any{"status": "passed", "verified_at": time.Now().UTC(), "source_sha256": sourceHash, "artifact_sha256": artifactHash, "snapshot_id": report.SnapshotID, "tables": report.Tables, "table_count": len(report.Tables), "row_count": rows, "project_count": len(projects.Rows), "mcp_calls": calls, "ready_skills": skills, "capabilities": capabilities, "listed_tools": tools, "source_unchanged": true, "external_requests": 0, "post_cutover_edit_restored": editPreserved, "rollback_snapshot_id": rollbackSnapshot.ID}
 	f, e := os.CreateTemp(parent, "go-local-rehearsal-report-*.json")
 	if e != nil {
 		t.Fatal("private report creation failed")
@@ -202,5 +247,5 @@ func TestApprovedLocalSnapshotRehearsal(t *testing.T) {
 	if e = f.Close(); e != nil {
 		t.Fatal("private report close failed")
 	}
-	t.Logf("passed: tables=%d rows=%d projects=%d MCP calls=%d ready skills=%d capabilities=%d tools=%d; readonly inputs unchanged; external requests=0", len(report.Tables), rows, len(projects.Rows), calls, skills, capabilities, tools)
+	t.Logf("passed: tables=%d rows=%d projects=%d MCP calls=%d ready skills=%d capabilities=%d tools=%d; post-cutover edit restored; readonly inputs unchanged; external requests=0", len(report.Tables), rows, len(projects.Rows), calls, skills, capabilities, tools)
 }

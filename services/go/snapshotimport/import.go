@@ -279,7 +279,7 @@ func checkBaselineSubset(actual map[string]string) error {
 	}
 	return nil
 }
-func checkImportSchema(schema map[string]string) error {
+func checkOwnedSchema(schema map[string]string) error {
 	if e := checkBaselineSubset(schema); e != nil {
 		return e
 	}
@@ -292,6 +292,12 @@ func checkImportSchema(schema map[string]string) error {
 		if !ok || normalizedCreate(actual) != normalizedCreate(ddl) {
 			return errors.New("destination contains an unknown or altered schema object")
 		}
+	}
+	return nil
+}
+func checkImportSchema(schema map[string]string) error {
+	if e := checkOwnedSchema(schema); e != nil {
+		return e
 	}
 	for _, required := range []string{"go_schema_migrations", runTable, progressTable} {
 		if _, ok := schema[required]; !ok {
@@ -396,7 +402,13 @@ func verifyTable(ctx context.Context, db Database, table *Table, count int64) er
 			size += len(encoded)
 			page++
 		}
-		r, e := db.Execute(ctx, turso.Statement{SQL: "SELECT rowid," + strings.Join(names, ",") + " FROM " + quoted(table.Name) + " WHERE rowid>? ORDER BY rowid LIMIT ?", Args: []turso.Value{turso.Integer(lastRowID), turso.Integer(page)}, WantRows: true})
+		filter := ""
+		args := []turso.Value{turso.Integer(page)}
+		if offset > 0 {
+			filter = " WHERE rowid>?"
+			args = []turso.Value{turso.Integer(lastRowID), turso.Integer(page)}
+		}
+		r, e := db.Execute(ctx, turso.Statement{SQL: "SELECT rowid," + strings.Join(names, ",") + " FROM " + quoted(table.Name) + filter + " ORDER BY rowid LIMIT ?", Args: args, WantRows: true})
 		if e != nil {
 			return e
 		}
@@ -408,7 +420,7 @@ func verifyTable(ctx context.Context, db Database, table *Table, count int64) er
 				return errors.New("destination verification column count mismatch")
 			}
 			rowid, e := integer(cells[0])
-			if e != nil || rowid <= lastRowID {
+			if e != nil || offset > 0 && rowid <= lastRowID {
 				return errors.New("invalid destination row ordering")
 			}
 			lastRowID = rowid

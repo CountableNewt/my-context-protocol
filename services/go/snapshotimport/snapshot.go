@@ -1,5 +1,6 @@
 // Package snapshotimport transfers a verified, offline SQLite snapshot into an
-// otherwise empty Turso database. It never reads or changes a hosted source.
+// otherwise empty Turso database and creates offline rollback snapshots under an
+// explicit writers-paused operator precondition. It never routes traffic.
 package snapshotimport
 
 import (
