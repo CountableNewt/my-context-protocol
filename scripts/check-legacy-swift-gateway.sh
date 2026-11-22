@@ -17,7 +17,7 @@ run_logged() {
   fi
 }
 
-  local swift_root="$ROOT/services/mcp-gateway"
+  swift_root="$ROOT/services/mcp-gateway"
   cd "$swift_root"
   mkdir -p .build/ci-logs
 
