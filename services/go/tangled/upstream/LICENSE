@@ -1,0 +1,66 @@
+MIT License
+
+Copyright (c) 2026 Anirudh Oppiliappan, Akshay Oppiliappan and
+contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---------------------------------------------------------------------------
+
+Exceptions
+
+The MIT license above does not cover the following paths. They are
+Tangled brand assets and site content under `license-brand`
+(SPDX identifier: LicenseRef-Tangled-Brand), except for third-party
+material inside them, such as `blog/public/avatars/` and posts written by
+guest authors, which stays with its owners:
+
+  web/src/lib/components/icons/DollyCheck.svelte
+  blog/
+  jobs/
+  cmd/dolly/
+  web/src/lib/components/landing/
+  web/src/lib/components/ui/logotype.ts
+  web/src/lib/components/ui/Logo.svelte
+  web/src/lib/components/ui/Logo.stories.svelte
+  web/src/lib/components/ui/AnimatedLogo.svelte
+  web/src/routes/company/
+  web/src/routes/compare/
+  web/src/routes/home/
+  web/src/routes/privacy/
+  web/src/routes/terms/
+  web/static/og-image.png
+  web/static/tangled_og.png
+  web/static/llms.txt
+  docs/public/favicon.svg
+  docs/public/apple-touch-icon.png
+  status/static/favicon.svg
+  status/static/logos/
+  status/src/logotype.ts
+  status/src/footer.ts
+  ogre/src/components/shared/logo.tsx
+  localinfra/pds-theme.css
+
+The same applies to every file generated from them, including the logos
+that `cmd/dolly` writes to `web/static/logos/`, `blog/public/logos/` and
+elsewhere.
+
+Third-party fonts fetched at build time (Timeless Sans, IBM Plex Mono) are
+not part of this repository and keep their own licenses. They are not
+covered by the MIT license or `license-brand`.
