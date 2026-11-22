@@ -667,3 +667,82 @@ func TestCookieFreeInstallStillRejectsMissingCodeWrongIdentityAndPresentWrongSes
 		})
 	}
 }
+
+func TestInstalledRepositoryUsesExistingAppWebhookWithoutHookAdministration(t *testing.T) {
+	s, db := setup(t)
+	s.config.AppWebhookSecret = "existing-app-secret"
+	if _, err := db.Execute(context.Background(), sql("UPDATE accounts SET github_app_installation_id=7 WHERE id='account'")); err != nil {
+		t.Fatal(err)
+	}
+	calls := map[string]int{}
+	s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+		route := r.Method + " " + r.URL.Path
+		calls[route]++
+		switch route {
+		case "POST /app/installations/7/access_tokens":
+			return reply(201, `{"token":"installation-token","expires_at":"2099-01-01T00:00:00Z"}`), nil
+		case "GET /repos/owner/repo":
+			if r.Header.Get("Authorization") != "Bearer installation-token" {
+				t.Fatal("repository access did not use scoped installation token")
+			}
+			return reply(200, `{"name":"repo","default_branch":"main"}`), nil
+		case "GET /app":
+			return reply(200, `{"events":["push","installation"]}`), nil
+		case "GET /app/hook/config":
+			return reply(200, `{"url":"https://app.example/webhooks/github","content_type":"json","insecure_ssl":"0"}`), nil
+		default:
+			t.Fatalf("unexpected GitHub request: %s", route)
+			return nil, nil
+		}
+	})}
+	input := map[string]json.RawMessage{"owner": json.RawMessage(`"owner"`), "repo": json.RawMessage(`"repo"`), "branch": json.RawMessage(`"feature/nested"`)}
+	result, err := s.ConnectRepository(context.Background(), "account", "project", input)
+	if err != nil || result["webhook_id"] != nil || len(calls) != 4 {
+		t.Fatal("App connection should reuse registered webhook", err)
+	}
+	rows, err := db.Execute(context.Background(), sql("SELECT github_installation_id,webhook_id,webhook_secret,default_branch FROM repo_connections WHERE project_id='project'"))
+	if err != nil || len(rows.Rows) != 1 || col(rows.Rows[0], 0) != "7" || rows.Rows[0][1].Type != "null" || rows.Rows[0][2].Type != "null" || col(rows.Rows[0], 3) != "feature/nested" {
+		t.Fatal("App connection did not persist scoped installation without repository hook", err)
+	}
+	// Missing local verification secret fails closed before saving a connection.
+	s.config.AppWebhookSecret = ""
+	if _, err = s.ConnectRepository(context.Background(), "account", "project", input); err == nil {
+		t.Fatal("missing App signature secret accepted")
+	}
+}
+
+func TestAppWebhookRegistrationMustAlreadyHavePushAndVerifiedLocalTarget(t *testing.T) {
+	s, _ := setup(t)
+	for _, tc := range []struct {
+		name, events, target, contentType, tls string
+		valid                                  bool
+	}{
+		{"legacy route", "push", "https://app.example/webhooks/github", "json", "0", true},
+		{"App route", "push", "https://app.example/webhooks/github-app", "json", "0", true},
+		{"missing push", "issues", "https://app.example/webhooks/github", "json", "0", false},
+		{"foreign target", "push", "https://other.example/webhooks/github", "json", "0", false},
+		{"unhandled path", "push", "https://app.example/unhandled", "json", "0", false},
+		{"insecure TLS", "push", "https://app.example/webhooks/github", "json", "1", false},
+		{"form encoding", "push", "https://app.example/webhooks/github", "form", "0", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+				if r.Method != "GET" || !strings.Contains(r.Header.Get("Authorization"), ".") {
+					t.Fatal("registration must be checked read-only with App JWT")
+				}
+				if r.URL.Path == "/app" {
+					return reply(200, fmt.Sprintf(`{"events":[%q]}`, tc.events)), nil
+				}
+				if r.URL.Path == "/app/hook/config" {
+					return reply(200, fmt.Sprintf(`{"url":%q,"content_type":%q,"insecure_ssl":%q}`, tc.target, tc.contentType, tc.tls)), nil
+				}
+				t.Fatal("unexpected registration request")
+				return nil, nil
+			})}
+			err := s.config.Client.VerifyAppWebhook(context.Background(), "https://app.example")
+			if (err == nil) != tc.valid {
+				t.Fatal("incorrect App webhook registration acceptance", err)
+			}
+		})
+	}
+}

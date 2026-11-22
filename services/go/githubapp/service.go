@@ -191,13 +191,26 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 		}
 		return nil, err
 	}
-	hookID, hookSecret, err := s.config.Client.CreateWebhook(ctx, owner, repo, token, s.config.WebhookOrigin)
-	if err != nil {
-		return nil, err
+	// GitHub Apps already have one signed webhook for their installation events.
+	// Creating a second repository hook with an installation token unnecessarily
+	// requires webhook-administration permissions and fails for normal Apps.
+	var hookID, hookSecret string
+	if installation != "" {
+		if s.config.AppWebhookSecret == "" {
+			return nil, &PublicError{503, "GitHub App webhook signing secret is not configured", nil}
+		}
+		if err = s.config.Client.VerifyAppWebhook(ctx, s.config.WebhookOrigin); err != nil {
+			return nil, err
+		}
+	} else {
+		hookID, hookSecret, err = s.config.Client.CreateWebhook(ctx, owner, repo, token, s.config.WebhookOrigin)
+		if err != nil {
+			return nil, err
+		}
 	}
 	committed := false
 	defer func() {
-		if !committed {
+		if !committed && hookID != "" {
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
 			s.config.Client.DeleteWebhook(cleanup, owner, repo, hookID, token)
@@ -206,13 +219,13 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 	id := col(old, 0)
 	var r *turso.Result
 	if id != "" {
-		r, err = s.config.DB.Execute(ctx, sql("UPDATE repo_connections SET repo_owner=?,repo_name=?,default_branch=?,provider='github',auth_type='oauth',webhook_id=?,webhook_secret=?,github_installation_id=?,token_encrypted=NULL WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM projects WHERE id=? AND account_id=?) RETURNING id", turso.Text(owner), turso.Text(repo), turso.Text(branch), turso.Text(hookID), turso.Text(hookSecret), nullableInstallation(installation), turso.Text(id), turso.Text(project), turso.Text(project), turso.Text(account)))
+		r, err = s.config.DB.Execute(ctx, sql("UPDATE repo_connections SET repo_owner=?,repo_name=?,default_branch=?,provider='github',auth_type='oauth',webhook_id=?,webhook_secret=?,github_installation_id=?,token_encrypted=NULL WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM projects WHERE id=? AND account_id=?) RETURNING id", turso.Text(owner), turso.Text(repo), turso.Text(branch), nullable(hookID), nullable(hookSecret), nullableInstallation(installation), turso.Text(id), turso.Text(project), turso.Text(project), turso.Text(account)))
 	} else {
 		id, err = identity.UUID()
 		if err != nil {
 			return nil, err
 		}
-		r, err = s.config.DB.Execute(ctx, sql("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type,webhook_id,webhook_secret,github_installation_id,created_at) SELECT ?,?,'github',?,?,?,'oauth',?,?,?,? WHERE EXISTS(SELECT 1 FROM projects WHERE id=? AND account_id=?) AND NOT EXISTS(SELECT 1 FROM repo_connections WHERE project_id=?) RETURNING id", turso.Text(id), turso.Text(project), turso.Text(owner), turso.Text(repo), turso.Text(branch), turso.Text(hookID), turso.Text(hookSecret), nullableInstallation(installation), turso.Integer(time.Now().Unix()), turso.Text(project), turso.Text(account), turso.Text(project)))
+		r, err = s.config.DB.Execute(ctx, sql("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type,webhook_id,webhook_secret,github_installation_id,created_at) SELECT ?,?,'github',?,?,?,'oauth',?,?,?,? WHERE EXISTS(SELECT 1 FROM projects WHERE id=? AND account_id=?) AND NOT EXISTS(SELECT 1 FROM repo_connections WHERE project_id=?) RETURNING id", turso.Text(id), turso.Text(project), turso.Text(owner), turso.Text(repo), turso.Text(branch), nullable(hookID), nullable(hookSecret), nullableInstallation(installation), turso.Integer(time.Now().Unix()), turso.Text(project), turso.Text(account), turso.Text(project)))
 	}
 	if err != nil {
 		return nil, err
@@ -232,7 +245,7 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 			s.config.Client.DeleteWebhook(ctx, col(old, 1), col(old, 2), col(old, 3), oldToken)
 		}
 	}
-	return map[string]any{"project_id": project, "provider": "github", "repo_owner": owner, "repo_name": repo, "default_branch": branch, "auth_type": "oauth", "webhook_id": hookID, "github_installation_id": installationValue(installation)}, nil
+	return map[string]any{"project_id": project, "provider": "github", "repo_owner": owner, "repo_name": repo, "default_branch": branch, "auth_type": "oauth", "webhook_id": installationWebhookID(hookID), "github_installation_id": installationValue(installation)}, nil
 }
 func oauthFallback(installation, token string) string {
 	if installation != "" {
@@ -270,4 +283,11 @@ func (s *Service) InstallationToken(ctx context.Context, id, oauth string) (stri
 		s.config.DB.Batch(ctx, []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE github_installation_id=?", nullableInstallation(id)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", nullableInstallation(id))})
 	}
 	return token, err
+}
+
+func installationWebhookID(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
 }

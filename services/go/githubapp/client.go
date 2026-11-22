@@ -427,3 +427,43 @@ func (c *Client) UserInstallation(ctx context.Context, token string, githubID in
 	}
 	return "", ErrForbidden
 }
+
+// VerifyAppWebhook verifies existing App registration; it never changes GitHub
+// permissions, subscriptions or webhook configuration. Both shipped hook routes
+// support signed App push and lifecycle deliveries.
+func (c *Client) VerifyAppWebhook(ctx context.Context, origin string) error {
+	u, err := url.Parse(origin)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" {
+		return &PublicError{503, "GitHub webhook origin is not configured", nil}
+	}
+	jwt, err := c.AppJWT(time.Now())
+	if err != nil {
+		return err
+	}
+	var registration struct {
+		Events []string `json:"events"`
+	}
+	if err = c.api(ctx, "GET", "https://api.github.com/app", jwt, "App event lookup", nil, &registration, 200); err != nil {
+		return err
+	}
+	push := false
+	for _, event := range registration.Events {
+		push = push || event == "push"
+	}
+	if !push {
+		return &PublicError{503, "GitHub App must already subscribe to push webhook events", nil}
+	}
+	var hook struct {
+		URL         string `json:"url"`
+		ContentType string `json:"content_type"`
+		InsecureSSL string `json:"insecure_ssl"`
+	}
+	if err = c.api(ctx, "GET", "https://api.github.com/app/hook/config", jwt, "App webhook lookup", nil, &hook, 200); err != nil {
+		return err
+	}
+	base := strings.TrimRight(origin, "/")
+	if hook.URL != base+"/webhooks/github" && hook.URL != base+"/webhooks/github-app" || hook.ContentType != "json" || hook.InsecureSSL != "0" {
+		return &PublicError{503, "GitHub App signed JSON webhook must already target this service with TLS verification", nil}
+	}
+	return nil
+}

@@ -72,7 +72,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	github, err := githubapp.New(githubapp.Config{DB: db, Sessions: identity.SQLStore{DB: db}, Client: client, Cipher: cipher, Slug: os.Getenv("GITHUB_APP_SLUG"), WebhookOrigin: os.Getenv("WEBHOOK_BASE_URL"), FrontendOrigins: origins})
+	github, err := githubapp.New(githubapp.Config{DB: db, Sessions: identity.SQLStore{DB: db}, Client: client, Cipher: cipher, Slug: os.Getenv("GITHUB_APP_SLUG"), WebhookOrigin: os.Getenv("WEBHOOK_BASE_URL"), AppWebhookSecret: os.Getenv("GITHUB_APP_WEBHOOK_SECRET"), FrontendOrigins: origins})
 	if err != nil {
 		log.Fatal(err)
 	}
