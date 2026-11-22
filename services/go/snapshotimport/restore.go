@@ -10,17 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/CountableNewt/my-context-protocol/services/go/migrations"
 )
 
 //go:embed restore.py
 var restoreScript string
 
-// RestoreLocal publishes a new standalone baseline SQLite database only after
+// RestoreLocal publishes a new standalone SQLite database only after
 // transactional restore, integrity/FK checks and an independent typed re-export
-// match. It never replaces a path or touches hosted databases. Go-only transient
-// tables are deliberately omitted, allowing the existing Swift backend to open it.
+// match. It never replaces a path or touches hosted databases. Legacy snapshots
+// restore baseline-only databases; v2 restores every included application table.
 func RestoreLocal(ctx context.Context, artifact, output string) (*Snapshot, error) {
 	if _, e := os.Lstat(output); !os.IsNotExist(e) {
 		return nil, errors.New("restore output must not already exist")
@@ -42,7 +40,7 @@ func RestoreLocal(ctx context.Context, artifact, output string) (*Snapshot, erro
 	defer os.Remove(temp + "-journal")
 	defer os.Remove(temp + "-wal")
 	defer os.Remove(temp + "-shm")
-	settings, _ := json.Marshal(map[string]string{"baseline": migrations.BaselineSQL})
+	settings, _ := json.Marshal(map[string]string{"baseline": schemaScript(snapshot.Schema)})
 	cmd := exec.CommandContext(ctx, "python3", "-c", restoreScript, artifact, temp)
 	cmd.Stdin = bytes.NewReader(settings)
 	cmd.Stdout = io.Discard

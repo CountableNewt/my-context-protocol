@@ -34,6 +34,7 @@ func run(args []string) error {
 	path := flags.String("snapshot", "", "typed JSONL snapshot artifact")
 	expectedHost := flags.String("expected-host", "", "required exact database hostname for load/verify/export-remote/repair; independently reviewed")
 	writersPaused := flags.Bool("writers-paused", false, "export-remote/repair only: all database writers are stopped and drained")
+	currentSchema := flags.Bool("current-schema", false, "export-remote only: preserve current Go application state, including ATProto OAuth and publication intents")
 	applyRepair := flags.Bool("apply", false, "repair-staged-floats only: explicitly permit bounded proven transport repair")
 	expectedFloatCells := flags.Int("expected-float-cells", 0, "repair only: exact independently audited changed REAL cell count, 1..32")
 	initialize := flags.Bool("initialize", false, "load only into a new empty destination")
@@ -48,6 +49,9 @@ func run(args []string) error {
 	}
 	if *timeout <= 0 {
 		return fmt.Errorf("timeout must be positive")
+	}
+	if *currentSchema && mode != "export-remote" {
+		return fmt.Errorf("--current-schema is supported only for export-remote")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -76,7 +80,7 @@ func run(args []string) error {
 		if e != nil {
 			return e
 		}
-		snapshot, e := snapshotimport.ExportRemote(ctx, readOnlyDatabase{query: db}, *output, snapshotimport.RemoteExportOptions{WritersPaused: *writersPaused})
+		snapshot, e := snapshotimport.ExportRemote(ctx, readOnlyDatabase{query: db}, *output, snapshotimport.RemoteExportOptions{WritersPaused: *writersPaused, CurrentSchema: *currentSchema})
 		if e != nil {
 			return e
 		}

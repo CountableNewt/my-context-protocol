@@ -29,6 +29,17 @@ func response(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}
 }
 
+func TestDefaultTransportDoesNotDelegatePrivateResolutionToProxy(t *testing.T) {
+	c, err := NewClient("https://pds.example", nil, authorizerFunc(func(context.Context, *http.Request, string) error { return nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, ok := c.http.Transport.(*http.Transport)
+	if !ok || transport.Proxy != nil || transport.DialContext == nil || transport.ResponseHeaderTimeout <= 0 {
+		t.Fatal("default PDS transport must validate socket addresses without an environment proxy")
+	}
+}
+
 func TestClientCASAndAuth(t *testing.T) {
 	m := mutation()
 	calls := 0

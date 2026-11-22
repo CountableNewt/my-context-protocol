@@ -62,7 +62,11 @@ func Transfer(ctx context.Context, db Database, path string, options Options) (*
 		if !options.Initialize {
 			return nil, errors.New("empty destination requires explicit initialize")
 		}
-		if e = migrations.Apply(ctx, db, migrations.Options{Initialize: true}); e != nil {
+		migrationOptions := migrations.Options{Initialize: true}
+		if snapshot.Format == CurrentFormat {
+			migrationOptions.Additions = additiveMigrations()
+		}
+		if e = migrations.Apply(ctx, db, migrationOptions); e != nil {
 			return nil, e
 		}
 		if e = createProgress(ctx, db, snapshot); e != nil {
@@ -78,16 +82,25 @@ func Transfer(ctx context.Context, db Database, path string, options Options) (*
 		if e != nil {
 			return nil, e
 		}
-		if len(schema) != len(expected)+1 {
+		if snapshot.Format != CurrentFormat && len(schema) != len(expected)+1 {
 			return nil, errors.New("destination is not an empty initialized staging database")
 		}
 		if e = checkBaselineSubset(schema); e != nil {
 			return nil, e
 		}
+		if snapshot.Format == CurrentFormat {
+			if e = checkOwnedSchema(schema); e != nil {
+				return nil, e
+			}
+		}
 		if _, ok := schema["go_schema_migrations"]; !ok {
 			return nil, errors.New("destination has no owned migration registry")
 		}
-		if e = migrations.Apply(ctx, db, migrations.Options{}); e != nil {
+		migrationOptions := migrations.Options{}
+		if snapshot.Format == CurrentFormat {
+			migrationOptions.Additions = additiveMigrations()
+		}
+		if e = migrations.Apply(ctx, db, migrationOptions); e != nil {
 			return nil, e
 		}
 		for _, table := range snapshot.Tables {

@@ -127,7 +127,10 @@ func NewClient(origin string, transport http.RoundTripper, auth Authorizer) (*Cl
 		return nil, errors.New("verified HTTPS PDS origin and authorizer required")
 	}
 	if transport == nil {
-		transport = ssrf.PublicOnlyTransport()
+		public := ssrf.PublicOnlyTransport()
+		public.Proxy = nil
+		public.ResponseHeaderTimeout = 10 * time.Second
+		transport = public
 	}
 	return &Client{endpoint: u, http: &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, auth: auth}, nil
 }
