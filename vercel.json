@@ -31,25 +31,25 @@
       "root": "services/go",
       "framework": "go",
       "entrypoint": "cmd/identity/main.go",
-      "buildCommand": "go build -o server ./cmd/identity"
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/identity"
     },
     "control": {
       "root": "services/go",
       "framework": "go",
       "entrypoint": "cmd/control/main.go",
-      "buildCommand": "go build -o server ./cmd/control"
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/control"
     },
     "mcp": {
       "root": "services/go",
       "framework": "go",
       "entrypoint": "cmd/mcp/main.go",
-      "buildCommand": "go build -o server ./cmd/mcp"
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/mcp"
     },
     "sync": {
       "root": "services/go",
       "framework": "go",
       "entrypoint": "cmd/sync/main.go",
-      "buildCommand": "go build -o server ./cmd/sync"
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/sync"
     }
   },
   "rewrites": [
