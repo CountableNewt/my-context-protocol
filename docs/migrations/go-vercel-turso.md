@@ -144,3 +144,18 @@ Chrome independently displayed commit `981e14d` as ready/active and the reposito
 Testing-tenant TLS and discovery passed, as did dynamic public-client registration, S256 advertisement and cross-project client rejection. The normal Chrome GitHub broker reached tenant consent for the temporary local acceptance client. After the owner explicitly approved that exact client/project/`mcp:invoke` grant, the native form POST failed with `Origin is not allowed` before issuing any code/token. The global `Referrer-Policy: no-referrer` makes non-CORS browser form submissions serialize Origin as `null` under the [Fetch Standard](https://fetch.spec.whatwg.org/#append-a-request-origin-header).
 
 The consent HTML alone now uses `Referrer-Policy: same-origin`, preserving the native same-origin POST identity while suppressing cross-origin referrers. Other OAuth responses retain no-referrer. Origin allowlists and one-use consent tokens are unchanged: regression tests reject opaque/foreign form origins without consuming consent, then accept the rightful tenant Origin. Relevant OAuth/identity/MCP race tests, vet and builds pass. The timed-out temporary CLI session was revoked; the exact registered client is retained only to repeat the owner-approved grant after the corrected preview is deployed, then must be removed together with its pending/code/token rows. End-to-end token exchange/replay rejection remains pending this rerun.
+
+
+### External signed GitHub delivery acceptance passed
+
+The owner explicitly approved Deployment Protection exceptions for exactly five domains: `my-context-protocol-migration-preview.vercel.app`, `testing.mycontextprotocol.dev`, `api.testing.mycontextprotocol.dev`, `mcp.testing.mycontextprotocol.dev`, and `*.mcp.testing.mycontextprotocol.dev`. Those exceptions were applied in the live Hobby project UI. Generated deployment URLs remain protected, and no bypass credential was created. Vercel's [September 9, 2026 announcement](https://vercel.com/changelog/protect-production-deployments-for-free-on-every-plan) confirms domain exceptions are available free on every plan; the current Hobby UI independently confirmed availability. Earlier assumptions that this required a paid plan are superseded.
+
+Chrome opened the existing development GitHub App's delivery history and used GitHub's own Redeliver control for push delivery `314ece2a-e6b7-11f1-9de3-f074599954a9`. Its original attempt received HTTP 401 from deployment protection. The redelivery at 2026-11-22 21:17:07 UTC reached the public migration alias directly and received HTTP 200 from Vercel with `status: processed` and one ready job:
+
+- Project: `C98D7F05-CB52-4EDB-BDA6-F7870A378784`.
+- Job: `F4B84A48-F75B-48E1-9E5C-C2BCE45AD939`.
+- Release: `9AF9F644-3F92-4841-A4E4-DF25145C0DF7`.
+
+A separate read-only Turso UI query confirmed that exact job exists with `delivery_key = github:314ece2a-e6b7-11f1-9de3-f074599954a9`, the same release ID, `status = ready`, and `error_code IS NULL`. This verifies an actual provider-signed external push through ingress, signature validation, repository selection, sync and durable release publication. GitHub supplied its original payload/signature directly: no reconstructed request, extracted signing secret, OIDC replay or permanent bypass was used. Another actual push returned HTTP 200 with an empty jobs list, which only demonstrates accepted ingress without a matching target and is not the sync acceptance evidence.
+
+This completes the previously separate external signed-hook acceptance. Tenant OAuth token exchange/replay checks, final production data import, production domain cutover and Railway retirement remain outstanding. Production Turso is still empty.
