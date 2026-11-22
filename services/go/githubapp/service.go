@@ -163,13 +163,16 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.config.DB.Execute(ctx, sql("SELECT id,repo_owner,repo_name,webhook_id,github_installation_id,token_encrypted FROM repo_connections WHERE project_id=? ORDER BY id LIMIT 1", turso.Text(project)))
+	current, err := s.config.DB.Execute(ctx, sql("SELECT id,repo_owner,repo_name,webhook_id,github_installation_id,token_encrypted,provider FROM repo_connections WHERE project_id=? ORDER BY id LIMIT 1", turso.Text(project)))
 	if err != nil {
 		return nil, err
 	}
 	var old []turso.Value
 	if len(current.Rows) > 0 {
 		old = current.Rows[0]
+		if provider := col(old, 6); provider != "" && provider != "github" {
+			return nil, &PublicError{409, "Project is connected to another repository provider", nil}
+		}
 		if id := col(old, 4); id != "" {
 			installation = id
 		}
@@ -280,7 +283,7 @@ func (s *Service) InstallationToken(ctx context.Context, id, oauth string) (stri
 	token, err := s.config.Client.InstallationToken(ctx, id, oauth)
 	var apiErr *APIError
 	if errors.As(err, &apiErr) && apiErr.Status == 404 {
-		s.config.DB.Batch(ctx, []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE github_installation_id=?", nullableInstallation(id)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", nullableInstallation(id))})
+		s.config.DB.Batch(ctx, []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE provider='github' AND github_installation_id=?", nullableInstallation(id)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", nullableInstallation(id))})
 	}
 	return token, err
 }

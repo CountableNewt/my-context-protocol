@@ -135,7 +135,7 @@ func (s *Service) Writeback(ctx context.Context, account, project, release, comp
 	if _, err = MergeSidecar(nil, document, exposure); err != nil {
 		return nil, &PublicError{409, err.Error(), nil}
 	}
-	connection, err := s.config.DB.Execute(ctx, sql("SELECT repo_owner,repo_name,default_branch,github_installation_id,token_encrypted,id FROM repo_connections WHERE project_id=? ORDER BY id LIMIT 1", turso.Text(project)))
+	connection, err := s.config.DB.Execute(ctx, sql("SELECT repo_owner,repo_name,default_branch,github_installation_id,token_encrypted,id FROM repo_connections WHERE project_id=? AND COALESCE(NULLIF(provider,''),'github')='github' ORDER BY id LIMIT 1", turso.Text(project)))
 	if err != nil {
 		return nil, err
 	}

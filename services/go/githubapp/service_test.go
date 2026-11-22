@@ -746,3 +746,24 @@ func TestAppWebhookRegistrationMustAlreadyHavePushAndVerifiedLocalTarget(t *test
 		})
 	}
 }
+
+func TestConnectRepositoryCannotReplaceOtherProvider(t *testing.T) {
+	service, db := setup(t)
+	_, err := db.Execute(context.Background(), sql("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type) VALUES ('connection','project','tangled','owner','repo','main','oauth')"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.config.Client.HTTP = &http.Client{Transport: transport(func(*http.Request) (*http.Response, error) {
+		t.Fatal("contacted GitHub for native repository replacement")
+		return nil, fmt.Errorf("unexpected request")
+	})}
+	_, err = service.ConnectRepository(context.Background(), "account", "project", map[string]json.RawMessage{"owner": json.RawMessage(`"owner"`), "repo": json.RawMessage(`"repo"`)})
+	public, ok := err.(*PublicError)
+	if !ok || public.Status != 409 {
+		t.Fatalf("native repository replacement accepted: %v", err)
+	}
+	result, err := db.Execute(context.Background(), sql("SELECT provider FROM repo_connections WHERE id='connection'"))
+	if err != nil || col(result.Rows[0], 0) != "tangled" {
+		t.Fatalf("provider changed: %+v %v", result, err)
+	}
+}

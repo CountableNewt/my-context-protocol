@@ -91,6 +91,8 @@ func main() {
 			return result, &syncError{409, "A sync is already running"}
 		case errors.Is(e, syncservice.ErrNotFound):
 			return result, &syncError{404, "No repository is connected"}
+		case errors.Is(e, syncservice.ErrProviderUnsupported):
+			return result, &syncError{501, "Repository provider is not configured"}
 		case errors.Is(e, syncservice.ErrInvalid):
 			return result, &syncError{422, "Repository validation failed; review the release validation report"}
 		case errors.Is(e, syncservice.ErrUnsupported):

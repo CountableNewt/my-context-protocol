@@ -195,3 +195,20 @@ func TestSQLRuntimeOverrideSelectionAndStaleChecksums(t *testing.T) {
 		t.Fatalf("stale flag %+v %v", r, err)
 	}
 }
+
+func TestSQLConnectionsPreserveProviderAndFilterGitHubWebhookTargets(t *testing.T) {
+	ctx := context.Background()
+	db := sqlitetest.New(t, migrations.BaselineSQL+MigrationSQL+seedSQL)
+	if _, err := db.Execute(ctx, stmt("UPDATE repo_connections SET provider='tangled' WHERE id='connection'")); err != nil {
+		t.Fatal(err)
+	}
+	store := SQLStore{DB: db}
+	c, err := store.Connection(ctx, "project")
+	if err != nil || c.Provider != "tangled" {
+		t.Fatalf("provider lost: %+v %v", c, err)
+	}
+	targets, err := store.Connections(ctx, "owner", "repo")
+	if err != nil || len(targets) != 0 {
+		t.Fatalf("native connection selected by GitHub webhook: %+v %v", targets, err)
+	}
+}

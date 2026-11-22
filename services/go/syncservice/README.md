@@ -55,3 +55,16 @@ Tests use actual Swift baseline schema through Python SQLite and in-memory HTTP
 fixtures, covering signatures, idempotency, leases, transactional publication,
 metadata carry-forward, package blobs and override precedence. No tests require
 external network access.
+
+## Repository providers
+
+`Connection.Provider` selects a `Config.Providers` adapter before a sync job is
+claimed. Empty provider values preserve legacy GitHub behavior. Unknown providers
+fail closed with `unsupported_provider`; they never use the GitHub fetcher or
+credential fallback. Native adapters implement `FetchRepository`, receive only
+their connection credentials, and must return an immutable revision (or implement
+`RepositoryCommitResolver`). GitHub webhooks only select GitHub connections.
+
+The default GitHub path retains existing archive-host and credential protections.
+Registering a provider does not imply repository discovery or writeback parity;
+those capabilities must be implemented before exposing that provider in clients.

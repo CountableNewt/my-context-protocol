@@ -309,7 +309,7 @@ func (s *Service) finishInstall(w http.ResponseWriter, r *http.Request, account 
 	now := time.Now().Unix()
 	args = []turso.Value{nullableInstallation(id), turso.Text(account), turso.Text(state), turso.Text(account), turso.Integer(now)}
 	accountSQL := "UPDATE accounts SET github_app_installation_id=? WHERE id=? AND " + guard
-	statements := []turso.Statement{sql(accountSQL, args...), sql("UPDATE repo_connections SET github_installation_id=? WHERE project_id=? AND "+guard, nullableInstallation(id), turso.Text(project), turso.Text(state), turso.Text(account), turso.Integer(now))}
+	statements := []turso.Statement{sql(accountSQL, args...), sql("UPDATE repo_connections SET github_installation_id=? WHERE project_id=? AND provider='github' AND "+guard, nullableInstallation(id), turso.Text(project), turso.Text(state), turso.Text(account), turso.Integer(now))}
 	if encrypted != "" {
 		statements = append(statements, sql("UPDATE accounts SET github_token_encrypted=? WHERE id=? AND "+guard, turso.Text(encrypted), turso.Text(account), turso.Text(state), turso.Text(account), turso.Integer(now)))
 	}
@@ -391,13 +391,13 @@ func (s *Service) appWebhook(w http.ResponseWriter, r *http.Request) {
 			httpError(w, &PublicError{400, "Missing installation id", nil})
 			return
 		}
-		_, err = s.config.DB.Batch(r.Context(), []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE github_installation_id=?", turso.Integer(payload.Installation.ID)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", turso.Integer(payload.Installation.ID))})
+		_, err = s.config.DB.Batch(r.Context(), []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE provider='github' AND github_installation_id=?", turso.Integer(payload.Installation.ID)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", turso.Integer(payload.Installation.ID))})
 	} else if event == "github_app_authorization" && payload.Action == "revoked" {
 		if payload.Account.ID <= 0 {
 			httpError(w, &PublicError{400, "Missing GitHub user id", nil})
 			return
 		}
-		_, err = s.config.DB.Batch(r.Context(), []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE project_id IN (SELECT p.id FROM projects p JOIN accounts a ON a.id=p.account_id WHERE a.github_id=?)", turso.Integer(payload.Account.ID)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_id=?", turso.Integer(payload.Account.ID))})
+		_, err = s.config.DB.Batch(r.Context(), []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE provider='github' AND project_id IN (SELECT p.id FROM projects p JOIN accounts a ON a.id=p.account_id WHERE a.github_id=?)", turso.Integer(payload.Account.ID)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_id=?", turso.Integer(payload.Account.ID))})
 	} else if event == "installation" || event == "installation_repositories" || event == "github_app_authorization" {
 		jsonResponse(w, 200, map[string]string{"status": "ignored", "event": event, "action": payload.Action})
 		return

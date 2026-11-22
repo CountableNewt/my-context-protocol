@@ -325,3 +325,74 @@ func TestRepositoryPingVerifiesOwnSecretWithoutStartingSync(t *testing.T) {
 		}
 	}
 }
+
+func TestUnsupportedProviderNeverUsesGitHubCredentialsOrFetcher(t *testing.T) {
+	service, store, fetcher := setup(t)
+	store.connection.Provider = "tangled"
+	store.connection.EncryptedToken = "private"
+	service.config.DecryptToken = func(string) (string, error) { t.Fatal("decrypted credential for unsupported provider"); return "", nil }
+	_, err := service.Run(context.Background(), "project", "")
+	if !errors.Is(err, ErrProviderUnsupported) || fetcher.calls != 0 || store.claimCalls != 0 {
+		t.Fatalf("unsupported provider reached GitHub: err=%v fetch=%d claims=%d", err, fetcher.calls, store.claimCalls)
+	}
+}
+
+type nativeProvider struct {
+	fetcher    *fakeFetcher
+	connection Connection
+	unresolved bool
+}
+
+func (p *nativeProvider) FetchRepository(ctx context.Context, c Connection) (reposync.Outcome, error) {
+	p.connection = c
+	out, err := p.fetcher.Fetch(ctx, c.Owner, c.Repository, c.Branch, "native-token")
+	if p.unresolved {
+		out.ResolvedCommitSHA = ""
+	}
+	return out, err
+}
+
+func TestNativeProviderDispatchIsolatesGitHubCredentials(t *testing.T) {
+	service, store, github := setup(t)
+	store.connection.Provider = "tangled"
+	store.connection.AccountEncryptedToken = "github-account-secret"
+	store.connection.InstallationID = "github-installation"
+	store.connection.EncryptedToken = "native-encrypted-token"
+	native := &nativeProvider{fetcher: &fakeFetcher{root: github.root}}
+	service.config.Providers = map[string]RepositoryProvider{"tangled": native}
+	service.config.DecryptToken = func(string) (string, error) { t.Fatal("native provider used GitHub decryption path"); return "", nil }
+	job, err := service.Run(context.Background(), "project", "")
+	if err != nil || job.Status != "ready" || github.calls != 0 || native.fetcher.calls != 1 {
+		t.Fatalf("dispatch failed: job=%+v err=%v github=%d native=%d", job, err, github.calls, native.fetcher.calls)
+	}
+	c := native.connection
+	if c.Provider != "tangled" || c.EncryptedToken != "native-encrypted-token" || c.AccountEncryptedToken != "" || c.InstallationID != "" || c.WebhookSecret != "" {
+		t.Fatalf("native connection leaked GitHub credentials: %+v", c)
+	}
+}
+
+func TestGitHubWebhookIgnoresNativeProviderConnection(t *testing.T) {
+	service, store, fetcher := setup(t)
+	store.connection.Provider = "tangled"
+	service.config.WebhookSecret = "global-secret"
+	body := `{"ref":"refs/heads/main","repository":{"name":"repo","owner":{"login":"owner"}}}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(body))
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-GitHub-Delivery", "delivery")
+	req.Header.Set("X-Hub-Signature-256", sign("global-secret", []byte(body)))
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != 200 || store.claimCalls != 0 || fetcher.calls != 0 {
+		t.Fatalf("GitHub webhook targeted native repository: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestNativeProviderMustResolveImmutableRevision(t *testing.T) {
+	service, store, github := setup(t)
+	store.connection.Provider = "tangled"
+	service.config.Providers = map[string]RepositoryProvider{"tangled": &nativeProvider{fetcher: &fakeFetcher{root: github.root}, unresolved: true}}
+	_, err := service.Run(context.Background(), "project", "")
+	if !errors.Is(err, ErrInvalid) || store.published != 0 || store.failed != 1 || github.calls != 0 {
+		t.Fatalf("unresolved native release published: err=%v published=%d failed=%d", err, store.published, store.failed)
+	}
+}

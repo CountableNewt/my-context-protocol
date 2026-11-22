@@ -34,13 +34,13 @@ func stmt(sql string, args ...turso.Value) turso.Statement {
 	return turso.Statement{SQL: sql, Args: args, WantRows: true}
 }
 
-const connectionSelect = `SELECT r.id,r.project_id,r.repo_owner,r.repo_name,r.default_branch,r.token_encrypted,a.github_token_encrypted,r.webhook_secret,r.github_installation_id,p.active_release_id FROM repo_connections r JOIN projects p ON p.id=r.project_id JOIN accounts a ON a.id=p.account_id `
+const connectionSelect = `SELECT r.id,r.project_id,r.repo_owner,r.repo_name,r.default_branch,r.token_encrypted,CASE WHEN COALESCE(NULLIF(r.provider,''),'github')='github' THEN a.github_token_encrypted ELSE NULL END,r.webhook_secret,r.github_installation_id,p.active_release_id,r.provider FROM repo_connections r JOIN projects p ON p.id=r.project_id JOIN accounts a ON a.id=p.account_id `
 
 func connection(row []turso.Value) (Connection, error) {
-	if len(row) != 10 {
+	if len(row) != 11 {
 		return Connection{}, errors.New("invalid repository connection row")
 	}
-	return Connection{value(row, 0), value(row, 1), value(row, 2), value(row, 3), value(row, 4), value(row, 5), value(row, 6), value(row, 7), value(row, 8), value(row, 9)}, nil
+	return Connection{Provider: value(row, 10), ID: value(row, 0), ProjectID: value(row, 1), Owner: value(row, 2), Repository: value(row, 3), Branch: value(row, 4), EncryptedToken: value(row, 5), AccountEncryptedToken: value(row, 6), WebhookSecret: value(row, 7), InstallationID: value(row, 8), PriorReleaseID: value(row, 9)}, nil
 }
 func (s SQLStore) Connection(ctx context.Context, id string) (Connection, error) {
 	r, err := s.DB.Execute(ctx, stmt(connectionSelect+"WHERE p.id=? ORDER BY r.id LIMIT 1", turso.Text(id)))
@@ -53,7 +53,7 @@ func (s SQLStore) Connection(ctx context.Context, id string) (Connection, error)
 	return connection(r.Rows[0])
 }
 func (s SQLStore) Connections(ctx context.Context, owner, repo string) ([]Connection, error) {
-	r, err := s.DB.Execute(ctx, stmt(connectionSelect+"WHERE lower(r.repo_owner)=lower(?) AND lower(r.repo_name)=lower(?) ORDER BY r.project_id,r.id LIMIT 11", turso.Text(owner), turso.Text(repo)))
+	r, err := s.DB.Execute(ctx, stmt(connectionSelect+"WHERE COALESCE(NULLIF(r.provider,''),'github')='github' AND lower(r.repo_owner)=lower(?) AND lower(r.repo_name)=lower(?) ORDER BY r.project_id,r.id LIMIT 11", turso.Text(owner), turso.Text(repo)))
 	if err != nil {
 		return nil, err
 	}

@@ -20,12 +20,14 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/reposync"
 )
 
+var ErrProviderUnsupported = errors.New("repository provider is not configured")
+
 var ErrBusy = errors.New("sync already running")
 var ErrUnsupported = errors.New("sync requires functionality not yet ported")
 var ErrNotFound = errors.New("repository connection not found")
 var ErrInvalid = errors.New("repository validation failed")
 
-type Connection struct{ ID, ProjectID, Owner, Repository, Branch, EncryptedToken, AccountEncryptedToken, WebhookSecret, InstallationID, PriorReleaseID string }
+type Connection struct{ Provider, ID, ProjectID, Owner, Repository, Branch, EncryptedToken, AccountEncryptedToken, WebhookSecret, InstallationID, PriorReleaseID string }
 type Job struct {
 	ID        string `json:"job_id"`
 	ProjectID string `json:"project_id"`
@@ -53,7 +55,25 @@ type CommitResolver interface {
 type Fetcher interface {
 	Fetch(context.Context, string, string, string, string) (reposync.Outcome, error)
 }
+
+// RepositoryProvider receives provider-native connection identity. It must resolve
+// its own credentials; GitHub account credentials are never passed to adapters.
+type RepositoryProvider interface {
+	FetchRepository(context.Context, Connection) (reposync.Outcome, error)
+}
+type RepositoryCommitResolver interface {
+	ResolveRepositoryCommit(context.Context, Connection) (string, error)
+}
+
+func (c Connection) provider() string {
+	if c.Provider == "" {
+		return "github"
+	}
+	return c.Provider
+}
+
 type Config struct {
+	Providers    map[string]RepositoryProvider
 	Store        Store
 	Fetcher      Fetcher
 	DecryptToken func(string) (string, error)
@@ -99,6 +119,17 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 	if err != nil {
 		return job, err
 	}
+	provider := connection.provider()
+	adapter := s.config.Providers[provider]
+	if provider != "github" && adapter == nil {
+		return job, ErrProviderUnsupported
+	}
+	// Strip legacy GitHub-only fields before any provider adapter sees the row.
+	if provider != "github" {
+		connection.AccountEncryptedToken = ""
+		connection.InstallationID = ""
+		connection.WebhookSecret = ""
+	}
 	job, claimed, err := s.config.Store.Claim(ctx, connection, key, time.Now().UTC())
 	if err != nil || !claimed {
 		return job, err
@@ -131,29 +162,36 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 		return job, ErrUnsupported
 	}
 	token := ""
-	for _, encrypted := range []string{connection.EncryptedToken, connection.AccountEncryptedToken} {
-		if encrypted == "" {
-			continue
+	if provider == "github" {
+		for _, encrypted := range []string{connection.EncryptedToken, connection.AccountEncryptedToken} {
+			if encrypted == "" {
+				continue
+			}
+			if s.config.DecryptToken == nil {
+				return job, ErrUnsupported
+			}
+			candidate, decryptErr := s.config.DecryptToken(encrypted)
+			if decryptErr == nil && candidate != "" {
+				token = candidate
+				break
+			}
 		}
-		if s.config.DecryptToken == nil {
-			return job, ErrUnsupported
-		}
-		candidate, decryptErr := s.config.DecryptToken(encrypted)
-		if decryptErr == nil && candidate != "" {
-			token = candidate
-			break
+		if connection.InstallationID != "" {
+			if s.config.InstallationToken == nil {
+				return job, ErrUnsupported
+			}
+			token, err = s.config.InstallationToken(ctx, connection.InstallationID, token)
+			if err != nil {
+				return job, err
+			}
 		}
 	}
-	if connection.InstallationID != "" {
-		if s.config.InstallationToken == nil {
-			return job, ErrUnsupported
-		}
-		token, err = s.config.InstallationToken(ctx, connection.InstallationID, token)
-		if err != nil {
-			return job, err
-		}
+	var snapshot reposync.Outcome
+	if adapter != nil {
+		snapshot, err = adapter.FetchRepository(ctx, connection)
+	} else {
+		snapshot, err = s.config.Fetcher.Fetch(ctx, connection.Owner, connection.Repository, connection.Branch, token)
 	}
-	snapshot, err := s.config.Fetcher.Fetch(ctx, connection.Owner, connection.Repository, connection.Branch, token)
 	if err != nil {
 		return job, err
 	}
@@ -195,7 +233,12 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 	compiled := make([]compiler.Compiled, 0, len(skills))
 	revision := snapshot.ResolvedCommitSHA
 	if revision == "" {
-		if resolver, ok := s.config.Fetcher.(CommitResolver); ok {
+		if resolver, ok := adapter.(RepositoryCommitResolver); ok {
+			revision, err = resolver.ResolveRepositoryCommit(ctx, connection)
+			if err != nil {
+				return job, err
+			}
+		} else if resolver, ok := s.config.Fetcher.(CommitResolver); adapter == nil && provider == "github" && ok {
 			revision, err = resolver.ResolveCommitSHA(ctx, connection.Owner, connection.Repository, connection.Branch, token)
 			if err != nil {
 				return job, err
@@ -203,6 +246,9 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 		}
 	}
 	if revision == "" {
+		if provider != "github" {
+			return job, errors.Join(ErrInvalid, errors.New("provider did not resolve an immutable revision"))
+		}
 		revision = "unknown"
 	}
 	for _, skill := range skills {
@@ -368,6 +414,9 @@ func (s *Service) webhook(w http.ResponseWriter, r *http.Request) {
 	authenticated := globalAuthenticated
 	targets := []Connection{}
 	for _, connection := range connections {
+		if connection.provider() != "github" {
+			continue
+		}
 		if !globalAuthenticated && !VerifySignature(connection.WebhookSecret, r.Header.Get("X-Hub-Signature-256"), body) {
 			continue
 		}
@@ -421,6 +470,8 @@ func write(w http.ResponseWriter, status int, v any) {
 func respondError(w http.ResponseWriter, err error) {
 	status, code := 500, "sync_failed"
 	switch {
+	case errors.Is(err, ErrProviderUnsupported):
+		status, code = 501, "unsupported_provider"
 	case errors.Is(err, ErrNotFound):
 		status, code = 404, "not_found"
 	case errors.Is(err, ErrBusy):
