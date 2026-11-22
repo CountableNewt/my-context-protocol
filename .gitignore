@@ -19,3 +19,5 @@ node_modules/
 .ci-logs/
 .migration-artifacts/
 __pycache__/
+.vercel
+.env*

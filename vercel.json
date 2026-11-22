@@ -1,0 +1,315 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "apps/web",
+      "framework": "nextjs",
+      "buildCommand": "bun run build",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "identity",
+          "format": "url",
+          "env": "IDENTITY_SERVICE_URL"
+        },
+        {
+          "type": "service",
+          "service": "control",
+          "format": "url",
+          "env": "CONTROL_SERVICE_URL"
+        },
+        {
+          "type": "service",
+          "service": "sync",
+          "format": "url",
+          "env": "SYNC_SERVICE_URL"
+        }
+      ],
+      "installCommand": "cd ../.. && bun install --frozen-lockfile"
+    },
+    "identity": {
+      "root": "services/go",
+      "framework": "go",
+      "entrypoint": "cmd/identity/main.go",
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/identity"
+    },
+    "control": {
+      "root": "services/go",
+      "framework": "go",
+      "entrypoint": "cmd/control/main.go",
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/control"
+    },
+    "mcp": {
+      "root": "services/go",
+      "framework": "go",
+      "entrypoint": "cmd/mcp/main.go",
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/mcp"
+    },
+    "sync": {
+      "root": "services/go",
+      "framework": "go",
+      "entrypoint": "cmd/sync/main.go",
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/sync"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/auth/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/github/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/dashboard/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/projects/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/webhooks/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "sync"
+      }
+    },
+    {
+      "source": "/health",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/auth/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/github/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/dashboard/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/projects/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/webhooks/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "sync"
+      }
+    },
+    {
+      "source": "/health",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.testing.mycontextprotocol.dev"
+        }
+      ],
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/internal/maintenance",
+      "destination": {
+        "service": "control"
+      }
+    },
+    {
+      "source": "/auth/github/callback",
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/auth/github/mcp-oauth-start",
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/auth/github/app/callback",
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/auth/cli/github",
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource/:path*",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/.well-known/oauth-authorization-server/:path*",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/authorize",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/register",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/token",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/oauth/consent",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/mcp/:path*",
+      "destination": {
+        "service": "mcp"
+      }
+    },
+    {
+      "source": "/webhooks/:path*",
+      "destination": {
+        "service": "sync"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ],
+  "crons": [
+    {
+      "path": "/internal/maintenance",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}

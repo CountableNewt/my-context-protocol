@@ -121,4 +121,16 @@ describe("GET /api/auth/mcp-oauth-resume", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("auth_service_unavailable");
   });
+  it("keeps the first resume handshake on its deployment host", async () => {
+    vi.stubEnv("IDENTITY_SERVICE_URL", "https://identity.internal");
+    const { GET } = await loadRoute();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 303, headers: {
+      location: "https://branch.vercel.app/auth/mcp-oauth-resume?pending=pid",
+      "set-cookie": "vapor-session=opaque; Path=/; HttpOnly; Secure",
+    } }));
+    const res = await GET(request("https://deployment.vercel.app/api/auth/mcp-oauth-resume?pending=pid&auth_token=tok"));
+    expect(res.headers.get("location")).toBe("https://deployment.vercel.app/auth/mcp-oauth-resume?pending=pid");
+    expect(res.headers.get("set-cookie")).toContain("vapor-session=opaque");
+  });
+
 });

@@ -115,3 +115,40 @@ import Testing
   #expect(expected == actual)
   #expect(Set(operations.map(\.name)).count == operations.count)
 }
+
+@Test func explicitUnifiedAPIBasePreservesLegacyOrigins() throws {
+  #expect(
+    try validateAPIBaseURL("https://mycontextprotocol.dev/api")
+      == "https://mycontextprotocol.dev/api")
+  #expect(
+    try validateAPIBaseURL("https://branch.vercel.app/api/") == "https://branch.vercel.app/api")
+  #expect(try validateAPIBaseURL("https://legacy.example/") == "https://legacy.example")
+  #expect(try validateAPIBaseURL("http://127.0.0.1:3000/api") == "http://127.0.0.1:3000/api")
+  for value in [
+    "https://example.com/other", "https://example.com/api/v1", "https://example.com/%61pi",
+    "https://example.com/api?query=1", "https://example.com/api#fragment",
+    "https://user:secret@example.com/api", "http://example.com/api",
+  ] {
+    #expect(throws: (any Error).self) { try validateAPIBaseURL(value) }
+  }
+  // Browser Origin headers must never include the API path.
+  #expect(throws: (any Error).self) { try validateOrigin("https://example.com/api") }
+}
+
+@Test func prefixedRequestURLsStayWithinTheSelectedAPIBase() throws {
+  let client = Client(origin: "https://preview.vercel.app/api")
+  #expect(
+    try client.requestURL("/projects").absoluteString == "https://preview.vercel.app/api/projects")
+  #expect(
+    try client.requestURL("/auth/confirm", query: [URLQueryItem(name: "token", value: "one-time")])
+      .absoluteString == "https://preview.vercel.app/api/auth/confirm?token=one-time")
+  #expect(
+    try Client(origin: "https://legacy.example").requestURL("/projects").absoluteString
+      == "https://legacy.example/projects")
+  for path in [
+    "/../projects", "/%2e%2e/projects", "/projects/%2Fsecret", "/projects/%5Csecret",
+    "/auth/%0Aconfirm",
+  ] {
+    #expect(throws: (any Error).self) { try client.requestURL(path) }
+  }
+}

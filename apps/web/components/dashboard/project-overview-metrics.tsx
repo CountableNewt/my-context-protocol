@@ -5,12 +5,17 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchProjectDashboardSummary } from "@/lib/projects-api";
 import { ApiError, formatApiErrorDetail } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MetricsTimeseriesCharts } from "@/components/dashboard/metrics-timeseries-charts";
+import dynamic from "next/dynamic";
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card";
 import { pluralEn } from "@/lib/pluralize";
 import { DashboardMcpMethodsBreakdownCard } from "@/components/dashboard/dashboard-mcp-methods-breakdown-card";
 import { cn } from "@/lib/utils";
 import type { ProjectDashboardSummary } from "@/lib/types";
+
+const MetricsTimeseriesCharts = dynamic(
+  () => import("@/components/dashboard/metrics-timeseries-charts").then((module) => module.MetricsTimeseriesCharts),
+  { loading: () => <p role="status" className="text-muted-foreground text-sm">Loading charts…</p> },
+);
 
 function shortSha(sha: string | null | undefined): string {
   if (!sha?.trim()) return "—";

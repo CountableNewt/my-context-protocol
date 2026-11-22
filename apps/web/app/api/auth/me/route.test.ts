@@ -36,6 +36,7 @@ describe("GET /api/auth/me", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://api.test/auth/me", {
       method: "GET",
       headers: { Cookie: "session=abc" },
+      cache: "no-store",
     });
   });
 

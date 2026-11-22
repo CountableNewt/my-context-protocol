@@ -11,9 +11,6 @@ func routes(_ app: Application) throws {
         if let host = RequestPublicOrigin.routingHostname(for: req) {
             switch try await TenantHostMiddleware.resolveProject(for: host, request: req) {
             case .resolved(let project, _):
-                if project.suspendedAt != nil {
-                    return Response(status: .paymentRequired, body: .init(string: "This project is suspended. The account owner must select an active project or upgrade to Pro."))
-                }
                 req.storage[ResolvedHostProjectKey.self] = project
             case .denied(let status, let message):
                 return Response(status: status, body: .init(string: message))
@@ -159,12 +156,6 @@ func routes(_ app: Application) throws {
     protected.post("projects", ":id", "custom-domain", "verify") { req in
         try await ProjectController.verifyCustomDomain(req: req)
     }
-    protected.post("billing", "checkout-session") { req in
-        try await BillingController.createCheckoutSession(req: req)
-    }
-    protected.post("billing", "portal-session") { req in
-        try await BillingController.createPortalSession(req: req)
-    }
     protected.get("github", "repos") { req in
         try await AuthController.listGithubRepos(req: req)
     }
@@ -197,9 +188,6 @@ func routes(_ app: Application) throws {
     }
     app.on(.POST, ["webhooks", "github-app"], body: .collect(maxSize: ByteCount(value: 512 * 1024))) { req in
         try await GitHubAppWebhookController.handle(req: req)
-    }
-    app.on(.POST, ["webhooks", "stripe"], body: .collect(maxSize: ByteCount(value: 1024 * 1024))) { req in
-        try await StripeWebhookController.handle(req: req)
     }
 
     mcpIngress.get(".well-known", "oauth-protected-resource") { req async throws in

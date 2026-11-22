@@ -8,13 +8,10 @@ struct DashboardTimeseriesTests {
         #expect(k == "24h")
     }
 
-    @Test func proGating() {
-        #expect(DashboardTimeseriesService.rangeRequiresPro("1h") == false)
-        #expect(DashboardTimeseriesService.rangeRequiresPro("24h") == false)
-        #expect(DashboardTimeseriesService.rangeRequiresPro("7d") == false)
-        #expect(DashboardTimeseriesService.rangeRequiresPro("1mo") == true)
-        #expect(DashboardTimeseriesService.rangeRequiresPro("ytd") == true)
-        #expect(DashboardTimeseriesService.rangeRequiresPro("all") == true)
+    @Test func allDashboardRangesAreAvailable() throws {
+        for range in DashboardTimeseriesService.allowedRangeKeys {
+            #expect(try DashboardTimeseriesService.normalizeRangeKey(range) == range)
+        }
     }
 
     @Test func build1hHasTwelveBuckets() throws {

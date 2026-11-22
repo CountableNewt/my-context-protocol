@@ -159,3 +159,20 @@ func validateOrigin(_ raw: String) throws -> String {
   }
   return raw.hasSuffix("/") ? String(raw.dropLast()) : raw
 }
+
+/// The unified Vercel app exposes account APIs under /api. Root-only URLs keep
+/// the previous gateway contract for existing self-hosted and Railway profiles.
+func validateAPIBaseURL(_ raw: String) throws -> String {
+  guard !raw.unicodeScalars.contains(where: { $0.value <= 32 || $0.value == 127 }),
+    var url = URLComponents(string: raw),
+    ["", "/", "/api", "/api/"].contains(url.percentEncodedPath)
+  else {
+    throw CLIError.usage("API URL must be an HTTPS origin, optionally ending in /api")
+  }
+  let prefixed = url.percentEncodedPath == "/api" || url.percentEncodedPath == "/api/"
+  url.path = ""
+  guard let origin = url.string else {
+    throw CLIError.usage("Invalid API URL")
+  }
+  return try validateOrigin(origin) + (prefixed ? "/api" : "")
+}

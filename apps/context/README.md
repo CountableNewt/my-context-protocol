@@ -28,7 +28,7 @@ Build a versioned binary with `make build VERSION=0.1.0`. Build on each target p
 
 ## Authenticate
 
-MyContextCLI uses the hosted account API at `https://api.mycontextprotocol.dev`
+MyContextCLI uses the hosted account API at `https://mycontextprotocol.dev/api`
 by default. Start with:
 
 ```sh
@@ -36,9 +36,23 @@ myctx auth login
 myctx auth status
 ```
 
-For self-hosting or an explicit Development environment, set `--url`, `MYCTX_URL`,
-or a saved profile URL. Use the account gateway/API origin; your personal tenant
-MCP endpoint and the dashboard origin do not provide the account management API.
+For a Vercel branch preview, set `--url https://YOUR_PREVIEW.vercel.app/api`,
+`MYCTX_URL`, or a saved profile URL. The `/api` suffix explicitly selects the
+unified application API; it is preserved for login, handoff confirmation and all
+management requests. Plain origins such as `http://localhost:8080` keep the legacy
+gateway routing contract for self-hosting and existing Railway profiles. No API
+prefix is inferred from a hostname and requests are never retried against a second
+path. Personal tenant MCP endpoints do not provide the management API.
+
+To move a saved hosted profile after the Vercel cutover:
+
+```sh
+myctx config set --url https://mycontextprotocol.dev/api
+myctx auth login
+```
+
+Changing the API base clears its stored credential and project selection. Existing
+root-only profiles continue to work with gateways that still expose root API routes.
 
 Login opens GitHub in your browser. MyContextCLI binds an ephemeral port on
 `127.0.0.1`, validates a random callback nonce, exchanges the single-use handoff,
@@ -98,11 +112,11 @@ myctx config show
 ```
 
 Flags take precedence over environment variables, which take precedence over the
-selected profile, then the hosted API default `https://api.mycontextprotocol.dev`.
+selected profile, then the hosted API default `https://mycontextprotocol.dev/api`.
 An existing profile with an explicit URL keeps that URL. Profile defaults to
 `default` (`MYCTX_PROFILE` overrides it).
 `--id` overrides `--project`, then `MYCTX_PROJECT`, then the stored project.
-Credentials and project defaults are scoped to the API origin. Changing a
+Credentials and project defaults are scoped to the complete API base URL, including `/api` when present. Changing a
 profile's URL clears its stored session and project. `config show` reports whether
 a credential is present without exposing its value.
 
@@ -155,7 +169,6 @@ responses: API-key creation intentionally returns the secret once.
 | `keys` | `list`, `create`, `update`, `revoke` |
 | `logs` | `list` |
 | `domains` | `get`, `set`, `verify` |
-| `billing` | `checkout`, `portal` |
 | `github` | `repos`, `install` |
 | `admin` | `metrics`, `timeseries`, `rollup-refresh`, `lookup`, `privileged-accounts`, `account-flags` |
 
@@ -174,13 +187,11 @@ Common payloads:
 | `repos connect` | `{"owner":"org","repo":"skills","branch":"main"}` |
 | `keys create` / `keys update` | `{"name":"Agent"}` |
 | `domains set` | `{"hostname":"context.example.com"}` |
-| `billing checkout` | `{"interval":"month"}` or `{"interval":"year"}` |
 | `admin lookup` | `{"github_login":"example"}` (also `github_id` or `email`) |
-| `admin account-flags` | `{"account_id":"UUID","is_admin":false,"paywall_bypass":true}` |
+| `admin account-flags` | `{"account_id":"UUID","is_admin":false}` |
 
 `skills writeback` creates an external branch and draft pull request; invoking
-that command authorizes that action. Billing commands create URLs; they do not
-open or complete checkout. GitHub installation returns its browser URL. HTTP
+that command authorizes that action. GitHub installation returns its browser URL. HTTP
 redirects are never followed with account credentials.
 
 For API operations beyond the named registry:
@@ -190,7 +201,7 @@ myctx api GET /projects
 myctx api PATCH /projects/PROJECT_UUID --data @project.json
 ```
 
-Raw requests stay on the configured API origin. This is an application control
+Raw requests stay on the configured API base URL; operation paths such as `/projects` are relative to its optional `/api` prefix. This is an application control
 CLI; tenant MCP protocol calls, inbound webhooks, internal infrastructure routes,
 and browser callback endpoints are not named management commands. Agent shells
 can run this CLI directly; it does not require a model-provider account.

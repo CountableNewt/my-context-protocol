@@ -59,19 +59,29 @@ struct Client {
   var session: String = ""
   var webOrigin: String = ""
   var timeout: Double = 30
-  func request(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil)
-    async throws -> (Data, HTTPURLResponse)
-  {
+  func requestURL(_ path: String, query: [URLQueryItem] = []) throws -> URL {
     guard !path.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }),
       path.hasPrefix("/"), !path.hasPrefix("//"), !path.contains("\\"),
       var relative = URLComponents(string: path), relative.scheme == nil, relative.host == nil,
-      relative.fragment == nil
+      relative.fragment == nil,
+      relative.percentEncodedPath.split(separator: "/").allSatisfy({ segment in
+        guard let decoded = String(segment).removingPercentEncoding else { return false }
+        return decoded != "." && decoded != ".." && !decoded.contains("/")
+          && !decoded.contains("\\")
+          && !decoded.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
+      })
     else { throw CLIError.usage("API path must be an origin-relative path") }
     relative.queryItems = (relative.queryItems ?? []) + query
     if relative.queryItems?.isEmpty == true { relative.queryItems = nil }
     guard let url = URL(string: origin + (relative.string ?? path)),
       url.host == URL(string: origin)?.host
     else { throw CLIError.usage("Invalid API path") }
+    return url
+  }
+  func request(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil)
+    async throws -> (Data, HTTPURLResponse)
+  {
+    let url = try requestURL(path, query: query)
     var request = URLRequest(url: url)
     request.httpMethod = method
     request.httpBody = body

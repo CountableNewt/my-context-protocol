@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs Swift CLI checks, then frontend checks (typecheck, lint, test, build) and gateway
-# checks (test, release build) in parallel. Any failed check makes the script fail.
+# Runs Swift CLI and SQLite migration checks, then frontend and Go checks
+# in parallel. Legacy gateway recovery checks: check-legacy-swift-gateway.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -67,53 +67,29 @@ frontend_checks() {
 }
 
 # ---------------------------------------------------------------------------
-# Swift checks (parallel with frontend)
+# Go checks (parallel with frontend)
 # ---------------------------------------------------------------------------
 
-swift_checks() {
-  local swift_root="$ROOT/services/mcp-gateway"
-  cd "$swift_root"
-  mkdir -p .build/ci-logs
-
-  header "Swift version"
-  swift --version | tee .build/ci-logs/swift-version.txt
-
-  swift package clean
-  swift package resolve
-  rm -rf .build/index-build 2>/dev/null || true
-  find .build -name build.db -delete 2>/dev/null || true
-
-  header "Swift test"
-  run_logged swift-test env \
-    DATABASE_URL="" \
-    SUPABASE_DB_URL="" \
-    DISABLE_ADMIN_ANALYTICS_ROLLUP_SCHEDULER=1 \
-    DISABLE_STRIPE_RECONCILIATION_SCHEDULER=1 \
-    swift test --disable-automatic-resolution \
-      --enable-swift-testing --disable-xctest \
-      --no-parallel \
-      -Xswiftc -warnings-as-errors
-
-  header "Swift release build"
-  run_logged swift-build \
-    swift build -c release --product App -Xswiftc -warnings-as-errors
+go_checks() {
+  header "Go format, vet, race tests, and build"
+  run_logged go-checks bash "$ROOT/scripts/check-go.sh"
 }
 
 # ---------------------------------------------------------------------------
-# Run both sides in parallel; abort everything if either fails
+# Run independent checks in parallel and report every failure
 # ---------------------------------------------------------------------------
 
 FRONTEND_PID=""
-SWIFT_PID=""
+GO_PID=""
 FAILED=0
 
 frontend_checks &
 FRONTEND_PID=$!
 
-swift_checks &
-SWIFT_PID=$!
+go_checks &
+GO_PID=$!
 
-# Wait for both, capturing exit codes.
+# Wait for both check groups, capturing exit codes.
 wait_pid() {
   local name="$1" pid="$2"
   if wait "$pid"; then
@@ -125,7 +101,7 @@ wait_pid() {
 }
 
 wait_pid "frontend" "$FRONTEND_PID"
-wait_pid "swift"    "$SWIFT_PID"
+wait_pid "go"       "$GO_PID"
 
 if [[ $FAILED -ne 0 ]]; then
   echo ""

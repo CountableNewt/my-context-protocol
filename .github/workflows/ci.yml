@@ -15,6 +15,19 @@ permissions:
   contents: read
 
 jobs:
+  go:
+    name: Go services
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go/go.mod
+          cache: true
+          cache-dependency-path: services/go/go.sum
+      - name: Go format, vet, race tests, and build
+        run: bash scripts/check-go.sh
+
   ci:
     name: Test and build
     runs-on: macos-latest
@@ -23,11 +36,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Full local CI also verifies Go on macOS; the separate Linux job checks
+      # the deployment target, including race detection and SQLite integration.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go/go.mod
+          cache-dependency-path: services/go/go.sum
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.7
 
-      - name: Run CI script
+      # The retired Swift gateway remains available through the manual recovery
+      # script; active CI retains Swift CLI, migration, frontend and Go checks.
+      - name: Run active CI checks
         run: bash scripts/ci.sh
 
   cli-linux:

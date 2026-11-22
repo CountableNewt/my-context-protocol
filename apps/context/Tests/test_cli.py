@@ -61,7 +61,10 @@ class CLITests(unittest.TestCase):
     def test_discovery_and_help_without_configuration(self):
         result = self.run_cli("commands")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertGreaterEqual(len(json.loads(result.stdout)), 44)
+        commands = json.loads(result.stdout)
+        self.assertGreaterEqual(len(commands), 42)
+        self.assertNotIn("billing checkout", result.stdout)
+        self.assertNotIn("billing portal", result.stdout)
         for args in [("help",), ("projects", "--help"), ("--version",)]:
             self.assertEqual(self.run_cli(*args).returncode, 0)
         self.assertIn("projects get", self.run_cli("help", "projects").stdout)
@@ -83,6 +86,27 @@ class CLITests(unittest.TestCase):
         self.assertEqual(headers["Cookie"], "vapor-session=secret")
         self.assertEqual(headers["Origin"], "https://web.example")
         self.assertEqual(json.loads(body), {"name": "New"})
+
+
+    def test_unified_api_prefix_management_and_credential_scope(self):
+        received = []
+        with server(lambda *args: (received.append(args) or (200, {}, b"{}"))) as origin:
+            env = dict(self.env, MYCTX_URL=origin + "/api/", MYCTX_SESSION="secret", MYCTX_WEB_URL="https://web.example")
+            result = self.run_cli("projects", "update", "--id", "project", "--set", 'name="Preview"', env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(received[-1][1], "/api/projects/project")
+            self.assertEqual(received[-1][2]["Cookie"], "vapor-session=secret")
+            self.assertEqual(received[-1][2]["Origin"], "https://web.example")
+            self.config.write_text(json.dumps({"profiles": {"default": {"url": origin, "session": "legacy-session"}}}))
+            result = self.run_cli("health", "--url", origin + "/api")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(received[-1][1], "/api/health")
+            self.assertNotIn("Cookie", received[-1][2])
+
+    def test_hosted_default_uses_unified_api_base(self):
+        shown = self.run_cli("config", "show")
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertEqual(json.loads(shown.stdout)["url"], "https://mycontextprotocol.dev/api")
 
     def test_response_shapes_and_exit_codes(self):
         for status, body, expected in [(204, b"", 0), (200, b"hello", 0), (401, b'{"reason":"expired"}', 3),
@@ -200,12 +224,18 @@ class CLITests(unittest.TestCase):
         self.assertIn("denied", result.stderr)
 
     def test_browser_login_nonce_and_handoff(self):
+        self.browser_login_nonce_and_handoff("")
+
+    def test_browser_login_uses_explicit_unified_api_prefix(self):
+        self.browser_login_nonce_and_handoff("/api")
+
+    def browser_login_nonce_and_handoff(self, prefix):
         callback_done = threading.Event()
         calls = []
         def gateway(method, path, headers, body):
             calls.append((method, path, headers))
             parsed = urllib.parse.urlsplit(path)
-            if parsed.path == "/auth/cli/github":
+            if parsed.path == prefix + "/auth/cli/github":
                 callback = urllib.parse.parse_qs(parsed.query)["return_to"][0]
                 def handoff():
                     # Invalid nonces must not consume the one successful callback.
@@ -217,18 +247,20 @@ class CLITests(unittest.TestCase):
                     callback_done.set()
                 threading.Thread(target=handoff, daemon=True).start()
                 return 302, {"Location": "https://github.com/login/oauth/authorize?client_id=client&state=signed"}, b""
-            if parsed.path == "/auth/confirm":
+            if parsed.path == prefix + "/auth/confirm":
                 self.assertEqual(urllib.parse.parse_qs(parsed.query), {"token": ["handoff"]})
                 return 200, {"Set-Cookie": "vapor-session=logged-in; Path=/; HttpOnly", "X-Context-Frontend-Origin": "https://web.example"}, b"{}"
             return 200, {}, b'{"id":"account"}'
         with server(gateway) as origin:
-            result = self.run_cli("auth", "login", "--no-browser", "--url", origin,
+            result = self.run_cli("auth", "login", "--no-browser", "--url", origin + prefix,
                                   env=dict(self.env, MYCTX_SESSION="old-secret"))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(callback_done.wait(1))
         self.assertNotIn("Cookie", calls[0][2])
         self.assertEqual(calls[-1][2]["Cookie"], "vapor-session=logged-in")
         self.assertEqual(json.loads(self.config.read_text())["profiles"]["default"]["session"], "logged-in")
+        self.assertEqual(urllib.parse.urlsplit(calls[-1][1]).path, prefix + "/auth/me")
+        self.assertTrue(all(urllib.parse.urlsplit(call[1]).path.startswith(prefix + "/auth/") for call in calls))
 
     def test_browser_preflight_rejects_invalid_gateway(self):
         cases = [(404, {}), (200, {}), (302, {"Location": "https://evil.example/steal"}),

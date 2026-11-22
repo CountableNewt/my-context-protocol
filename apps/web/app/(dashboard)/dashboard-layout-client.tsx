@@ -1,9 +1,7 @@
 "use client";
 
-import { useAuth } from "@/contexts/auth-context";
 import { AuthGuard } from "@/components/auth-guard";
 import { EnvironmentBanner } from "@/components/dashboard/environment-banner";
-import { ProjectSelectionDialog } from "@/components/dashboard/project-selection-dialog";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Header } from "@/components/layout/header";
@@ -15,12 +13,8 @@ function DashboardLayoutInner({
   children: React.ReactNode;
   defaultSidebarOpen: boolean;
 }) {
-  const { user } = useAuth();
-  const needsSelection = user?.needs_project_selection === true;
-
   return (
     <>
-      <ProjectSelectionDialog open={needsSelection} />
       <SidebarProvider defaultOpen={defaultSidebarOpen}>
         <AppSidebar />
         <SidebarInset>

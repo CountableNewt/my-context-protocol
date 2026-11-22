@@ -80,7 +80,7 @@ public struct CLI {
     if !options["help"].isEmpty || name.isEmpty || options.words.first == "help" {
       let prefix = options.words.filter { $0 != "help" }.joined(separator: " ")
       output(
-        "MyContextCLI — agent-friendly MyContextProtocol CLI\n\nUsage: myctx <group> <command> [flags]\nHosted service: api.mycontextprotocol.dev (override with --url for self-hosting)\n\nAuthentication: auth login [--no-browser] | auth login --session-stdin | auth status | auth logout\nConfiguration: config show | config set --url ORIGIN [--project ID]\nDiscovery: commands (JSON) | api operations (JSON) | help\nRaw API: api METHOD /path [--data JSON|@file|-] [--query key=value]\n\nGlobal flags: --url ORIGIN --web-url ORIGIN --profile NAME --config FILE --project ID --timeout 30s --compact --json\nRequest flags: --id ID --release-id ID --compiled-skill-id ID --key-id ID\n               --data JSON|@file|- --set field=JSON --query key=value (repeatable)\nEnvironment: MYCTX_URL, MYCTX_WEB_URL, MYCTX_SESSION, MYCTX_PROFILE, MYCTX_CONFIG, MYCTX_PROJECT (legacy CONTEXT_* also supported)\n\nCommands:\n"
+        "MyContextCLI — agent-friendly MyContextProtocol CLI\n\nUsage: myctx <group> <command> [flags]\nHosted API: https://mycontextprotocol.dev/api (plain origins retain legacy gateway routing)\n\nAuthentication: auth login [--no-browser] | auth login --session-stdin | auth status | auth logout\nConfiguration: config show | config set --url API_BASE [--project ID]\nDiscovery: commands (JSON) | api operations (JSON) | help\nRaw API: api METHOD /path [--data JSON|@file|-] [--query key=value]\n\nGlobal flags: --url API_BASE --web-url ORIGIN --profile NAME --config FILE --project ID --timeout 30s --compact --json\nRequest flags: --id ID --release-id ID --compiled-skill-id ID --key-id ID\n               --data JSON|@file|- --set field=JSON --query key=value (repeatable)\nEnvironment: MYCTX_URL, MYCTX_WEB_URL, MYCTX_SESSION, MYCTX_PROFILE, MYCTX_CONFIG, MYCTX_PROJECT (legacy CONTEXT_* also supported)\n\nCommands:\n"
       )
       var lastGroup = ""
       for operation in operations
@@ -112,9 +112,9 @@ public struct CLI {
     var config = try Configuration.load(path)
     let profileName = first(options["profile"], environment("PROFILE", env), "default")
     var profile = config.profiles[profileName] ?? Profile()
-    let origin = try validateOrigin(
+    let origin = try validateAPIBaseURL(
       first(
-        options["url"], environment("URL", env), profile.url, "https://api.mycontextprotocol.dev"))
+        options["url"], environment("URL", env), profile.url, "https://mycontextprotocol.dev/api"))
     if name == "config show" {
       emit(
         .object([

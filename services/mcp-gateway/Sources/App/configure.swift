@@ -238,12 +238,12 @@ public func configure(_ app: Application) async throws {
     app.migrations.add(AddPortableSkillRuntime())
     app.migrations.add(HardenPortableSkillRuntime())
     app.migrations.add(AddSkillUsageAnalytics())
+    app.migrations.add(RemoveProjectPaymentSuspensions())
 
     try await app.autoMigrate()
 
     app.lifecycle.use(AdminAnalyticsRollupLifecycle())
     app.lifecycle.use(SkillUsageRetentionLifecycle())
-    app.lifecycle.use(StripeReconciliationLifecycle())
     app.lifecycle.use(LocalDevFixtureLifecycle())
 
     try routes(app)

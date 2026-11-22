@@ -7,10 +7,10 @@ private func userResponse(for account: Account, suggestedGithubAppInstall: Bool 
         email: account.email,
         login: account.login,
         avatar_url: account.avatarUrl,
-        plan: account.hasProEntitlements ? "pro" : "free",
+        plan: "free",
         is_admin: account.isAdmin,
-        internal_pro_bypass: InternalProBypass.matches(login: account.login, githubId: account.githubId),
-        can_manage_subscription: account.hasStripeCustomerRecord,
+        internal_pro_bypass: false,
+        can_manage_subscription: false,
         suggested_github_app_install: suggestedGithubAppInstall,
         app_env: AppEnvironment.appEnvString,
         non_production_bypasses: AppEnvironment.nonProductionBypassesActive,
@@ -285,7 +285,7 @@ struct AuthController {
                 throw Abort(.unauthorized, reason: "Invalid session")
             }
             try await syncEnvAdminBootstrap(account: account, db: req.db)
-            try await syncStripeStatusIfStale(account: account, req: req)
+            try await ProjectEntitlementReconciler.reconcileProjects(for: account, db: req.db)
             let suggest = try await Self.suggestedGithubAppMe(account: account, db: req.db)
             let needsProjectSelection = try await Self.computeNeedsProjectSelection(account: account, db: req.db)
             return userResponse(for: account, suggestedGithubAppInstall: suggest, needsProjectSelection: needsProjectSelection)
@@ -297,35 +297,9 @@ struct AuthController {
         }
     }
 
-    /// Re-fetches Stripe subscription status when the cached value is older than 5 minutes.
-    /// Silently swallows errors so a Stripe outage never breaks `/auth/me`.
-    private static func syncStripeStatusIfStale(account: Account, req: Request) async throws {
-        guard account.stripeSubscriptionId != nil else { return }
-        let staleCutoff: TimeInterval = 300  // 5 minutes
-        if let checked = account.stripeStatusCheckedAt, Date().timeIntervalSince(checked) < staleCutoff {
-            return
-        }
-        do {
-            try await StripeSubscriptionSync.syncAccount(
-                account: account,
-                client: req.client,
-                db: req.db,
-                logger: req.logger
-            )
-        } catch {
-            req.logger.warning("stripe_sync on /auth/me failed (non-fatal): \(error)")
-        }
-    }
-
-    /// True when the account is on free tier and has more non-suspended projects than the free limit.
+    /// Kept for older clients; selecting an active project is no longer required.
     static func computeNeedsProjectSelection(account: Account, db: Database) async throws -> Bool {
-        guard !account.hasProEntitlements else { return false }
-        let freeLimit = Int(Environment.get("FREE_PROJECT_LIMIT") ?? "") ?? 1
-        let activeCount = try await Project.query(on: db)
-            .filter(\.$account.$id == account.id!)
-            .filter(\.$suspendedAt == .null)
-            .count()
-        return activeCount > freeLimit
+        false
     }
 
     /// Repositories the session user can access on GitHub (uses stored OAuth token).
@@ -380,9 +354,8 @@ struct AuthController {
         return response
     }
 
-    /// Pro users with GitHub repos missing App installation, when slug + webhook base URL are configured.
+    /// Users with GitHub repos missing App installation, when slug + webhook base URL are configured.
     private static func suggestedGithubAppMe(account: Account, db: Database) async throws -> Bool {
-        guard account.hasProEntitlements else { return false }
         guard let slug = Environment.get("GITHUB_APP_SLUG"), !slug.isEmpty else { return false }
         guard let base = Environment.get("WEBHOOK_BASE_URL"), !base.isEmpty else { return false }
         guard let aid = account.id else { return false }
@@ -412,15 +385,15 @@ struct UserResponse: Content {
     let is_admin: Bool
     /// True when this account matches `INTERNAL_PRO_GITHUB_*` env allowlists.
     let internal_pro_bypass: Bool
-    /// True when a Stripe Customer exists (Customer Portal / paid subscription management).
+    /// Legacy compatibility field; always false after payment removal.
     let can_manage_subscription: Bool
-    /// Hint for Pro: install the GitHub App so webhooks can use installation tokens.
+    /// Install the GitHub App so webhooks can use installation tokens.
     let suggested_github_app_install: Bool
     /// Backend `APP_ENV`: `local`, `dev`, or `prod`.
     let app_env: String
     /// True when local-only Pro/rate-limit bypasses are active (`APP_ENV=local` and `strictProGating` is off).
     let non_production_bypasses: Bool
-    /// True when account is on free tier but has more active (non-suspended) projects than the free limit.
+    /// Legacy compatibility field; all projects now remain active.
     let needs_project_selection: Bool
 
     enum CodingKeys: String, CodingKey {

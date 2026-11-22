@@ -11,7 +11,7 @@ struct ProjectController {
         return formatter.string(from: date)
     }
 
-    private static func projectResponse(_ project: Project, isPro: Bool = true) -> ProjectResponse {
+    private static func projectResponse(_ project: Project) -> ProjectResponse {
         ProjectResponse(
             id: project.id!.uuidString,
             account_id: project.$account.id.uuidString,
@@ -22,9 +22,9 @@ struct ProjectController {
             custom_domain: project.customDomain,
             custom_domain_verified_at: project.customDomainVerifiedAt.map { formatDate($0) },
             active_release_id: project.activeReleaseId?.uuidString,
-            mcp_url: McpUrlBuilder.publicMcpUrl(for: project, isPro: isPro),
+            mcp_url: McpUrlBuilder.publicMcpUrl(for: project),
             mcp_oauth_enabled: AppEnvironment.mcpOAuthEnabled,
-            suspended_at: project.suspendedAt.map { formatDate($0) }
+            suspended_at: nil
         )
     }
 
@@ -44,15 +44,10 @@ struct ProjectController {
         return r.firstMatch(in: s, options: [], range: range) != nil
     }
 
-    private static func syncRateConfig(isPro: Bool) -> (max: Int, windowSeconds: TimeInterval) {
-        if isPro {
-            let max = Int(Environment.get("SYNC_RATE_LIMIT_PRO_MAX") ?? "") ?? 60
-            let w = TimeInterval(Int(Environment.get("SYNC_RATE_LIMIT_PRO_WINDOW_SECONDS") ?? "") ?? 3600)
-            return (max, w)
-        }
-        let max = Int(Environment.get("SYNC_RATE_LIMIT_FREE_MAX") ?? "") ?? 10
-        let w = TimeInterval(Int(Environment.get("SYNC_RATE_LIMIT_FREE_WINDOW_SECONDS") ?? "") ?? 3600)
-        return (max, w)
+    private static func syncRateConfig() -> (max: Int, windowSeconds: TimeInterval) {
+        let max = Int(Environment.get("SYNC_RATE_LIMIT_MAX") ?? "") ?? 60
+        let window = TimeInterval(Int(Environment.get("SYNC_RATE_LIMIT_WINDOW_SECONDS") ?? "") ?? 3600)
+        return (max, window)
     }
 
     private static func requireAccount(_ req: Request) throws -> Account {
@@ -75,8 +70,8 @@ struct ProjectController {
         return project
     }
 
-    /// True when GitHub App + private key are configured so `connect-repo` can use installation tokens for Pro webhooks.
-    private static func isGitHubAppConfiguredForProWebhooks() -> Bool {
+    /// True when GitHub App + private key are configured so `connect-repo` can use installation tokens for webhooks.
+    private static func isGitHubAppConfiguredForWebhooks() -> Bool {
         guard let slug = Environment.get("GITHUB_APP_SLUG"), !slug.isEmpty else { return false }
         guard let cid = Environment.get("GITHUB_APP_CLIENT_ID"), !cid.isEmpty else { return false }
         return (try? GitHubAppInstallationTokenService.loadPrivatePEM()) != nil
@@ -192,13 +187,13 @@ struct ProjectController {
         let projects = try await Project.query(on: req.db)
             .filter(\.$account.$id == account.id!)
             .all()
-        return projects.map { projectResponse($0, isPro: account.hasProEntitlements) }
+        return projects.map { projectResponse($0) }
     }
 
     static func get(req: Request) async throws -> ProjectResponse {
         let account = try requireAccount(req)
         let project = try await requireProject(req, accountId: account.id!)
-        return projectResponse(project, isPro: account.hasProEntitlements)
+        return projectResponse(project)
     }
 
     /// Update project metadata (display name only for now).
@@ -214,7 +209,7 @@ struct ProjectController {
         guard name.count <= 256 else { throw Abort(.badRequest, reason: "Name is too long") }
         project.name = name
         try await project.save(on: req.db)
-        return projectResponse(project, isPro: account.hasProEntitlements)
+        return projectResponse(project)
     }
 
     /// Active-release MCP catalog (tools, resources, prompts) for dashboard clients.
@@ -375,22 +370,6 @@ struct ProjectController {
             throw Abort(.conflict, reason: "Slug already in use for this account")
         }
 
-        let projectLimit: Int
-        let limitLabel: String
-        if account.hasProEntitlements {
-            projectLimit = Int(Environment.get("PRO_PROJECT_LIMIT") ?? "") ?? 5
-            limitLabel = "Pro accounts are limited to \(projectLimit) projects."
-        } else {
-            projectLimit = Int(Environment.get("FREE_PROJECT_LIMIT") ?? "") ?? 1
-            limitLabel = "Free accounts are limited to \(projectLimit) project. Upgrade to Pro to create more."
-        }
-        let existing = try await Project.query(on: req.db)
-            .filter(\.$account.$id == account.id!)
-            .count()
-        if existing >= projectLimit {
-            throw Abort(.paymentRequired, reason: limitLabel)
-        }
-
         let subdomain = try await allocateSubdomain(db: req.db)
         let project = Project(
             accountId: account.id!,
@@ -399,51 +378,16 @@ struct ProjectController {
             subdomain: subdomain
         )
         try await project.save(on: req.db)
-        return projectResponse(project, isPro: account.hasProEntitlements)
+        return projectResponse(project)
     }
 
-    /// Marks the given project as the active project for the account, suspending all others that exceed
-    /// the free-tier project limit. No-op for Pro accounts (all their projects stay active).
+    /// Retained for older clients; all projects remain active.
     static func setActive(req: Request) async throws -> ProjectResponse {
         let account = try requireAccount(req)
         let project = try await requireProject(req, accountId: account.id!)
-
-        if account.hasProEntitlements {
-            try await ProjectEntitlementReconciler.reconcileProjects(for: account, db: req.db, logger: req.logger)
-            guard let updated = try await Project.find(project.id, on: req.db) else {
-                throw Abort(.internalServerError)
-            }
-            return projectResponse(updated, isPro: true)
-        }
-
-        let allProjects = try await Project.query(on: req.db)
-            .filter(\.$account.$id == account.id!)
-            .sort(\.$createdAt, .ascending)
-            .sort(\.$id, .ascending)
-            .all()
-
-        let freeLimit = max(1, Int(Environment.get("FREE_PROJECT_LIMIT") ?? "") ?? 1)
-        var nonSelectedKept = 0
-        for p in allProjects {
-            let isSelected = p.id == project.id
-            let shouldStayActive = isSelected || nonSelectedKept < max(0, freeLimit - 1)
-            if shouldStayActive {
-                if !isSelected { nonSelectedKept += 1 }
-                if p.suspendedAt != nil {
-                    p.suspendedAt = nil
-                    try await p.save(on: req.db)
-                }
-            } else if p.suspendedAt == nil {
-                p.suspendedAt = Date()
-                try await p.save(on: req.db)
-            }
-        }
-
-        // Re-fetch after saves.
-        guard let updated = try await Project.find(project.id, on: req.db) else {
-            throw Abort(.internalServerError)
-        }
-        return projectResponse(updated, isPro: false)
+        try await ProjectEntitlementReconciler.reconcileProjects(for: account, db: req.db, logger: req.logger)
+        project.suspendedAt = nil
+        return projectResponse(project)
     }
 
     static func getRepoConnection(req: Request) async throws -> RepoConnectionResponse {
@@ -501,10 +445,9 @@ struct ProjectController {
         let effectiveInstallationId: Int64? =
             pendingInstallation ?? existingFirst?.githubInstallationId ?? account.githubAppInstallationId
 
-        // Pro: require GitHub App installation (when app + webhook env are configured) before we can use installation tokens.
-        if account.hasProEntitlements,
-           let wb = Environment.get("WEBHOOK_BASE_URL"), !wb.isEmpty,
-           Self.isGitHubAppConfiguredForProWebhooks(),
+        // Require GitHub App installation (when app + webhook env are configured) before we can use installation tokens.
+        if let wb = Environment.get("WEBHOOK_BASE_URL"), !wb.isEmpty,
+           Self.isGitHubAppConfiguredForWebhooks(),
            effectiveInstallationId == nil {
             let returnTo = try Self.frontendProjectPageUrl(projectId: project.id!)
             let installUrl = try Self.buildGitHubAppInstallUrl(
@@ -557,10 +500,9 @@ struct ProjectController {
             logger: req.logger
         )
 
-        let isPro = account.hasProEntitlements
         var webhookId: String?
         var webhookSecret: String?
-        if isPro {
+        do {
             guard let baseURL = Environment.get("WEBHOOK_BASE_URL"), !baseURL.isEmpty else {
                 throw Abort(.internalServerError, reason: "WEBHOOK_BASE_URL not configured")
             }
@@ -625,7 +567,7 @@ struct ProjectController {
         let account = try requireAccount(req)
         let project = try await requireProject(req, accountId: account.id!)
         if !AppEnvironment.nonProductionBypassesActive {
-            let cfg = syncRateConfig(isPro: account.hasProEntitlements)
+            let cfg = syncRateConfig()
             let allowed = req.application.syncRateLimiter.allow(
                 accountId: account.id!,
                 projectId: project.id!,
@@ -688,9 +630,6 @@ struct ProjectController {
 
     static func setCustomDomain(req: Request) async throws -> CustomDomainResponse {
         let account = try requireAccount(req)
-        guard account.hasProEntitlements else {
-            throw Abort(.paymentRequired, reason: "Custom domain requires Pro")
-        }
         let project = try await requireProject(req, accountId: account.id!)
         struct Body: Content { let hostname: String }
         let body = try req.content.decode(Body.self)
@@ -724,9 +663,6 @@ struct ProjectController {
 
     static func verifyCustomDomain(req: Request) async throws -> CustomDomainResponse {
         let account = try requireAccount(req)
-        guard account.hasProEntitlements else {
-            throw Abort(.paymentRequired, reason: "Custom domain requires Pro")
-        }
         let project = try await requireProject(req, accountId: account.id!)
         guard let host = project.customDomain, !host.isEmpty else {
             throw Abort(.badRequest, reason: "Set a custom domain first")
@@ -1799,12 +1735,6 @@ struct ProjectController {
     static func accountDashboardTimeseries(req: Request) async throws -> AccountDashboardTimeseriesResponse {
         let account = try requireAccount(req)
         let rangeKey = try DashboardTimeseriesService.normalizeRangeKey(req.query[String.self, at: "range"])
-        if DashboardTimeseriesService.rangeRequiresPro(rangeKey), !account.hasProEntitlements {
-            throw Abort(
-                .paymentRequired,
-                reason: "Upgrade to Pro for dashboard ranges longer than 7 days."
-            )
-        }
         let projects = try await Project.query(on: req.db)
             .filter(\.$account.$id == account.id!)
             .all()
@@ -1842,12 +1772,6 @@ struct ProjectController {
         let account = try requireAccount(req)
         let project = try await requireProject(req, accountId: account.id!)
         let rangeKey = try DashboardTimeseriesService.normalizeRangeKey(req.query[String.self, at: "range"])
-        if DashboardTimeseriesService.rangeRequiresPro(rangeKey), !account.hasProEntitlements {
-            throw Abort(
-                .paymentRequired,
-                reason: "Upgrade to Pro for dashboard ranges longer than 7 days."
-            )
-        }
         guard let pid = project.id else {
             throw Abort(.internalServerError, reason: "Invalid project")
         }

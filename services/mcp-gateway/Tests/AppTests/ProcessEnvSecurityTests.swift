@@ -504,7 +504,7 @@ struct ProcessEnvSecurityTests {
         }
     }
 
-    @Test("Account hasProEntitlements via internal allowlist in production")
+    @Test("Every account has full access in production regardless of internal allowlists")
     func accountProInternalAllowlist() throws {
         withIsolatedProcessEnv {
             let (apply, restore) = temporaryEnv([
@@ -523,7 +523,7 @@ struct ProcessEnvSecurityTests {
             let acc = Account(githubId: 100, login: "pro-user")
             #expect(acc.hasProEntitlements == true)
             let other = Account(githubId: 101, login: "free-user")
-            #expect(other.hasProEntitlements == false)
+            #expect(other.hasProEntitlements == true)
         }
     }
 

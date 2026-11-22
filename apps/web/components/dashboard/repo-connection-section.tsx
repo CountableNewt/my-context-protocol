@@ -247,14 +247,15 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
   }
 
   if (connection) {
+    const automaticSync = Boolean(connection.webhook_id || connection.github_installation_configured);
     return (
       <Card>
         <CardHeader>
           <CardTitle>Repository Connection</CardTitle>
           <CardDescription>
-            {connection.webhook_id
+            {automaticSync
               ? "Pushes to the default branch trigger a sync automatically."
-              : "Manual sync only on your plan — use Sync Now after you push. Upgrade to Pro for GitHub webhooks."}
+              : "Automatic sync is not configured for this connection. Use Sync Now after you push."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -272,7 +273,9 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
             <div>
               <dt className="text-muted-foreground">Webhook</dt>
               <dd className="font-medium">
-                {connection.webhook_id ? "Configured" : "Not configured (manual sync)"}
+                {connection.github_installation_configured
+                  ? "Configured through GitHub App"
+                  : connection.webhook_id ? "Configured" : "Not configured (manual sync)"}
               </dd>
             </div>
           </dl>

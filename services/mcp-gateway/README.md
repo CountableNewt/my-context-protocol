@@ -7,7 +7,6 @@ Swift/Vapor backend for MyContextProtocol. It syncs Git repositories containing 
 - Swift 6 / Vapor
 - Fluent with SQLite WAL as the primary database and Postgres compatibility during migration
 - GitHub OAuth and GitHub App installation flows
-- Stripe billing webhooks
 - `mcp-server-kit` for reusable MCP protocol models and schema primitives
 
 ## Local Development
@@ -40,7 +39,7 @@ Tests clear inherited hosted database URLs and fall back to in-memory SQLite unl
 
 ```text
 Sources/App/
-├── Controllers/   # Auth, MCP, billing, projects, admin, webhooks
+├── Controllers/   # Auth, MCP, projects, admin, webhooks
 ├── MCP/           # Product-specific MCP catalog, OAuth, notifications, handlers
 ├── Middleware/    # Tenant host, auth, rate limits, origin checks
 ├── Migrations/    # Fluent schema migrations
@@ -88,7 +87,7 @@ railway variable set --environment production --service Gateway \
 
 `GITHUB_OAUTH_REDIRECT_URI` is **only** for dashboard GitHub login (`/auth/github/callback`). Do not point it at `/auth/github/app/callback` — that path is for GitHub App installation and uses `GITHUB_APP_SETUP_CALLBACK_URL` instead. If login OAuth is sent to the app callback, users return to the frontend with `github_app_error=invalid_state` and `/auth/me` stays 401.
 
-Include GitHub App, Stripe, SaaS MCP host, and admin/pro bypass secrets as needed from `.env.example`.
+Include GitHub App, SaaS MCP host, and admin secrets as needed from `.env.example`. Every account has full feature access; manual sync uses the shared `SYNC_RATE_LIMIT_MAX` and `SYNC_RATE_LIMIT_WINDOW_SECONDS` safety limits.
 
 ## MCP OAuth
 
@@ -119,7 +118,7 @@ The dashboard returns both the application ownership TXT record and Railway's re
 ownership records. Without a project token, existing domains keep routing but creating a new tenant
 domain fails closed with HTTP 503.
 
-Verified custom domains remain stored when an account loses Pro, but runtime routing requires current Pro entitlement. Routing resumes automatically after the account regains Pro access.
+Verified custom domains are available to every account. Legacy payment-related project suspensions are cleared by migration; historical billing columns remain for data compatibility. Checkout, billing portal, and Stripe webhook routes are no longer registered.
 
 Production deploys through Railway's GitHub integration: merge `dev` into `main`, and Railway
 builds `main` once CI passes. See [`railway/README.md`](../../railway/README.md).

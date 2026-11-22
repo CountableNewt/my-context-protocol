@@ -173,4 +173,12 @@ describe("RepoConnectionSection GitHub access", () => {
     expect(sessionStorage.getItem("pendingRepoConnect:project-1")).toBeNull();
   });
 
+  it("shows automatic sync for an installed App without a repository hook", async () => {
+    vi.mocked(fetchRepoConnection).mockResolvedValue({project_id:"project-1",provider:"github",repo_owner:"owner",repo_name:"skills",default_branch:"main",auth_type:"oauth",webhook_id:null,github_installation_configured:true});
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Configured through GitHub App"));
+    expect(host.textContent).toContain("trigger a sync automatically");
+    expect(host.textContent).not.toContain("Not configured (manual sync)");
+  });
+
 });

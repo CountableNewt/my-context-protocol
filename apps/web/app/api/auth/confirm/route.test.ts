@@ -32,12 +32,27 @@ describe("GET /api/auth/confirm", () => {
     expect(res.headers.get("location")).toContain("missing_params");
   });
 
-  it("redirects to login when redirect param is missing", async () => {
+  it("supports token-only CLI confirmation and preserves its session", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "http://api.test");
     const { GET } = await loadRoute();
-    const res = await GET(request("http://app.test/api/auth/confirm?token=abc"));
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toContain("missing_params");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+      headers: { "set-cookie": "sid=cli; Path=/; HttpOnly", "x-context-frontend-origin": "https://app.test" },
+    }));
+    const res = await GET(request("https://app.test/api/auth/confirm?token=abc"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toContain("sid=cli");
+    expect(res.headers.get("x-context-frontend-origin")).toBe("https://app.test");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://api.test/auth/confirm?token=abc");
+  });
+
+  it("returns a JSON rejection for a consumed CLI handoff", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://api.test");
+    const { GET } = await loadRoute();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const res = await GET(request("https://app.test/api/auth/confirm?token=abc"));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("redirects to login for unsafe redirect paths", async () => {
@@ -111,6 +126,22 @@ describe("GET /api/auth/confirm", () => {
     );
     const c = res.headers.getSetCookie()[0];
     expect(c.toLowerCase()).not.toMatch(/;\s*secure\b/);
+  });
+
+  it("keeps a deployment-link login on that host even when backend uses a branch alias", async () => {
+    vi.stubEnv("IDENTITY_SERVICE_URL", "https://identity.internal");
+    const { GET } = await loadRoute();
+    fetchMock.mockResolvedValueOnce(new Response(null, {
+      status: 303,
+      headers: {
+        location: "https://branch-preview.vercel.app/projects",
+        "set-cookie": "vapor-session=opaque; Domain=branch-preview.vercel.app; Path=/; Secure; HttpOnly",
+      },
+    }));
+    const res = await GET(request("https://deployment-preview.vercel.app/api/auth/confirm?token=t&redirect=%2Fprojects"));
+    expect(res.headers.get("location")).toBe("https://deployment-preview.vercel.app/projects");
+    expect(res.headers.get("set-cookie")).toContain("vapor-session=opaque");
+    expect(res.headers.get("set-cookie")).not.toContain("Domain=");
   });
 
   it("returns JSON when backend responds 200 with body", async () => {

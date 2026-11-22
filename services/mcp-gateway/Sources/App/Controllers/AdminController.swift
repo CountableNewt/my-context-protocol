@@ -28,7 +28,7 @@ struct AdminAccountFlagsRequest: Content {
     var paywall_bypass: Bool?
 }
 
-/// Admin-only directory row: accounts with platform admin and/or paywall bypass overrides.
+/// Admin directory row. Legacy payment fields are inert compatibility metadata.
 struct AdminPrivilegedAccountRow: Content {
     let account_id: String
     let github_login: String
@@ -93,16 +93,14 @@ enum AdminController {
         return AdminLookupResponse(
             account_id: id.uuidString,
             is_admin: acct.isAdmin,
-            paywall_bypass: acct.paywallBypass
+            paywall_bypass: false
         )
     }
 
     static func updateFlags(req: Request) async throws -> Response {
         let body = try req.content.decode(AdminAccountFlagsRequest.self)
-        let hasAdmin = body.is_admin != nil
-        let hasBypass = body.paywall_bypass != nil
-        guard hasAdmin || hasBypass else {
-            throw Abort(.badRequest, reason: "Set at least one of is_admin or paywall_bypass")
+        guard body.is_admin != nil else {
+            throw Abort(.badRequest, reason: "Set is_admin; payment bypass controls have been removed")
         }
 
         guard let account = try await Account.find(body.account_id, on: req.db), let id = account.id else {
@@ -119,25 +117,18 @@ enum AdminController {
             account.isAdmin = v
             account.adminGrantedAt = v ? Date() : nil
         }
-        if let v = body.paywall_bypass {
-            account.paywallBypass = v
-            account.paywallBypassGrantedAt = v ? Date() : nil
-        }
         try await account.save(on: req.db)
         let payload = AdminLookupResponse(
             account_id: id.uuidString,
             is_admin: account.isAdmin,
-            paywall_bypass: account.paywallBypass
+            paywall_bypass: false
         )
         return try await payload.encodeResponse(status: .ok, for: req)
     }
 
     static func listPrivilegedAccounts(req: Request) async throws -> [AdminPrivilegedAccountRow] {
         let accounts = try await Account.query(on: req.db)
-            .group(.or) { group in
-                group.filter(\.$isAdmin == true)
-                group.filter(\.$paywallBypass == true)
-            }
+            .filter(\.$isAdmin == true)
             .sort(\.$login, .ascending)
             .all()
         return accounts.compactMap { acct in
@@ -146,9 +137,9 @@ enum AdminController {
                 account_id: aid.uuidString,
                 github_login: acct.login,
                 is_admin: acct.isAdmin,
-                paywall_bypass: acct.paywallBypass,
+                paywall_bypass: false,
                 admin_granted_at: Self.rfc3339(acct.adminGrantedAt),
-                paywall_bypass_granted_at: Self.rfc3339(acct.paywallBypassGrantedAt)
+                paywall_bypass_granted_at: nil
             )
         }
     }
