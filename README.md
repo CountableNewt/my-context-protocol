@@ -56,7 +56,7 @@ myctx projects list
 myctx commands
 ```
 
-The CLI defaults to the hosted account API at `https://api.mycontextprotocol.dev`.
+The CLI defaults to the hosted account API at `https://mycontextprotocol.dev/api`.
 For self-hosting or an explicit Development environment, override it with `--url`,
 `MYCTX_URL`, or a saved profile URL. Precedence is flags, environment, profile,
 then hosted default; existing profiles retain their explicit URL. A personal
