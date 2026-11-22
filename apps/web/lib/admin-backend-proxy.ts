@@ -5,7 +5,7 @@ import { forwardBackendResponseCookies } from "@/lib/forward-backend-response-co
 
 /** Server-side only: prefer non-public var to avoid client bundle assumptions; fall back to public URL. */
 export function getAdminBackendOrigin(): string {
-  return getBackendOrigin();
+  return getBackendOrigin("control");
 }
 
 /**

@@ -45,7 +45,7 @@ Set the frontend `NEXT_PUBLIC_API_URL` to the backend origin, usually `http://lo
 
 ## MyContextCLI
 
-MyContextCLI (`myctx`), written in Swift, exposes the complete account, project, release, skill, runtime, billing,
+MyContextCLI (`myctx`), written in Swift, exposes the complete account, project, release, skill, runtime,
 and administrator API with JSON output for agents. Requires Swift 6+ on macOS or Linux.
 
 ```bash

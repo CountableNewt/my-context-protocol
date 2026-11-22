@@ -2,6 +2,12 @@
 
 This document describes what the MyContextProtocol frontend expects from the backend API. Use it when implementing or integrating the backend.
 
+Every account has full feature access. There is no Pro tier, project-count payment limit,
+webhook or custom-domain paywall, or analytics range paywall. Legacy plan fields may be
+returned for wire compatibility but must not control access. Checkout, subscription
+portal, and Stripe webhook endpoints are no longer available. Authentication, project
+ownership, admin authorization, and shared abuse-prevention limits still apply.
+
 ---
 
 ## Overview
@@ -202,7 +208,7 @@ Content-Type: application/json
 
 **Response:** `RepoConnection` object.
 
-- **`409 Conflict`** — Pro + webhooks + GitHub App env configured, but no installation id yet. JSON: `{ "reason": "github_app_install_required", "install_url": "..." }`. Navigate to `install_url`, complete install on GitHub (include the repo), then POST again.
+- **`409 Conflict`** — Webhooks + GitHub App env configured, but no installation id yet. JSON: `{ "reason": "github_app_install_required", "install_url": "..." }`. Navigate to `install_url`, complete install on GitHub (include the repo), then POST again.
 
 ---
 

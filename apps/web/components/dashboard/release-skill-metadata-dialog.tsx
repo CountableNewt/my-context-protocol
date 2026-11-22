@@ -20,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { MarkdownPreview } from "@/components/dashboard/markdown-preview";
+import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -46,6 +46,11 @@ import {
   mcpReviewHighlightFields,
   type McpMetadataHealthTier,
 } from "@/lib/mcp-metadata-health";
+
+const MarkdownPreview = dynamic(
+  () => import("@/components/dashboard/markdown-preview").then((module) => module.MarkdownPreview),
+  { loading: () => <p role="status" className="text-muted-foreground text-sm">Loading preview…</p> },
+);
 
 /** Muted destructive field chrome — matches releases table “blocking MCP publish” control. */
 const FIELD_ERROR_SURFACE =

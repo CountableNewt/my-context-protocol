@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   Area,
@@ -48,7 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth } from "@/contexts/auth-context";
 
 const axisMuted = "hsl(240 3.8% 46.1%)";
 const gridStroke = "hsl(240 5.9% 90% / 0.35)";
@@ -67,8 +65,6 @@ export function MetricsTimeseriesCharts({
   variant: Variant;
   projectId?: string;
 }) {
-  const { user } = useAuth();
-  const isPro = user?.plan === "pro";
   const [range, setRange] = useState<DashboardTimeseriesRange>("24h");
 
   const query = useQuery<DashboardTimeseriesPayload>({
@@ -130,18 +126,6 @@ export function MetricsTimeseriesCharts({
     return label;
   };
 
-  const upgradeHint =
-    variant !== "admin" &&
-    !isPro && (
-      <p className="text-muted-foreground mt-2 text-xs">
-        Longer history (beyond 7 days) is available on{" "}
-        <Link href="/billing" className="text-primary underline-offset-4 hover:underline">
-          Pro
-        </Link>
-        .
-      </p>
-    );
-
   if (query.isLoading) {
     return (
       <div className="rounded-lg border p-4" role="status" aria-live="polite">
@@ -152,28 +136,6 @@ export function MetricsTimeseriesCharts({
 
   if (query.error) {
     const err = query.error;
-    if (variant !== "admin" && err instanceof ApiError && err.status === 402) {
-      return (
-        <div
-          className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <p className="font-medium text-amber-700 dark:text-amber-400">
-            This time range requires Pro.
-          </p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            Upgrade to unlock ranges longer than 7 days.
-          </p>
-          <Link
-            href="/billing"
-            className="mt-2 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
-          >
-            View plans
-          </Link>
-        </div>
-      );
-    }
     return (
       <div
         className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm"
@@ -216,16 +178,13 @@ export function MetricsTimeseriesCharts({
               <SelectItem
                 key={opt.value}
                 value={opt.value}
-                disabled={variant !== "admin" && opt.proOnly && !isPro}
               >
                 {opt.label}
-                {opt.proOnly && variant !== "admin" ? " (Pro)" : ""}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      {upgradeHint}
       {variant === "admin" && query.data && isAdminTimeseriesPayload(query.data) ? (
         <div className="text-muted-foreground space-y-1 text-xs">
           <p>{query.data.data_source_note}</p>

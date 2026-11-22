@@ -16,14 +16,12 @@ import { McpCatalogSection } from "@/components/dashboard/mcp-catalog-section";
 import { ProjectOverviewMetrics } from "@/components/dashboard/project-overview-metrics";
 import { SkillRuntimeSection } from "@/components/dashboard/skill-runtime-section";
 import { SkillUsageSection } from "@/components/dashboard/skill-usage-section";
-import { useAuth } from "@/contexts/auth-context";
 import { ApiError, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { CopyIcon } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/clipboard";
 
 export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
-  const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -164,7 +162,7 @@ export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
             </dl>
           </div>
           <McpCatalogSection projectId={projectId} />
-          <CustomDomainSection projectId={projectId} isPro={user?.plan === "pro"} />
+          <CustomDomainSection projectId={projectId} />
         </TabsContent>
         <TabsContent value="repo">
           <RepoConnectionSection projectId={projectId} />

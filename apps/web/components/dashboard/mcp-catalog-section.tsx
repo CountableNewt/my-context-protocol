@@ -23,7 +23,7 @@ import { CopyIcon } from "lucide-react";
 import { ApiError, formatApiErrorDetail } from "@/lib/api";
 import { copyTextToClipboard, mcpEventsUrl } from "@/lib/clipboard";
 import { pluralEn } from "@/lib/pluralize";
-import { MarkdownPreview } from "@/components/dashboard/markdown-preview";
+import dynamic from "next/dynamic";
 import { glassSurfaceClasses } from "@/lib/glass";
 import { MYCONTEXT_CATALOG_TOOL_NAME } from "@/lib/mcp-tool-names";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+const MarkdownPreview = dynamic(
+  () => import("@/components/dashboard/markdown-preview").then((module) => module.MarkdownPreview),
+  { loading: () => <p role="status" className="text-muted-foreground text-sm">Loading preview…</p> },
+);
 
 function mcpHostOrigin(mcpUrl: string): string | null {
   try {

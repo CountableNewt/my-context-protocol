@@ -9,9 +9,10 @@ const monorepoRoot = path.resolve(projectRoot, "../..");
 
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() ?? "";
 const apiUrl = (rawApiUrl || "http://localhost:8080").replace(/\/$/, "");
+const serviceMode = process.env.VERCEL_SERVICE_MODE === "1";
 
 /** Rewrites are fixed at build time; missing API URL on Vercel produces 502 on every `/api/*` call. */
-if (process.env.VERCEL === "1") {
+if (process.env.VERCEL === "1" && !serviceMode) {
   if (!rawApiUrl) {
     throw new Error(
       "NEXT_PUBLIC_API_URL must be set for Vercel builds. Without it, /api/* rewrites target localhost and the edge returns 502."
@@ -31,7 +32,6 @@ const proxiedApiPrefixes = [
   "dashboard",
   "projects",
   "github",
-  "billing",
   "webhooks",
 ] as const;
 
@@ -42,7 +42,7 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
-      { source: "/api/health", destination: `${apiUrl}/health` },
+      ...(!serviceMode ? [{ source: "/api/health", destination: `${apiUrl}/health` }] : []),
       // Map the bare /auth/mcp-oauth-resume path (used as the OAuth return_to URL by the
       // backend) to the proxied API route that handles redirect + cookie forwarding.
       // Must come before the generic /api/auth/:path* proxy so the filesystem route wins.
@@ -50,10 +50,10 @@ const nextConfig: NextConfig = {
         source: "/auth/mcp-oauth-resume",
         destination: "/api/auth/mcp-oauth-resume",
       },
-      ...proxiedApiPrefixes.map((prefix) => ({
+      ...(!serviceMode ? proxiedApiPrefixes.map((prefix) => ({
         source: `/api/${prefix}/:path*`,
         destination: `${apiUrl}/${prefix}/:path*`,
-      })),
+      })) : []),
     ];
   },
   async headers() {

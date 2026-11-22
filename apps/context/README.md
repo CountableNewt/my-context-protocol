@@ -155,7 +155,6 @@ responses: API-key creation intentionally returns the secret once.
 | `keys` | `list`, `create`, `update`, `revoke` |
 | `logs` | `list` |
 | `domains` | `get`, `set`, `verify` |
-| `billing` | `checkout`, `portal` |
 | `github` | `repos`, `install` |
 | `admin` | `metrics`, `timeseries`, `rollup-refresh`, `lookup`, `privileged-accounts`, `account-flags` |
 
@@ -174,13 +173,11 @@ Common payloads:
 | `repos connect` | `{"owner":"org","repo":"skills","branch":"main"}` |
 | `keys create` / `keys update` | `{"name":"Agent"}` |
 | `domains set` | `{"hostname":"context.example.com"}` |
-| `billing checkout` | `{"interval":"month"}` or `{"interval":"year"}` |
 | `admin lookup` | `{"github_login":"example"}` (also `github_id` or `email`) |
-| `admin account-flags` | `{"account_id":"UUID","is_admin":false,"paywall_bypass":true}` |
+| `admin account-flags` | `{"account_id":"UUID","is_admin":false}` |
 
 `skills writeback` creates an external branch and draft pull request; invoking
-that command authorizes that action. Billing commands create URLs; they do not
-open or complete checkout. GitHub installation returns its browser URL. HTTP
+that command authorizes that action. GitHub installation returns its browser URL. HTTP
 redirects are never followed with account credentials.
 
 For API operations beyond the named registry:

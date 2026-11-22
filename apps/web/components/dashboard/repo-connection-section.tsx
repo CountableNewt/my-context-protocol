@@ -254,7 +254,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
           <CardDescription>
             {connection.webhook_id
               ? "Pushes to the default branch trigger a sync automatically."
-              : "Manual sync only on your plan — use Sync Now after you push. Upgrade to Pro for GitHub webhooks."}
+              : "Automatic sync is not configured for this connection. Use Sync Now after you push."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

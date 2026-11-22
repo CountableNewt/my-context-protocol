@@ -105,12 +105,6 @@ public let operations: [Operation] = [
     name: "domains verify", method: "POST", path: "/projects/:id/custom-domain/verify",
     description: "Verify project ownership, routing DNS, and TLS status"),
   Operation(
-    name: "billing checkout", method: "POST", path: "/billing/checkout-session",
-    description: "Create a Pro billing checkout URL"),
-  Operation(
-    name: "billing portal", method: "POST", path: "/billing/portal-session",
-    description: "Create a billing portal URL"),
-  Operation(
     name: "github repos", method: "GET", path: "/github/repos",
     description: "List accessible GitHub repositories"),
   Operation(

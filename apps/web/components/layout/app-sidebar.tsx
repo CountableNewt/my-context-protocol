@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboardIcon,
   FolderIcon,
-  CreditCardIcon,
   ShieldIcon,
   ChevronRightIcon,
   UserCircleIcon,
@@ -41,7 +40,6 @@ const navItems = [
 
 const footerNavItems = [
   { href: "/account", label: "Account", icon: UserCircleIcon },
-  { href: "/billing", label: "Billing", icon: CreditCardIcon },
 ] as const;
 
 const PROJECTS_ACCORDION_STORAGE_KEY = "mycontext.sidebar.projectsAccordionOpen";
@@ -362,7 +360,7 @@ export function AppSidebar() {
           </SidebarGroup>
         </SidebarContent>
       </nav>
-      <nav aria-label="Account, billing, and sign out">
+      <nav aria-label="Account and sign out">
         <SidebarFooter className="border-0">
           <div
             aria-hidden

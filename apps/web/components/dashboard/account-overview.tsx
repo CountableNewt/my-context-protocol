@@ -5,10 +5,15 @@ import Link from "next/link";
 import { fetchAccountDashboardSummary } from "@/lib/projects-api";
 import { ApiError, formatApiErrorDetail } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MetricsTimeseriesCharts } from "@/components/dashboard/metrics-timeseries-charts";
+import dynamic from "next/dynamic";
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card";
 import { pluralEn } from "@/lib/pluralize";
 import { DashboardMcpMethodsBreakdownCard } from "@/components/dashboard/dashboard-mcp-methods-breakdown-card";
+
+const MetricsTimeseriesCharts = dynamic(
+  () => import("@/components/dashboard/metrics-timeseries-charts").then((module) => module.MetricsTimeseriesCharts),
+  { loading: () => <p role="status" className="text-muted-foreground text-sm">Loading charts…</p> },
+);
 
 function formatPct(x: number | null | undefined): string {
   if (x == null) return "—";

@@ -10,17 +10,14 @@ export interface AdminPlatformMetrics {
 export interface AdminLookupResult {
   account_id: string;
   is_admin: boolean;
-  paywall_bypass: boolean;
 }
 
-/** Accounts with platform admin and/or paywall bypass (admin session only). */
+/** Accounts with platform admin access (admin session only). */
 export interface AdminPrivilegedAccountRow {
   account_id: string;
   github_login: string;
   is_admin: boolean;
-  paywall_bypass: boolean;
   admin_granted_at: string | null;
-  paywall_bypass_granted_at: string | null;
 }
 
 export async function fetchAdminMetrics(): Promise<AdminPlatformMetrics> {
@@ -51,7 +48,6 @@ export async function adminLookup(
 export async function adminUpdateFlags(body: {
   account_id: string;
   is_admin?: boolean;
-  paywall_bypass?: boolean;
 }): Promise<AdminLookupResult> {
   return api.post<AdminLookupResult>("/admin/account-flags", body);
 }

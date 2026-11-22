@@ -61,7 +61,10 @@ class CLITests(unittest.TestCase):
     def test_discovery_and_help_without_configuration(self):
         result = self.run_cli("commands")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertGreaterEqual(len(json.loads(result.stdout)), 44)
+        commands = json.loads(result.stdout)
+        self.assertGreaterEqual(len(commands), 42)
+        self.assertNotIn("billing checkout", result.stdout)
+        self.assertNotIn("billing portal", result.stdout)
         for args in [("help",), ("projects", "--help"), ("--version",)]:
             self.assertEqual(self.run_cli(*args).returncode, 0)
         self.assertIn("projects get", self.run_cli("help", "projects").stdout)

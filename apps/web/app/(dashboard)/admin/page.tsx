@@ -42,9 +42,14 @@ import {
 } from "@/components/ui/table";
 import Link from "next/link";
 import { ShieldAlertIcon } from "lucide-react";
-import { MetricsTimeseriesCharts } from "@/components/dashboard/metrics-timeseries-charts";
+import dynamic from "next/dynamic";
 import { glassSurfaceClasses } from "@/lib/glass";
 import { cn } from "@/lib/utils";
+
+const MetricsTimeseriesCharts = dynamic(
+  () => import("@/components/dashboard/metrics-timeseries-charts").then((module) => module.MetricsTimeseriesCharts),
+  { loading: () => <p role="status" className="text-muted-foreground text-sm">Loading charts…</p> },
+);
 
 type IdKind = "github_login" | "github_id" | "email";
 
@@ -70,7 +75,6 @@ function formatHeldSince(iso: string | null | undefined): string {
 function overridesSummary(row: AdminPrivilegedAccountRow): string {
   const parts: string[] = [];
   if (row.is_admin) parts.push("Admin");
-  if (row.paywall_bypass) parts.push("Paywall Bypass");
   return parts.length ? parts.join(" · ") : "—";
 }
 
@@ -184,7 +188,6 @@ export default function AdminPage() {
 
   const runFlagUpdate = async (patch: {
     is_admin?: boolean;
-    paywall_bypass?: boolean;
   }) => {
     if (!lookupResult) return;
     setActionLoading(true);
@@ -244,8 +247,7 @@ export default function AdminPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
         <p className="text-muted-foreground mt-1">
-          Platform-wide aggregates, a directory of accounts with admin or paywall
-          overrides, and single-account lookup. Lookup by identifier still returns
+          Platform-wide aggregates, a directory of administrators, and single-account lookup. Lookup by identifier still returns
           only id and flags (no email or profile).
         </p>
       </div>
@@ -314,7 +316,7 @@ export default function AdminPage() {
             <div>
               <CardTitle>Accounts With Overrides</CardTitle>
               <CardDescription>
-                Anyone with platform admin and/or paywall bypass. Times are from
+                Accounts with platform admin access. Times are from
                 when each override was last turned on (approximate for accounts
                 granted before this audit field existed — backfilled from account
                 creation).
@@ -338,34 +340,28 @@ export default function AdminPage() {
             <Skeleton className="h-32 w-full" />
           ) : privileged.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              No accounts with admin or paywall bypass overrides.
+              No administrator accounts.
             </p>
           ) : (
             <Table>
               <TableCaption className="sr-only">
-                Accounts with admin or paywall-bypass overrides and grant times.
+                Administrator accounts and grant times.
               </TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>GitHub Login</TableHead>
                   <TableHead>Overrides</TableHead>
                   <TableHead>Admin Since</TableHead>
-                  <TableHead>Paywall Bypass Since</TableHead>
                   <TableHead className="font-mono text-xs">Account ID</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {privileged.map((row) => (
+                {privileged.filter((row) => row.is_admin).map((row) => (
                   <TableRow key={row.account_id}>
                     <TableCell className="font-medium">{row.github_login}</TableCell>
                     <TableCell className="text-sm">{overridesSummary(row)}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {row.is_admin ? formatHeldSince(row.admin_granted_at) : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {row.paywall_bypass
-                        ? formatHeldSince(row.paywall_bypass_granted_at)
-                        : "—"}
                     </TableCell>
                     <TableCell className="font-mono text-xs break-all">
                       {row.account_id}
@@ -450,9 +446,6 @@ export default function AdminPage() {
               <p className="text-sm">
                 Admin:{" "}
                 <strong>{lookupResult.is_admin ? "yes" : "no"}</strong>
-                {" · "}
-                Paywall bypass:{" "}
-                <strong>{lookupResult.paywall_bypass ? "yes" : "no"}</strong>
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-1 sm:justify-start">
                 <Button
@@ -472,24 +465,6 @@ export default function AdminPage() {
                   onClick={() => void runFlagUpdate({ is_admin: false })}
                 >
                   Revoke Admin
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  disabled={actionLoading || lookupResult.paywall_bypass}
-                  onClick={() => void runFlagUpdate({ paywall_bypass: true })}
-                >
-                  Grant Paywall Bypass
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={actionLoading || !lookupResult.paywall_bypass}
-                  onClick={() => void runFlagUpdate({ paywall_bypass: false })}
-                >
-                  Revoke Paywall Bypass
                 </Button>
               </div>
               {actionMessage ? (

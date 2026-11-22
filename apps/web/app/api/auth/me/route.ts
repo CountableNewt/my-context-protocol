@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     res = await fetch(backendUrl, {
       method: "GET",
       headers: { Cookie: cookie },
+      cache: "no-store",
     });
   } catch {
     return NextResponse.json(
@@ -30,5 +31,5 @@ export async function GET(request: NextRequest) {
   }
 
   const data = await res.json();
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { "cache-control": "private, no-store" } });
 }
