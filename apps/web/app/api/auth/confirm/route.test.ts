@@ -32,12 +32,27 @@ describe("GET /api/auth/confirm", () => {
     expect(res.headers.get("location")).toContain("missing_params");
   });
 
-  it("redirects to login when redirect param is missing", async () => {
+  it("supports token-only CLI confirmation and preserves its session", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "http://api.test");
     const { GET } = await loadRoute();
-    const res = await GET(request("http://app.test/api/auth/confirm?token=abc"));
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toContain("missing_params");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+      headers: { "set-cookie": "sid=cli; Path=/; HttpOnly", "x-context-frontend-origin": "https://app.test" },
+    }));
+    const res = await GET(request("https://app.test/api/auth/confirm?token=abc"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toContain("sid=cli");
+    expect(res.headers.get("x-context-frontend-origin")).toBe("https://app.test");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://api.test/auth/confirm?token=abc");
+  });
+
+  it("returns a JSON rejection for a consumed CLI handoff", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://api.test");
+    const { GET } = await loadRoute();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const res = await GET(request("https://app.test/api/auth/confirm?token=abc"));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("redirects to login for unsafe redirect paths", async () => {

@@ -47,7 +47,7 @@ Sources: [Services](https://vercel.com/docs/services), [Go runtime](https://verc
 
 - Starting checkout: clean `feature/mcp-22-sqlite-primary`; retained per repository instructions.
 - Custom MyContextProtocol skills endpoint: request returned HTTP 401; unavailable until authentication is repaired.
-- Linear: plugin discovered but not connected; issue updates pending connection.
+- Linear: connection declined by owner; migration evidence is tracked in this document.
 - Vercel: connected account has no existing project matching `context` at initial inspection.
 - Railway retirement: pending all acceptance above.
 
@@ -62,7 +62,7 @@ Sources: [Services](https://vercel.com/docs/services), [Go runtime](https://verc
 - Runtime Next API forwarding supports identity/control/sync bindings with an explicit route allowlist, same-origin cookies, uncached account data, and fail-closed missing preview bindings. `VERCEL_SERVICE_MODE=1` must only be enabled when those services are deployed and ready.
 - Created empty `mcp-migration-preview` on the existing Turso Free account after explicit owner approval, default `aws-us-east-2` group. No production data imported. URL: `libsql://mcp-migration-preview-countablenewt.aws-us-east-2.turso.io`.
 - Account dashboard displayed 82% shared embedded-sync quota used. Use stateless remote HTTP queries for this migration; do not create embedded replicas or run bulk sync rehearsals against that remaining quota.
-- No Vercel deployment or domain cutover has occurred. Railway remains live.
+- A protected Vercel Preview deployment built successfully; production domain cutover has not occurred. Railway remains live.
 
 ### Remaining identity acceptance
 
@@ -71,3 +71,18 @@ A single production GitHub OAuth callback cannot create a handoff in production 
 Remaining backend port includes MCP OAuth/consent/token registration, GitHub App install and repository listing, control API, compiler/runtime, sync publication and webhooks, shared revision/subscription/rate-limit state, maintenance scheduling, custom domains, controlled schema migration and data verification. The current Go identity slice must not receive unsupported routes.
 
 Go verification: race-enabled tests, `go vet`, and `go build ./...` pass for the implemented packages. Final frontend regression also preserves host-only sessions on deployment-specific preview URLs when backend defaults use a branch alias.
+
+## 2026-11-22 remote rehearsal and Go implementation
+
+Implemented identity, control, MCP runtime/OAuth, compiler, repository sync, GitHub App operations, custom-domain provider, controlled migrations, and bounded daily maintenance. Go uses stateless Turso HTTP transactions with foreign keys enabled on each stream. Initial migration registry creation and baseline adoption commit atomically; imported schemas require explicit verified adoption.
+
+- Full Go race tests, vet, and command builds pass. Frontend: 218 tests, typecheck and lint pass (existing navigation warnings). Latest local Turbopack attempt is blocked by worker socket sandbox permissions; the hosted Next 16.4.6 Turbopack build succeeded.
+- Created one Hobby project `my-context-protocol` (`prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7`), linked to GitHub with `main` production. No separate development project.
+- Explicit Preview deployment `dpl_FYeJ1wdxT8c4baZKyBBvz3xzrLNs` built all five services. Stable migration alias: https://my-context-protocol-migration-preview.vercel.app. Initial smoke found a root routing 404 and identity startup failure from missing GitHub credentials; validation remains in progress.
+- Preview-only database token and encryption/internal/cron credentials were approved and provisioned for `feature/mcp-22-sqlite-primary`. No production credentials or data in this preview. Database token expires after 30 days.
+- Actual Turso schema initialization and maintenance indexes applied. Synthetic remote rehearsal passed transactions/rollback, exact integers/blobs, encrypted token compatibility, session revocation, one-time handoffs, and foreign-key enforcement/integrity. Synthetic rows were removed.
+- Owner approved moving development GitHub OAuth to the stable migration preview. Existing development client credentials copied directly Railway→branch Preview without local persistence; callback changed to the stable alias. Production OAuth remains unchanged. GitHub App install configuration and tenant OAuth host acceptance remain outstanding.
+- Read-only Railway production inventory: SQLite 8,286,208 bytes, 30 tables, 3 accounts, 2 projects, 47 Fluent migrations. No production backup/import/cutover has yet been performed.
+- Preserve the source encryption key during production migration. Production write freeze, consistent snapshot, restore rehearsal, row/schema comparison, authenticated dashboard/CLI/MCP/domain acceptance, and Railway shutdown are still required.
+
+Vercel CLI initially classified a failed first deployment as Production; it never became live and no existing domain moved. Every subsequent deployment explicitly uses `--environment preview`. The authenticated curl helper unexpectedly created an automation bypass credential; revoke it after validation and retain preview authentication.

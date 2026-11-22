@@ -45,7 +45,13 @@ export async function GET(request: NextRequest) {
   const isRedirect = Boolean(location) && res.status >= 300 && res.status < 400;
 
   if (isRedirect && location) {
-    const response = NextResponse.redirect(new URL(location, request.url), { status: 302 });
+    let target = new URL(location, request.url);
+    // The first handshake sets a host-only cookie. Keep its continuation on
+    // this deployment URL even when the backend defaults to the branch alias.
+    if (request.nextUrl.searchParams.has("auth_token") && target.pathname === "/auth/mcp-oauth-resume") {
+      target = new URL(target.pathname + target.search, request.url);
+    }
+    const response = NextResponse.redirect(target, { status: 302 });
     forwardBackendResponseCookies(res, response, new URL(request.url));
     return response;
   }

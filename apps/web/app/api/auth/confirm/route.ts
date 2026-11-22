@@ -8,16 +8,16 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("token");
   const redirectTo = searchParams.get("redirect");
 
-  if (!token || redirectTo == null || redirectTo === "") {
+  if (!token || redirectTo === "") {
     return NextResponse.redirect(new URL("/login?error=missing_params", request.url), 302);
   }
   try {
-    assertSafeRelativeRedirectPath(redirectTo);
+    if (redirectTo != null) assertSafeRelativeRedirectPath(redirectTo);
   } catch {
     return NextResponse.redirect(new URL("/login?error=invalid_redirect", request.url), 302);
   }
 
-  const backendUrl = `${getBackendOrigin()}/auth/confirm?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectTo)}`;
+  const backendUrl = `${getBackendOrigin()}/auth/confirm?token=${encodeURIComponent(token)}${redirectTo == null ? "" : `&redirect=${encodeURIComponent(redirectTo)}`}`;
 
   const res = await fetch(backendUrl, {
     method: "GET",
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   const isBackendRedirect =
     Boolean(location) && res.status >= 300 && res.status < 400;
 
-  if (isBackendRedirect && location) {
+  if (isBackendRedirect && location && redirectTo != null) {
     const requestUrl = new URL(request.url);
     // Use 302 to the browser even when Vapor returns 303 — avoids rare clients mishandling Set-Cookie on 303.
     // Keep host-only cookies on the origin that consumed the handoff. A preview
@@ -43,10 +43,19 @@ export async function GET(request: NextRequest) {
   }
 
   if (res.ok) {
-    return NextResponse.json(await res.json());
+    const response = NextResponse.json(await res.json());
+    response.headers.set("Cache-Control", "no-store");
+    const frontendOrigin = res.headers.get("x-context-frontend-origin");
+    if (frontendOrigin) response.headers.set("X-Context-Frontend-Origin", frontendOrigin);
+    forwardBackendResponseCookies(res, response, new URL(request.url));
+    return response;
   }
 
   // 401 = token already consumed. First request succeeded; redirect to return URL (or /) instead of auth_failed.
+  if (redirectTo == null) {
+    return NextResponse.json({ error: "Authentication failed" }, { status: res.status >= 400 ? res.status : 502, headers: { "Cache-Control": "no-store" } });
+  }
+
   if (res.status === 401) {
     try {
       assertSafeRelativeRedirectPath(redirectTo);

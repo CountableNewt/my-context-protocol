@@ -67,3 +67,34 @@ describe("project-scoped GitHub installation redirects", () => {
     expect(() => assertGitHubInstallUrl(target, context)).toThrow("untrusted_github_url");
   });
 });
+
+describe("relative GitHub installers on Vercel previews", () => {
+  const context = { origin: "https://immutable-preview.vercel.app", projectId: "E21A4021-D807-4E6A-81D2-3811C93939C6" };
+  const installer = `/api/auth/github/app/install?project_id=${context.projectId}&owner=owner&repo=skills`;
+
+  it("accepts an origin-relative installer and project return path on the current deployment", () => {
+    expect(() => assertGitHubInstallUrl(`${installer}&return_to=${encodeURIComponent(`/projects/${context.projectId}`)}`, context)).not.toThrow();
+    expect(() => assertGitHubInstallUrl(installer, context)).not.toThrow();
+    expect(() => assertGitHubInstallUrl(`${installer}&return_to=${encodeURIComponent(`${context.origin}/projects/${context.projectId}`)}`, context)).not.toThrow();
+  });
+
+  it.each([
+    "/projects/another-project",
+    `projects/${context.projectId}`,
+    `/projects/${context.projectId}/extra`,
+    `https://branch-alias.vercel.app/projects/${context.projectId}`,
+    `//attacker.example/projects/${context.projectId}`,
+    `/projects/${context.projectId}#fragment`,
+    `/projects/%2f${context.projectId}`,
+    `/projects/${context.projectId}\\extra`,
+  ])("rejects returns outside the current origin and exact project: %s", (returnTo) => {
+    expect(() => assertGitHubInstallUrl(`${installer}&return_to=${encodeURIComponent(returnTo)}`, context)).toThrow("untrusted_github_url");
+  });
+
+  it("rejects protocol-relative targets and ambiguous return parameters", () => {
+    expect(() => assertGitHubInstallUrl(`//immutable-preview.vercel.app${installer}`, context)).toThrow();
+    expect(() => assertGitHubInstallUrl(`${installer}&return_to=/projects/${context.projectId}&return_to=/projects/other`, context)).toThrow();
+    expect(() => assertGitHubInstallUrl(installer)).toThrow();
+    expect(() => assertGitHubInstallUrl(installer.slice(1), context)).toThrow();
+  });
+});

@@ -1,0 +1,13 @@
+.git
+**/.build
+**/node_modules
+**/.next
+**/.turbo
+**/coverage
+**/.ci-logs
+**/.DS_Store
+**/.env*
+.migration-artifacts
+services/mcp-gateway
+apps/context
+railway
