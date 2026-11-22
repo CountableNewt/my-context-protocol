@@ -337,3 +337,43 @@ func TestInvalidArtifactNeverInitializesDestination(t *testing.T) {
 		t.Fatal("invalid artifact initialized destination")
 	}
 }
+
+func TestSnapshotVerificationRejectsUnownedObjects(t *testing.T) {
+	for _, tc := range []struct{ name, sql string }{{"table", "CREATE TABLE unowned_data(value TEXT)"}, {"view", "CREATE VIEW unowned_view AS SELECT id FROM accounts"}, {"trigger", "CREATE TRIGGER unowned_trigger BEFORE INSERT ON accounts BEGIN SELECT 1; END"}, {"colliding_trigger", "CREATE TRIGGER accounts BEFORE INSERT ON accounts BEGIN SELECT 1; END"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, artifact, _ := fixtureSnapshot(t)
+			db := sqlitetest.New(t, "")
+			if _, e := Transfer(context.Background(), db, artifact, Options{Initialize: true}); e != nil {
+				t.Fatal(e)
+			}
+			if _, e := db.Execute(context.Background(), turso.Statement{SQL: tc.sql}); e != nil {
+				t.Fatal(e)
+			}
+			if _, e := Verify(context.Background(), db, artifact); e == nil {
+				t.Fatal("unowned object accepted by verification")
+			}
+			if _, e := Transfer(context.Background(), db, artifact, Options{Resume: true}); e == nil {
+				t.Fatal("unowned object accepted by resume")
+			}
+		})
+	}
+}
+func TestSnapshotVerificationAllowsExactAdditionsButRejectsAlteredKnownDDL(t *testing.T) {
+	_, artifact, _ := fixtureSnapshot(t)
+	db := sqlitetest.New(t, "")
+	if _, e := Transfer(context.Background(), db, artifact, Options{Initialize: true}); e != nil {
+		t.Fatal(e)
+	}
+	if e := migrations.Apply(context.Background(), db, migrations.Options{Additions: additiveMigrations()}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := Verify(context.Background(), db, artifact); e != nil {
+		t.Fatal("exact owned additions rejected", e)
+	}
+	if _, e := db.Execute(context.Background(), turso.Statement{SQL: "ALTER TABLE mcp_rate_limits ADD COLUMN unexpected TEXT"}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := Verify(context.Background(), db, artifact); e == nil {
+		t.Fatal("altered known table accepted")
+	}
+}

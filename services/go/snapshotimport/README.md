@@ -34,8 +34,11 @@ Provision a new Turso database without attaching it to running application servi
 ```sh
 go run ./cmd/import load \
   --snapshot /private/tmp/mcp-sqlite-transfer/snapshot.jsonl \
+  --expected-host mycontext-production-OWNER.turso.io \
   --initialize
 ```
+
+`load` and `verify` require `--expected-host` to match the exact hostname in `TURSO_DATABASE_URL`. Replace the example hostname with an independently reviewed destination hostname; do not derive this guard from the same environment URL. URLs, userinfo, paths, ports, queries and wildcards are not accepted as the expected hostname. Export and inspect remain entirely local and need no host argument.
 
 Initialization refuses an existing database. It applies the exact controlled Go baseline, then stages rows in foreign-key dependency order with enforcement enabled. Every chunk is an atomic transaction containing data inserts and its progress checkpoint. Transactions target 2 MiB and at most 120 insert statements, below Hrana limits; a larger permitted single row travels alone. There is no reset, replace, force or arbitrary SQL mode.
 
@@ -46,6 +49,7 @@ If a request fails or its commit response is lost, rerun against the same destin
 ```sh
 go run ./cmd/import load \
   --snapshot /private/tmp/mcp-sqlite-transfer/snapshot.jsonl \
+  --expected-host mycontext-production-OWNER.turso.io \
   --resume
 ```
 
@@ -55,17 +59,31 @@ Resume requires the same logical snapshot fingerprint, complete matching checkpo
 
 ```sh
 go run ./cmd/import verify \
-  --snapshot /private/tmp/mcp-sqlite-transfer/snapshot.jsonl
+  --snapshot /private/tmp/mcp-sqlite-transfer/snapshot.jsonl \
+  --expected-host mycontext-production-OWNER.turso.io
 
 # Baseline is already recorded. Add Go-owned state tables and maintenance indexes.
 go run ./cmd/migrate
 
 go run ./cmd/import verify \
-  --snapshot /private/tmp/mcp-sqlite-transfer/snapshot.jsonl
+  --snapshot /private/tmp/mcp-sqlite-transfer/snapshot.jsonl \
+  --expected-host mycontext-production-OWNER.turso.io
 ```
 
-`verify` is read-only. It compares every source table using exact typed values: signed 64-bit integers stay decimal strings in transport, BLOBs use base64 (including empty BLOBs), REAL timestamps preserve their IEEE-754 value, text/UUID spelling stays unchanged and NULL remains distinct. Digests are independent of row order and include duplicate rows. Target schema constraints are verified and foreign keys are never disabled. Owned additive tables can be added after completion; they are not misrepresented as source data.
+`verify` is read-only. It compares every source table using exact typed values: signed 64-bit integers stay decimal strings in transport, BLOBs use base64 (including empty BLOBs), REAL timestamps preserve their IEEE-754 value, text/UUID spelling stays unchanged and NULL remains distinct. Digests are independent of row order and include duplicate rows. Target schema constraints are verified and foreign keys are never disabled. Only exact shipped Go additive schema objects can accompany the import. Resume and verification reject unknown tables, views, triggers and changed definitions of owned objects. Known Go additions can be applied after completion; their new tables are not misrepresented as source data.
 
 A successful read-only verification can report `verified: true` while the marker still says `loading` if the previous final checkpoint response failed; use `load --resume` to finalize it. A later modification of application data makes the original snapshot comparison fail, so capture verification evidence **before** allowing runtime writes.
 
 After transfer, complete authenticated Chrome, CLI, MCP/OAuth, encrypted GitHub token, repository sync and domain acceptance against the destination. Keep Railway and its backup intact until those checks and the final cutover are complete. This tool performs none of those external actions.
+
+### Private local restore acceptance
+
+The opt-in integration test restores a reviewed artifact into an ephemeral local SQLite database, verifies every typed source row before and after the shipped additive migrations, and calls MCP initialize, tools/list and mycontext_catalog using temporary synthetic API keys. It makes no network requests. It requires a private (0700) artifact parent, 0600 source.sqlite and artifact files, and matching TMPDIR. Source hashes must remain unchanged. Output contains aggregate counts only; a 0600 metadata-only acceptance report is saved in that parent. MCP requests may mutate telemetry in the temporary database after source-row verification.
+
+```sh
+TMPDIR=/private/tmp/mcp-production-rehearsal \
+MCP_SQLITE_REHEARSAL_SNAPSHOT=/private/tmp/mcp-production-rehearsal/snapshot.jsonl \
+go test -race ./snapshotimport -run TestApprovedLocalSnapshotRehearsal -v
+```
+
+Without the opt-in environment variable, this test skips. A passing local rehearsal does not change routing or perform a hosted transfer.

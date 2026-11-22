@@ -282,7 +282,7 @@ func quoted(name string) string    { return `"` + strings.ReplaceAll(name, `"`, 
 
 type tableSpec struct{ columns, dependencies []string }
 
-var createPattern = regexp.MustCompile(`(?is)^CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+("[^"]+"|[a-zA-Z_][a-zA-Z_0-9]*)`)
+var createPattern = regexp.MustCompile(`(?is)^CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(?:IF\s+NOT\s+EXISTS\s+)?("[^"]+"|[a-zA-Z_][a-zA-Z_0-9]*)`)
 var referencePattern = regexp.MustCompile(`(?i)\bREFERENCES\s+("[^"]+"|[a-zA-Z_][a-zA-Z_0-9]*)`)
 
 func baseline() (map[string]string, map[string]tableSpec, error) {

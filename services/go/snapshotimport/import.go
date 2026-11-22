@@ -260,6 +260,9 @@ func destinationSchema(ctx context.Context, db Database) (map[string]string, err
 		if !ok {
 			return nil, errors.New("invalid destination schema definition")
 		}
+		if _, exists := schema[name]; exists {
+			return nil, errors.New("destination contains colliding schema object names")
+		}
 		schema[name] = sql
 	}
 	return schema, nil
@@ -280,11 +283,24 @@ func checkImportSchema(schema map[string]string) error {
 	if e := checkBaselineSubset(schema); e != nil {
 		return e
 	}
-	if normalized(schema[runTable]) != normalized(runDDL) || normalized(schema[progressTable]) != normalized(progressDDL) {
-		return errors.New("snapshot checkpoint schema mismatch")
+	expected, e := ownedSchema()
+	if e != nil {
+		return e
+	}
+	for name, actual := range schema {
+		ddl, ok := expected[name]
+		if !ok || normalizedCreate(actual) != normalizedCreate(ddl) {
+			return errors.New("destination contains an unknown or altered schema object")
+		}
+	}
+	for _, required := range []string{"go_schema_migrations", runTable, progressTable} {
+		if _, ok := schema[required]; !ok {
+			return errors.New("snapshot checkpoint schema is missing")
+		}
 	}
 	return nil
 }
+
 func matchingRun(ctx context.Context, db Database, id string) (string, error) {
 	r, e := db.Execute(ctx, turso.Statement{SQL: "SELECT snapshot_id,status FROM " + runTable + " WHERE id=1", WantRows: true})
 	if e != nil {

@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/snapshotimport"
@@ -29,6 +31,7 @@ func run(args []string) error {
 	source := flags.String("source", "", "standalone SQLite backup (export only)")
 	output := flags.String("output", "", "new private JSONL artifact (export only)")
 	path := flags.String("snapshot", "", "typed JSONL snapshot artifact")
+	expectedHost := flags.String("expected-host", "", "required exact destination hostname for load/verify; independently reviewed")
 	initialize := flags.Bool("initialize", false, "load only into a new empty destination")
 	resume := flags.Bool("resume", false, "resume this exact snapshot's existing staged import")
 	rows := flags.Int("batch-rows", 100, "maximum rows per import transaction, capped at 120")
@@ -68,6 +71,9 @@ func run(args []string) error {
 		if *path == "" {
 			return fmt.Errorf("load/verify requires --snapshot")
 		}
+		if e := validateExpectedHost(*expectedHost, os.Getenv("TURSO_DATABASE_URL")); e != nil {
+			return e
+		}
 		db, e := turso.New(os.Getenv("TURSO_DATABASE_URL"), os.Getenv("TURSO_AUTH_TOKEN"))
 		if e != nil {
 			return e
@@ -94,4 +100,38 @@ func run(args []string) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(result)
+}
+
+// Validate independently supplied target intent before reading credentials or
+// constructing a destination client. This function never performs network I/O.
+func validateExpectedHost(expected, rawURL string) error {
+	if expected == "" {
+		return fmt.Errorf("load/verify requires --expected-host")
+	}
+	if len(expected) > 253 || strings.ContainsAny(expected, "/:@?#\\* []\t\r\n") || strings.TrimSpace(expected) != expected {
+		return fmt.Errorf("expected-host must be one exact hostname, without a URL, port, wildcard or credentials")
+	}
+	for _, label := range strings.Split(expected, ".") {
+		if len(label) < 1 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return fmt.Errorf("invalid expected-host")
+		}
+		for _, c := range label {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+				return fmt.Errorf("invalid expected-host")
+			}
+		}
+	}
+	parsed, e := url.Parse(rawURL)
+	if e != nil {
+		return fmt.Errorf("invalid destination database URL")
+	}
+	// Reuse the production origin/TLS checks with a non-secret placeholder. New
+	// creates a client only; it sends no requests and does not need real credentials.
+	if _, e = turso.New(rawURL, "target-validation-only"); e != nil {
+		return fmt.Errorf("invalid destination database URL")
+	}
+	if !strings.EqualFold(parsed.Hostname(), expected) {
+		return fmt.Errorf("destination hostname does not match --expected-host")
+	}
+	return nil
 }
