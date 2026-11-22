@@ -6,7 +6,8 @@ mixed or partial credentials fail startup. Credentials stay server-side.
 
 For a narrower credential than a personal/team token, create a connectable account
 integration in Vercel's Integrations Console, keep it unlisted/community, and ask
-only for Project Read/Write and Domain Read/Write. Install it on the intended Hobby
+for Project Read/Write and Domain Read/Write, plus the mandatory Integration
+Configuration Read permission. Install it on the intended Hobby
 team and select **only MyContextProtocol**, rather than all projects. Verify that
 selection in Integrations → Manage → Manage Access.
 
