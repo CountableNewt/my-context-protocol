@@ -145,7 +145,10 @@ func Transfer(ctx context.Context, db Database, path string, options Options) (*
 			statements := []turso.Statement{}
 			encodedBytes := 1024
 			for end < int64(len(table.Data)) && len(statements) < batchRows {
-				statement := insert(table, table.Data[end])
+				statement, err := insert(table, table.Data[end])
+				if err != nil {
+					return nil, err
+				}
 				raw, _ := json.Marshal(statement)
 				if len(raw) > MaxRowBytes+16384 {
 					return nil, errors.New("snapshot row exceeds transport statement limit")
@@ -233,14 +236,29 @@ func createProgress(ctx context.Context, db Database, snapshot *Snapshot) error 
 	_, e := db.Batch(ctx, statements)
 	return e
 }
-func insert(table *Table, row []turso.Value) turso.Statement {
+func insert(table *Table, row []turso.Value) (turso.Statement, error) {
 	names := make([]string, len(table.Columns))
 	marks := make([]string, len(names))
+	args := []turso.Value{}
 	for i, name := range table.Columns {
 		names[i] = quoted(name)
 		marks[i] = "?"
+		if row[i].Type == "float" {
+			value, ok := row[i].Value.(float64)
+			if !ok {
+				return turso.Statement{}, errors.New("invalid SQLite REAL argument")
+			}
+			expression, parameters, err := exactFloatSQL(value)
+			if err != nil {
+				return turso.Statement{}, err
+			}
+			marks[i] = expression
+			args = append(args, parameters...)
+		} else {
+			args = append(args, row[i])
+		}
 	}
-	return turso.Statement{SQL: "INSERT INTO " + quoted(table.Name) + "(" + strings.Join(names, ",") + ") VALUES(" + strings.Join(marks, ",") + ")", Args: row}
+	return turso.Statement{SQL: "INSERT INTO " + quoted(table.Name) + "(" + strings.Join(names, ",") + ") VALUES(" + strings.Join(marks, ",") + ")", Args: args}, nil
 }
 func destinationSchema(ctx context.Context, db Database) (map[string]string, error) {
 	r, e := db.Execute(ctx, turso.Statement{SQL: "SELECT name,sql FROM sqlite_schema WHERE type IN ('table','index','view','trigger') AND name NOT LIKE 'sqlite_%'", WantRows: true})
