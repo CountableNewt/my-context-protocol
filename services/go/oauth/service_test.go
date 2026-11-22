@@ -97,6 +97,9 @@ func TestOAuthCodePKCEAndReplayAgainstSQLite(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("consent %d %s", w.Code, w.Body.String())
 	}
+	if w.Header().Get("Referrer-Policy") != "same-origin" {
+		t.Fatal("consent must preserve same-origin browser form identity")
+	}
 	if strings.Contains(w.Body.String(), "<My Project>") {
 		t.Fatal("project name was not escaped")
 	}
@@ -105,7 +108,24 @@ func TestOAuthCodePKCEAndReplayAgainstSQLite(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 	body := url.Values{"pending": {id}, "decision": {"approve"}, "consent_token": {match[1]}}.Encode()
-	approved := request(s, "POST", "https://tenant.example/oauth/consent", body, "")
+	// A browser previously serialized its Origin as null under no-referrer.
+	// Keep rejecting opaque/foreign origins; fixing the form policy must not
+	// weaken the allowlist or consume consent on a rejected request.
+	for _, origin := range []string{"null", "https://other.example"} {
+		r := httptest.NewRequest("POST", "https://tenant.example/oauth/consent", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Origin", origin)
+		blocked := httptest.NewRecorder()
+		s.ServeHTTP(blocked, r)
+		if blocked.Code != 403 {
+			t.Fatal("non-tenant form origin accepted")
+		}
+	}
+	r := httptest.NewRequest("POST", "https://tenant.example/oauth/consent", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "https://tenant.example")
+	approved := httptest.NewRecorder()
+	s.ServeHTTP(approved, r)
 	if approved.Code != 303 {
 		t.Fatalf("approve %d %s", approved.Code, approved.Body.String())
 	}

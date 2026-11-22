@@ -562,6 +562,10 @@ func (s *Service) consent(w http.ResponseWriter, r *http.Request, p *Project) {
 		fail(w, 503, "server_error", "Consent unavailable")
 		return
 	}
+	// no-referrer makes a native browser form POST send Origin:null. Preserve
+	// its same-origin identity for the strict Origin check, while withholding
+	// referrers from cross-origin GitHub and loopback redirects.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 	fmt.Fprintf(w, "<!doctype html><html><head><meta charset=\"utf-8\"><title>Authorize MCP Client</title></head><body><h1>Authorize MCP Client</h1><p>Project: <strong>%s</strong></p><p>Permissions: <code>%s</code></p><form method=\"post\" action=\"/oauth/consent\"><input type=\"hidden\" name=\"pending\" value=\"%s\"><input type=\"hidden\" name=\"consent_token\" value=\"%s\"><button name=\"decision\" value=\"approve\">Approve</button><button name=\"decision\" value=\"deny\">Deny</button></form></body></html>", html.EscapeString(p.Name), html.EscapeString(pending["scope"]), html.EscapeString(pending["id"]), html.EscapeString(token))
