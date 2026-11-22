@@ -1,6 +1,6 @@
 # Go, Vercel, and Turso migration
 
-Requested and cut over on 2026-11-22. Production now runs on the single Vercel Hobby project and Turso Developer; all Railway compute is retired with storage and backups retained. The dated preparation entries below are historical; the final evidence section records the completed acceptance and rollback checks.
+Requested and cut over on 2026-11-22. Production now runs on the single Vercel Hobby project and Turso Developer; all Railway compute is retired with storage and backups retained. The retired Swift gateway and Railway tooling were subsequently removed from the working tree; Git history retains them. Railway services were deleted and the owner scheduled whole-project deletion within 48 hours on 2026-11-22. The dated preparation entries below are historical; the final evidence section records the completed acceptance and rollback checks.
 
 ## Final production cutover and recovery evidence
 

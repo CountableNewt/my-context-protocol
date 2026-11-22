@@ -1,5 +1,7 @@
 # PostgreSQL to durable SQLite
 
+> Historical migration record. The referenced Swift gateway, Railway configuration and one-time scripts were removed after the Go/Vercel/Turso cutover. These are not current deployment instructions; use `services/go/snapshotimport/README.md` for active snapshot tooling. Retrieve retired source from Git history when investigating this record.
+
 This procedure prepares a database artifact and a controlled Gateway cutover. It does not change
 live Railway resources. Rehearse in Development with the exact Gateway revision before Production.
 The source PostgreSQL service and its backups remain available throughout acceptance.

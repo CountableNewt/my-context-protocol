@@ -18,7 +18,6 @@ services/go/                    Active Go backend
   cmd/sync/                     Signed webhooks and bounded repository compilation
   cmd/migrate/                  Explicit schema migration/adoption
   cmd/import/                   Verified snapshot transfer and offline rollback
-services/mcp-gateway/            Legacy Swift/Vapor recovery and reference source
 scripts/                        Reproducible CI and operator tooling
 docs/                           Architecture, migration evidence and runbooks
 ```
@@ -66,23 +65,15 @@ See [the CLI guide](apps/context/README.md) for profiles, automation, payloads a
 bash scripts/ci.sh
 ```
 
-Active CI covers Go formatting, vet, race tests and builds; frontend type checks, lint, tests and Turbopack build; Swift CLI formatting, tests and build; and SQLite migration tests. A separate Linux job validates the Swift CLI. The required GitHub check remains **Test and build**. Go SQL integration tests use Python 3; the deployed Go runtime does not require Python or a local SQLite database.
+Active CI covers Go formatting, vet, race tests and builds; frontend type checks, lint, tests and Turbopack build; Swift CLI formatting, tests and build; and the active Go snapshot/migration tests. A separate Linux job validates the Swift CLI. The required GitHub check remains **Test and build**. Go SQL integration tests use Python 3; the deployed Go runtime does not require Python or a local SQLite database.
 
 The single Vercel project uses `main` for Production and feature branches for Previews, with isolated branch-scoped preview credentials and data. There are no separate Dev and Prod Vercel projects. Do not place production credentials or private production snapshots in ordinary previews. The [migration record](docs/migrations/go-vercel-turso.md) documents the verified production import, Chrome/CLI/MCP acceptance, signed GitHub delivery and rollback rehearsal.
 
 ## Recovery and retired infrastructure
 
-Railway Development and Production compute are off. Service definitions, volumes and backups remain for recovery; retained storage can still incur charges. See the [retirement inventory](docs/runbooks/railway-compute-retirement-2026-11-22.md).
+Railway services have been deleted, and the owner scheduled the whole project for deletion within 48 hours on 2026-11-22. The retired Swift/Vapor gateway, Railway deployment configuration and completed PostgreSQL migration scripts have been removed from the working tree; their history remains in Git.
 
-The former Swift/Vapor gateway remains available for manual recovery checks:
-
-```sh
-bash scripts/check-legacy-swift-gateway.sh
-```
-
-Its external `mcp-server-kit` dependency applies to the legacy gateway. See [legacy gateway recovery](docs/migrations/legacy-swift-gateway.md) for toolchain and dependency requirements. It is not part of default active-backend CI.
-
-After Go has accepted writes, a stale Railway database is not a current rollback target. Pause and drain all destination writers, export the post-write data, restore and verify a new SQLite database, then explicitly restore the stopped gateway and switch routing. The [snapshot and rollback workflow](services/go/snapshotimport/README.md) preserves typed rows and Fluent history; it does not deploy or change traffic automatically.
+Current recovery uses the [Go snapshot and rollback workflow](services/go/snapshotimport/README.md). Pause and drain destination writers, export current data, restore a new SQLite database and verify its exact typed rows before changing traffic. Services must never start against an unverified or stale snapshot. Private migration artifacts are outside this repository.
 
 ## History
 

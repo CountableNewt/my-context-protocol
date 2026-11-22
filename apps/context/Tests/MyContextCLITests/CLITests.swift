@@ -92,27 +92,27 @@ import Testing
   #expect(environment("URL", ["MYCTX_URL": "new", "CONTEXT_URL": "old"]) == "new")
   #expect(environment("URL", ["MYCTX_URL": "", "CONTEXT_URL": "old"]) == "old")
 }
-@Test func operationRegistryCoversGateway() throws {
+@Test func operationRegistryCoversDocumentedAccountAPI() throws {
   let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   let source = try String(
-    contentsOf: root.appendingPathComponent("services/mcp-gateway/Sources/App/routes.swift"),
+    contentsOf: root.appendingPathComponent(
+      "packages/mycontext-api-contract/BACKEND_API_CONTRACT.md"),
     encoding: .utf8)
   let regex = try NSRegularExpression(
-    pattern: #"(?m)^\s*(?:protected|adminProtected)\.(get|post|patch|put|delete)\(([^\n]+)\)\s*\{"#)
-  let segments = try NSRegularExpression(pattern: #""([^"]+)""#)
-  var expected: Set<String> = ["GET /health", "GET /auth/me", "POST /auth/logout"]
-  for match in regex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
-    let method = (source as NSString).substring(with: match.range(at: 1)).uppercased()
-    let args = (source as NSString).substring(with: match.range(at: 2))
-    let parts = segments.matches(in: args, range: NSRange(args.startIndex..., in: args)).map {
-      (args as NSString).substring(with: $0.range(at: 1))
+    pattern: #"(?m)^(GET|POST|PATCH|PUT|DELETE) (/[^\s?`]+)"#)
+  // Browser handshakes are handled by `auth login`, not direct account operations.
+  let browserRoutes: Set<String> = ["GET /auth/github", "GET /auth/github/callback"]
+  let documented = Set(
+    regex.matches(in: source, range: NSRange(source.startIndex..., in: source)).map {
+      (source as NSString).substring(with: $0.range(at: 1)) + " "
+        + (source as NSString).substring(with: $0.range(at: 2))
     }
-    expected.insert(method + " /" + parts.joined(separator: "/"))
-  }
-  #expect(expected.count >= 40)
+  ).subtracting(browserRoutes)
   let actual = Set(operations.map { $0.method + " " + $0.path })
-  #expect(expected == actual)
+  #expect(documented.count >= 18)
+  #expect(documented.isSubset(of: actual))
+  #expect(actual.count >= 40)
   #expect(Set(operations.map(\.name)).count == operations.count)
 }
 
