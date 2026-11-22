@@ -1,6 +1,6 @@
 # Go, Vercel, and Turso migration
 
-Requested and cut over on 2026-11-22. Production now runs on the single Vercel Hobby project and Turso Developer; all Railway compute is retired with storage and backups retained. The dated preparation entries below are historical; the final evidence section records the completed acceptance and rollback checks.
+Requested and cut over on 2026-11-22. Production now runs on the single Vercel Hobby project and Turso Developer; all Railway compute is retired with storage and backups retained. The retired Swift gateway and Railway tooling were subsequently removed from the working tree; Git history retains them. Railway services were deleted and the owner scheduled whole-project deletion within 48 hours on 2026-11-22. The dated preparation entries below are historical; the final evidence section records the completed acceptance and rollback checks.
 
 ## Final production cutover and recovery evidence
 
@@ -16,7 +16,7 @@ At **2026-11-22 22:18 UTC**, all six Railway Development/Production Web, Gateway
 
 After Railway removal, public checks returned dashboard HTTP 200, API health HTTP 200, authenticated-project routes HTTP 401 on both `/api/projects` and legacy `/projects`, custom MCP metadata HTTP 200 and MCP HTTP 401, all served by Vercel. The approved temporary Railway SSH registration was removed and independently confirmed absent; the temporary production credential file was deleted and confirmed absent. Private backup/recovery artifacts remain protected.
 
-The Swift gateway source remains legacy recovery/reference code. Default CI retains Go format/vet/race/build, frontend checks, Swift CLI format/test/build and SQLite migration tests; the former gateway suite is preserved as an explicit [manual recovery command](legacy-swift-gateway.md). The required GitHub check name remains Test and build. Final active CI must pass on the PR head before merge. The Vercel project remains Hobby; the owner's explicit Turso Developer choice supersedes the initial Free-tier target.
+The retired Swift gateway source, its manual check command and completed PostgreSQL migration tooling were removed after cutover; they remain available in Git history. Current recovery uses the [Go snapshot workflow](../../services/go/snapshotimport/README.md). Default CI retains Go format/vet/race/build (including snapshot and migration tests), frontend checks and Swift CLI format/test/build. The required GitHub check name remains Test and build. Final active CI must pass on the PR head before merge. The Vercel project remains Hobby; the owner's explicit Turso Developer choice supersedes the initial Free-tier target.
 
 ## Target
 

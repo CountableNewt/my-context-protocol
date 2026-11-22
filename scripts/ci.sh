@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs Swift CLI and SQLite migration checks, then frontend and Go checks
-# in parallel. Legacy gateway recovery checks: check-legacy-swift-gateway.sh.
+# Runs Swift CLI checks, then frontend and Go checks in parallel.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,9 +43,6 @@ make -C "$ROOT/apps/context" check test build
 
 header "Bun workspace install"
 bun install --frozen-lockfile
-
-header "SQLite migration tests"
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/tests -v
 
 # ---------------------------------------------------------------------------
 # Frontend checks (parallel sub-jobs)

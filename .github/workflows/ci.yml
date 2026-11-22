@@ -47,8 +47,8 @@ jobs:
         with:
           bun-version: 1.3.7
 
-      # The retired Swift gateway remains available through the manual recovery
-      # script; active CI retains Swift CLI, migration, frontend and Go checks.
+      # Active CI covers the Swift CLI, frontend and Go services, including
+      # the current SQLite/Turso snapshot and migration tooling.
       - name: Run active CI checks
         run: bash scripts/ci.sh
 

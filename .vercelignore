@@ -8,6 +8,4 @@
 **/.DS_Store
 **/.env*
 .migration-artifacts
-services/mcp-gateway
 apps/context
-railway

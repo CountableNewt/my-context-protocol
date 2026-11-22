@@ -1,5 +1,7 @@
 # Supabase to Railway production migration
 
+> Historical migration record. The referenced Swift gateway, Railway configuration and one-time scripts were removed after the Go/Vercel/Turso cutover. These are not current deployment instructions; use `services/go/snapshotimport/README.md` for active snapshot tooling. Retrieve retired source from Git history when investigating this record.
+
 This runbook records the 2026-08-10 production cutover from Fly, Supabase, and Vercel to Railway.
 Railway project `MyContextProtocol` uses an isolated `production` environment containing Web,
 Gateway, and Postgres.

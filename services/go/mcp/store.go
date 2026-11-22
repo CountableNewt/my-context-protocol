@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
 	skillruntime "github.com/CountableNewt/my-context-protocol/services/go/runtime"
 	"github.com/CountableNewt/my-context-protocol/services/go/security"
@@ -422,12 +421,6 @@ func contains(values []string, value string) bool {
 		}
 	}
 	return false
-}
-func assertRows(rows []row) error {
-	if len(rows) != 1 {
-		return fmt.Errorf("unexpected row count")
-	}
-	return nil
 }
 
 func (s SQLStore) ProjectByID(ctx context.Context, id string) (*Project, error) {

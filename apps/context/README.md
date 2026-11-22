@@ -225,8 +225,8 @@ make test
 make build
 ```
 
-The Swift route-coverage test reads `services/mcp-gateway/Sources/App/routes.swift` and
-fails when a management endpoint is missing from the registry. Tests therefore
+The account API coverage test reads `packages/mycontext-api-contract/BACKEND_API_CONTRACT.md`
+and fails when a documented management endpoint is missing from the registry. Tests therefore
 run from the monorepo checkout. The CLI checks run Swift formatting and warnings-as-errors builds, native Swift tests,
 and executable integration tests against isolated loopback HTTP servers. The latter cover
 browser authentication, session storage, credential isolation, redirects, JSON precision,
