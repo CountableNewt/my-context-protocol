@@ -14,7 +14,7 @@ The source PostgreSQL service and its backups remain available throughout accept
   `PGUSER`, `PGPASSWORD` or `PGSERVICE`; connection strings and passwords are never command arguments.
 - Use a source role with complete visibility (table owner, superuser or `BYPASSRLS`). Export sets
   `row_security=off` so policies that would silently hide rows instead cause an export failure.
-- Preserve `ENCRYPTION_KEY`, authentication secrets, GitHub and Stripe configuration. Existing
+- Preserve `ENCRYPTION_KEY`, authentication secrets, GitHub configuration. Existing
   encrypted credentials and sessions are copied and need the same keys to remain usable.
 - Keep snapshots, database files and verification reports outside the repository. Snapshots include
   tokens, session payloads and private skill data. Both export and imported output use mode `0600`.
@@ -28,7 +28,7 @@ The source PostgreSQL service and its backups remain available throughout accept
    swift build -c release --product App
    APP_ENV=local DATABASE_DRIVER=sqlite SQLITE_PATH=/absolute/private/schema.sqlite \
      SEED_LOCAL_FIXTURES=0 DISABLE_ADMIN_ANALYTICS_ROLLUP_SCHEDULER=1 \
-     DISABLE_SKILL_USAGE_RETENTION_SCHEDULER=1 DISABLE_STRIPE_RECONCILIATION_SCHEDULER=1 \
+     DISABLE_SKILL_USAGE_RETENTION_SCHEDULER=1 \
      .build/release/App migrate --yes
    ```
 

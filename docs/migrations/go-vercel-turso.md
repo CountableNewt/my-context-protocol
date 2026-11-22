@@ -86,3 +86,15 @@ Implemented identity, control, MCP runtime/OAuth, compiler, repository sync, Git
 - Preserve the source encryption key during production migration. Production write freeze, consistent snapshot, restore rehearsal, row/schema comparison, authenticated dashboard/CLI/MCP/domain acceptance, and Railway shutdown are still required.
 
 Vercel CLI initially classified a failed first deployment as Production; it never became live and no existing domain moved. Every subsequent deployment explicitly uses `--environment preview`. The authenticated curl helper unexpectedly created an automation bypass credential; revoke it after validation and retain preview authentication.
+
+### Additional acceptance evidence
+
+- Draft review: https://github.com/CountableNewt/my-context-protocol/pull/82. Feature branch is current with main. Automatic Git previews are working; stable branch alias is https://my-context-protocol-git-feature-mcp-cff674-sam-clemente-s-team.vercel.app. The separately tested migration callback alias remains https://my-context-protocol-migration-preview.vercel.app until its callback configuration is deliberately changed.
+- Chrome completed GitHub sign-in and loaded the Go-backed dashboard, then created and persisted two acceptance projects as an ordinary account without a payment gate. Repository/App and tenant MCP acceptance are still pending.
+- Actual development login uses GitHub App `mycontextprotocol-dev` (App ID 3137793), not the similarly named older OAuth App. The older OAuth App callback was restored; only the active App callback was moved to the migration preview. Homepage, wildcard and webhook settings were retained. Installation callback handling now supports OAuth-on-install with verified one-use intents, GitHub user identity and installation ownership.
+- Read-only production schema comparison matched all 38 baseline objects exactly: no missing, changed or extra objects. Account aggregates showed zero stored subscription IDs and three null subscription statuses; no Stripe subscriptions were canceled.
+- Latest frontend verification: 219 tests, typecheck and lint pass. Latest complete Go formatting/race/vet/build checks pass, including callback, legacy webhook and snapshot importer tests. Existing SQLite migration suite: 17 pass, one optional Postgres fixture skipped.
+- The approved temporary preview token file was deleted after remote rehearsal. The accidentally CLI-created automation bypass was revoked. Preview authentication remains enabled.
+- GitHub reported 12 existing default-branch dependency alerts (2 high, 10 moderate) during push; these are outside this migration's implementation and remain visible in repository security alerts.
+
+Pending explicit approvals: transfer the consistent production snapshot to a private local rehearsal file; generate a development App private key and webhook secret. Automatic review rejected the production-data transfer until that specific approval is provided. No snapshot was copied by that rejected command. Production import, DNS changes and Railway retirement remain unperformed.

@@ -1,41 +1,53 @@
-# Go Backend Foundation
+# Go gateway services
 
-Shared Go packages for the incremental Swift gateway migration. This module does
-not replace the production gateway yet and does not claim HTTP/MCP route parity.
+The migration replaces the Swift gateway with four HTTP services in one Vercel
+deployment. Production cutover status and acceptance evidence live in
+[`docs/migrations/go-vercel-turso.md`](../../docs/migrations/go-vercel-turso.md).
 
-- `identity`: browser and CLI GitHub login, persistent sessions and handoff confirmation; see its README for the exact implemented routes and outstanding hosted acceptance.
-- `reposync`: bounded GitHub archive fetch/extraction and recursive skill discovery; pipeline publication is still pending.
-- `security`: AES-256-GCM encrypted repository tokens compatible with Swift
-  Crypto's base64 nonce/ciphertext/tag format; lowercase SHA-256 token digests;
-  32-byte random opaque tokens.
-- `session`: the JSON string-to-string payload stored in `app_sessions`. Existing
-  account identity uses the `accountId` key. Updating a session must use an UPDATE
-  that fails when no session exists; never upsert a revoked session.
-- `turso`: stateless Hrana HTTP `/v2/pipeline` requests, explicit conditional batch
-  transactions and same-request stream close. SQL arguments use typed values;
-  integers remain decimal strings. Each client has a 15-second HTTP timeout and
-  respects an earlier request context deadline. Requests and responses are capped
-  at 4 MiB and transactions at 128 application statements. Redirects are rejected.
+| Command | Responsibility |
+| --- | --- |
+| `cmd/identity` | GitHub browser/CLI login, sessions and installation callbacks |
+| `cmd/control` | Account/project APIs, catalogs, analytics and maintenance |
+| `cmd/mcp` | Tenant-bound MCP, OAuth consent/PKCE and streaming notifications |
+| `cmd/sync` | Signed webhooks, bounded repository sync and release publication |
+| `cmd/migrate` | Explicit schema initialization or verified legacy adoption |
+| `cmd/rehearse` | Disposable synthetic checks against the named preview database |
+| `cmd/import` | Offline typed snapshot export, staged transfer and verification |
 
-The Turso client accepts `libsql://` or HTTPS origins and an auth token. Loopback
-HTTP is allowed for local tests. Tokens are not included in error strings. SQL
-must be application-owned and transaction-control statements must not be passed
-to `Batch`. No automatic HTTP retry is attempted: a lost response may follow a
-successful commit, so mutations require application-specific idempotency before
-retrying. Database migrations run as an explicit release/setup task, never from
-request initialization.
+Run `bash scripts/check-go.sh` from the repository root. Integration tests require
+Python 3 and exercise real SQLite transactions; production uses stateless Turso
+HTTP requests and has no Python or local SQLite dependency.
 
-```sh
-cd services/go
-go test -race ./...
-go vet ./...
-```
+Copy `env.example` into your local environment when running services individually.
+Services never apply schema migrations during startup. Run the migration command
+against an explicitly selected database before serving traffic. Initialization and
+legacy adoption are separate operations; retain a consistent source backup first.
 
-The HTTP tests use local test servers, without contacting a real Turso database.
-Production cutover still requires a remote Turso transaction/rollback rehearsal,
-Swift-produced encrypted-token fixtures, and authentication/session route parity.
+Vercel settings are in the root `vercel.json`. Next.js uses private runtime service
+bindings; browser requests use the same origin under `/api`. The hosted MCP path is
+`/mcp`; self-hosted deployments can configure a different path. Tenant OAuth needs a
+mapped tenant hostname, not just a generic deployment URL.
 
-Protocol references:
+Preview credentials belong only to their Git branch and isolated database. Preserve
+the original encryption key when importing existing encrypted GitHub tokens. Never
+put production credentials or user data in an ordinary branch preview.
 
-- <https://github.com/tursodatabase/libsql/blob/main/docs/HTTP_V2_SPEC.md>
-- <https://github.com/tursodatabase/libsql-client-ts/blob/main/packages/libsql-client/src/hrana.ts>
+GitHub Apps using OAuth during installation can share `/auth/github/callback` with
+regular sign-in. Configure the App's callback to the branch alias for preview, and
+the canonical app origin for production. A static callback cannot select arbitrary
+isolated branch databases; each such branch needs its own App/callback configuration
+or a separately reviewed callback broker.
+
+The shared security package uses Swift-compatible AES-256-GCM base64
+nonce/ciphertext/tag serialization and lowercase SHA-256 credential hashes.
+Session payloads retain the `accountId` key; updates never upsert revoked sessions.
+The Turso client rejects redirects and arbitrary transaction-control statements,
+closes streams in the same request, caps request/response bodies at 4 MiB, and
+allows at most 128 application statements per transaction. It does not retry
+mutations automatically: a lost HTTP response can follow a successful commit.
+Retry safety belongs to each operation's durable idempotency state.
+
+Protocol references: [Hrana HTTP v2](https://github.com/tursodatabase/libsql/blob/main/docs/HTTP_V2_SPEC.md)
+and the [official client implementation](https://github.com/tursodatabase/libsql-client-ts/blob/main/packages/libsql-client/src/hrana.ts).
+
+For production transfer, follow the [snapshot workflow](snapshotimport/README.md).
