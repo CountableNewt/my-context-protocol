@@ -310,3 +310,65 @@ func TestResolveCommitSHAFallback(t *testing.T) {
 		}
 	}
 }
+
+func githubPAXFixture(t *testing.T, metadata map[string]string, entry item) []byte {
+	t.Helper()
+	var data bytes.Buffer
+	gz := gzip.NewWriter(&data)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeXGlobalHeader, Name: "pax_global_header", PAXRecords: metadata}); err != nil {
+		t.Fatal(err)
+	}
+	kind := entry.kind
+	if kind == 0 {
+		kind = tar.TypeReg
+	}
+	h := &tar.Header{Name: entry.name, Typeflag: kind, Linkname: entry.link, Mode: 0600}
+	if kind == tar.TypeReg {
+		h.Size = int64(len(entry.body))
+	}
+	if err := tw.WriteHeader(h); err != nil {
+		t.Fatal(err)
+	}
+	if kind == tar.TypeReg {
+		if _, err := tw.Write([]byte(entry.body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return data.Bytes()
+}
+func TestGitHubGlobalPAXMetadataPreservesCommitAndSafeExtraction(t *testing.T) {
+	const commit = "0123456789abcdef0123456789abcdef01234567"
+	data := githubPAXFixture(t, map[string]string{"comment": commit}, item{name: "owner-repo-0123456/skills/hosted/SKILL.md", body: "# Hosted fixture"})
+	out, err := (Fetcher{TempDir: t.TempDir()}).Extract(context.Background(), bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Cleanup()
+	if out.ResolvedCommitSHA != commit {
+		t.Fatal("GitHub resolved commit metadata lost")
+	}
+	files, err := FindSkillFiles(context.Background(), out.RepositoryRoot, 5)
+	if err != nil || len(files) != 1 {
+		t.Fatal("GitHub PAX archive did not expose skill", err)
+	}
+	if _, err = os.Stat(filepath.Join(out.ExtractPath, "pax_global_header")); !os.IsNotExist(err) {
+		t.Fatal("global metadata became filesystem content")
+	}
+	for _, entry := range []item{{name: "../escape", body: "unsafe"}, {name: "root/link", kind: tar.TypeSymlink, link: "/etc/passwd"}, {name: "root/link", kind: tar.TypeLink, link: "root/file"}} {
+		unsafe := githubPAXFixture(t, map[string]string{"comment": commit}, entry)
+		if _, err = (Fetcher{TempDir: t.TempDir()}).Extract(context.Background(), bytes.NewReader(unsafe)); !errors.Is(err, ErrUnsafeEntry) {
+			t.Fatal("PAX metadata bypassed entry validation", err)
+		}
+	}
+	oversized := githubPAXFixture(t, map[string]string{"comment": strings.Repeat("x", 4097)}, item{name: "root/file", body: "safe"})
+	if _, err = (Fetcher{TempDir: t.TempDir()}).Extract(context.Background(), bytes.NewReader(oversized)); !errors.Is(err, ErrUnsafeEntry) {
+		t.Fatal("unbounded global metadata accepted", err)
+	}
+}

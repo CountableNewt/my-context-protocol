@@ -27,6 +27,7 @@ export interface RepoConnection {
   default_branch: string;
   auth_type: string;
   webhook_id?: string | null;
+  github_installation_configured?: boolean;
 }
 
 /** From `GET /github/repos` (GitHub repos the OAuth token can access). */

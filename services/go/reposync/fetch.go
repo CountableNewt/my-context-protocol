@@ -222,6 +222,7 @@ func (f Fetcher) Extract(ctx context.Context, compressed io.Reader) (out Outcome
 	archive := tar.NewReader(expanded)
 	var bytes int64
 	entries := 0
+	commit := ""
 	for {
 		if err = ctx.Err(); err != nil {
 			return out, err
@@ -238,6 +239,26 @@ func (f Fetcher) Extract(ctx context.Context, compressed io.Reader) (out Outcome
 		entries++
 		if entries > limits.Entries {
 			return out, ErrTooManyEntries
+		}
+		if h.Typeflag == tar.TypeXGlobalHeader {
+			// GitHub tarballs start with a global PAX comment containing the
+			// resolved commit. Metadata is never a filesystem entry or applied to
+			// later paths, sizes, modes or links. Bound it in addition to the
+			// compressed/expanded stream and total header-count limits.
+			metadataBytes := 0
+			for key, value := range h.PAXRecords {
+				metadataBytes += len(key) + len(value)
+			}
+			if metadataBytes > 4096 || len(h.PAXRecords) > 16 {
+				return out, ErrUnsafeEntry
+			}
+			if value := h.PAXRecords["comment"]; len(value) == 40 && shaPattern.MatchString(value) {
+				if commit != "" && !strings.EqualFold(commit, value) {
+					return out, ErrUnsafeEntry
+				}
+				commit = strings.ToLower(value)
+			}
+			continue
 		}
 		name := strings.TrimSuffix(h.Name, "/")
 		clean := path.Clean(name)
@@ -305,7 +326,10 @@ func (f Fetcher) Extract(ctx context.Context, compressed io.Reader) (out Outcome
 	if err != nil {
 		return out, err
 	}
-	return Outcome{extracted, repositoryRoot, root, shaPattern.FindString(filepath.Base(repositoryRoot))}, nil
+	if commit == "" {
+		commit = shaPattern.FindString(filepath.Base(repositoryRoot))
+	}
+	return Outcome{extracted, repositoryRoot, root, commit}, nil
 }
 
 func ResolveRepositoryRoot(extracted string) (string, error) {
