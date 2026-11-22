@@ -1,14 +1,21 @@
 ## Learned User Preferences
 
 - When committing on this repo, keep unrelated local changes out of the commit and honor an explicitly provided staged-file list as authoritative.
+- Use Chrome for browser validation unless the user specifically requests otherwise.
 
 ## Learned Workspace Facts
 
-- The repository is organized as a Stygian-style Bun/Turbo monorepo: `apps/web` for the Next.js dashboard, `services/mcp-gateway` for the Swift/Vapor backend, and `packages/*` for shared contracts/types.
-- Backend code lives under `services/mcp-gateway/Sources/App`; stale references to `Sources/MyContextProtocol`, `services/backend`, or `services/frontend` should be corrected when touched.
-- Development and production run on Railway with isolated Web, Gateway, and Postgres environments. The former Fly, Supabase, and Vercel production resources were permanently removed after the Railway cutover.
-- CI is designed to run on GitHub Actions through `.github/workflows/ci.yml` and `scripts/ci.sh`; Depot workflows are legacy and should not be reintroduced.
-- Railway deploys through its GitHub integration (`dev` → Development, `main` → Production, Wait for CI on); do not reintroduce Actions deploy jobs or `railway up` deploy scripts.
+- This is a Bun/Turbo monorepo: `apps/web` is the Next.js 16 dashboard, `services/go` is the active backend, `apps/context` is the active Swift CLI, and `packages/*` contains shared contracts/types.
+- Active Go HTTP services are `cmd/identity`, `cmd/control`, `cmd/mcp` and `cmd/sync`. Bounded maintenance runs through control; perpetual background loops are not the hosted architecture.
+- Production runs in one Vercel Hobby project using root `vercel.json`. `main` is the Production branch; feature branches use branch-scoped Previews, not separate Dev/Prod projects. Next.js uses Turbopack and server-only runtime service bindings for same-origin `/api` forwarding.
+- Persistence uses stateless Turso HTTP queries. The owner chose Turso Developer; the original Free-tier target is superseded. Production and preview databases/credentials remain isolated. Never upload production data to an ordinary preview.
+- Tenant MCP uses `/mcp` on mapped tenant or verified custom hosts. Tenant OAuth requires its actual host, PKCE and one-use consent. A generic Vercel deployment URL does not establish tenant-host acceptance.
+- Explicit schema and snapshot tooling lives in `services/go/cmd/migrate`, `services/go/cmd/import` and `services/go/snapshotimport`. Services must not run schema migrations at startup. Preserve encryption/signing secrets during transfers and keep strict typed-row verification.
+- Railway Development/Production compute is retired. Definitions, volumes and backups remain; auto-deploys and database image auto-updates are disabled. Do not restart stale compute or reintroduce `railway up`/Railway deployment workflows. After Go writes, recovery requires paused writers and a fresh verified reverse transfer before restoring traffic.
+- The Swift/Vapor gateway under `services/mcp-gateway/Sources/App` is legacy recovery/reference source, not the live backend. Its suite remains available through `scripts/check-legacy-swift-gateway.sh`; it is excluded from default active CI. Avoid stale backend paths such as `Sources/MyContextProtocol`, `services/backend` and `services/frontend` when touching documentation.
+- GitHub Actions CI is defined by `.github/workflows/ci.yml` and `scripts/ci.sh`: Go format/vet/race/build, frontend checks, Swift CLI format/test/build and SQLite migration tests. Linux also checks the Swift CLI. Preserve the required **Test and build** check name. Depot workflows are legacy and must not be reintroduced.
+- Every account has full feature access. No Pro tier, payment gates or payment-based project/webhook limits should be reintroduced.
+- Migration evidence is maintained in `docs/migrations/go-vercel-turso.md`; Railway retirement inventory is in `docs/runbooks/railway-compute-retirement-2026-11-22.md`.
 - The frontend was merged into this repository by git subtree from the archived `Stygian-Tech/my-context-protocol-frontend` history.
-- `mcp-server-kit` is the canonical external Swift package for reusable MCP protocol primitives. Local two-repo development may use a sibling checkout; GitHub Actions and Railway remote builds require a published Git revision.
+- `mcp-server-kit` remains the canonical external Swift package for legacy reusable MCP protocol primitives. Local legacy-gateway development may use a sibling checkout; remote recovery builds require a published pinned revision.
 - The internal MCP agent guide is maintained outside this open-source repo. Do not add Notion URLs or re-add an MCP agent guide file without an explicit request.
