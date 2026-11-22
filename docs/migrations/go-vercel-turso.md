@@ -7,7 +7,7 @@ Requested 2026-11-22. This is a migration record, not evidence of a completed cu
 - One Vercel Hobby project, Git integration, `main` production, all other branches previews. No separate dev/prod projects.
 - Next.js dashboard with Turbopack (already enabled for development and builds).
 - Go HTTP services: identity, control API, MCP runtime, repository sync, and bounded maintenance requests.
-- Turso Free: production database and isolated preview database credentials; preview builds never receive production credentials.
+- Turso Developer for now: owner upgraded on 2026-11-22 and explicitly chose to remain there. Production and preview credentials stay isolated. The original Free-tier target is deferred; Vercel remains Hobby.
 - Full access for every account: no Pro tier, payment gates, project-count restrictions, webhook restrictions, or subscription reconciliation.
 - Stop Railway compute only after verified data migration, production acceptance, and a restore rehearsal. Preserve backups through cutover.
 
@@ -68,7 +68,7 @@ Sources: [Services](https://vercel.com/docs/services), [Go runtime](https://verc
 
 A single production GitHub OAuth callback cannot create a handoff in production storage and have it redeemed from an isolated preview database. Before hosted branch login, implement and validate a deliberate callback broker or use separately configured preview OAuth credentials/callbacks. Origin allowlisting alone does not solve this. Route `/auth/github/callback` explicitly to identity; the dashboard API proxy alone only owns `/api/*`.
 
-Remaining backend port includes MCP OAuth/consent/token registration, GitHub App install and repository listing, control API, compiler/runtime, sync publication and webhooks, shared revision/subscription/rate-limit state, maintenance scheduling, custom domains, controlled schema migration and data verification. The current Go identity slice must not receive unsupported routes.
+Those Go contract areas are now implemented and tested; the initial foundation limitation above is historical. Remaining operational acceptance includes real hosted repository sync/App delivery, tenant OAuth/domain routing, final data import and production cutover.
 
 Go verification: race-enabled tests, `go vet`, and `go build ./...` pass for the implemented packages. Final frontend regression also preserves host-only sessions on deployment-specific preview URLs when backend defaults use a branch alias.
 
@@ -97,4 +97,19 @@ Vercel CLI initially classified a failed first deployment as Production; it neve
 - The approved temporary preview token file was deleted after remote rehearsal. The accidentally CLI-created automation bypass was revoked. Preview authentication remains enabled.
 - GitHub reported 12 existing default-branch dependency alerts (2 high, 10 moderate) during push; these are outside this migration's implementation and remain visible in repository security alerts.
 
-Pending explicit approvals: transfer the consistent production snapshot to a private local rehearsal file; generate a development App private key and webhook secret. Automatic review rejected the production-data transfer until that specific approval is provided. No snapshot was copied by that rejected command. Production import, DNS changes and Railway retirement remain unperformed.
+The owner subsequently approved the private production snapshot and development App migration; both are complete as recorded below. Production import, DNS changes and Railway retirement remain unperformed.
+
+## Latest verified state
+
+- Owner chose Turso Developer for now after the account-wide sync allowance warning. This migration uses stateless SQL and the MCP preview reports zero embedded-sync bytes. Investigation of other projects' cumulative sync usage was deferred at the owner's request. No further plan change or overage setting was enabled by this migration.
+- Created the approved empty classic SQLite database `my-context-protocol-production`, default `aws-us-east-2`, URL `libsql://my-context-protocol-production-countablenewt.aws-us-east-2.turso.io`. A database-scoped read/write token with no expiry is in Vercel Production and the specifically approved temporary mode-600 file `/private/tmp/mcp-production-rehearsal/production.env`; delete that credential file after migration. Read-only probe confirmed zero application tables. No production data imported.
+- Prepared only Vercel Production: preserved the existing Railway encryption and OAuth client credentials, generated separate internal/cron credentials, retained existing public callback origins and MCP domain/path. Existing production accounts and repo connections do not use GitHub App installation IDs; the existing production OAuth flow is retained.
+- Approved development App key is stored only as a branch Preview Secret. Its generated local download was removed. App client aliases/slug/shared callback and webhook secret are branch-scoped. Development App webhook URL points to the migration alias; external signed delivery acceptance remains pending.
+- Private consistent source backup: 8,286,208 bytes; integrity `ok`, zero FK violations. SHA-256 `1f2098cf41cf3111e60555872504e10989bbd2f907ca0848ea7306f1e6c2826c`. The backup and typed artifact are mode 600 under `/private/tmp/mcp-production-rehearsal` (mode 700).
+- Local restore verified all 30 tables and 16,299 typed rows. Go schema additions preserved every source count/hash. Both imported projects passed MCP initialize, tools/list and catalog calls: 9 ready skills, 9 capabilities, 8 listed tools, 6 MCP calls. An additional project edit survived typed remote-export/offline-restore rollback. Source backup/artifact hashes remained unchanged; the private rehearsal made zero external requests. Metadata-only reports stay in the private directory.
+- Actual hosted CLI acceptance passed through ephemeral same-project OIDC authentication: Chrome browser handoff, two visible preview projects, MCP initialize, tools/list and catalog. The temporary MCP key and CLI session were revoked; no permanent platform bypass was used.
+- Full GitHub CI passed again in https://github.com/CountableNewt/my-context-protocol/actions/runs/45062873802 (Go, Swift CLI Linux, macOS full tests/build). Latest added fixture/rollback/domain changes also passed relevant race tests, vet and Go builds locally.
+- Preserved root REST paths on existing API hostnames in `vercel.json`, alongside the unified `/api` route, so saved legacy CLI profiles remain compatible at cutover.
+- Added renewing short-lived Vercel integration authentication for custom domains. Owner approved an unlisted integration with project/domain read-write and only this project selected. The draft is prepared in the Integrations Console; no integration has yet been created or agreement accepted. Browser logo upload stalled and native picker access was denied. Finish the existing app-icon upload and obtain action-time approval for the required Marketplace Agreement before creation/install.
+
+Remaining before retirement: finish provider integration/install, hosted repository sync and signed-hook acceptance, actual tenant MCP OAuth/domain tests, final write freeze and fresh verified import, production DNS/deployment acceptance and rollback verification, then stop Railway compute while retaining recovery artifacts. The current private rehearsal snapshot is not a final cutover snapshot.
