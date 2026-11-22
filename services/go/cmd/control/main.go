@@ -51,14 +51,14 @@ func main() {
 		log.Fatal(err)
 	}
 	cfg.Catalog = catalog
-	if token := os.Getenv("VERCEL_TOKEN"); token != "" {
+	if token := os.Getenv("VERCEL_TOKEN"); token != "" || os.Getenv("VERCEL_INTEGRATION_CLIENT_ID") != "" || os.Getenv("VERCEL_INTEGRATION_CLIENT_SECRET") != "" || os.Getenv("VERCEL_INTEGRATION_INSTALLATION_ID") != "" {
 		reserved := []string{cfg.MCPBaseDomain}
 		for _, origin := range origins {
 			if u, e := url.Parse(origin); e == nil {
 				reserved = append(reserved, u.Hostname())
 			}
 		}
-		provider, e := domains.New(db, domains.Config{Token: token, ProjectID: os.Getenv("VERCEL_PROJECT_ID"), TeamID: os.Getenv("VERCEL_TEAM_ID"), ReservedDomains: reserved})
+		provider, e := domains.New(db, domains.Config{Token: token, IntegrationClientID: os.Getenv("VERCEL_INTEGRATION_CLIENT_ID"), IntegrationClientSecret: os.Getenv("VERCEL_INTEGRATION_CLIENT_SECRET"), IntegrationInstallationID: os.Getenv("VERCEL_INTEGRATION_INSTALLATION_ID"), ProjectID: os.Getenv("VERCEL_PROJECT_ID"), TeamID: os.Getenv("VERCEL_TEAM_ID"), ReservedDomains: reserved})
 		if e != nil {
 			log.Fatal(e)
 		}

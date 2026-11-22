@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/security"
@@ -26,15 +27,20 @@ type Resolver interface {
 	LookupTXT(context.Context, string) ([]string, error)
 }
 type Config struct {
-	Token, ProjectID, TeamID string
-	ReservedDomains          []string
+	Token, ProjectID, TeamID                                                string
+	IntegrationClientID, IntegrationClientSecret, IntegrationInstallationID string
+	ReservedDomains                                                         []string
 }
 type Service struct {
-	db       Database
-	config   Config
-	resolver Resolver
-	http     *http.Client
-	api      string
+	db          Database
+	config      Config
+	resolver    Resolver
+	http        *http.Client
+	api         string
+	tokenMu     sync.Mutex
+	cachedToken string
+	tokenExpiry time.Time
+	now         func() time.Time
 }
 type Error struct {
 	Status  int
@@ -44,10 +50,11 @@ type Error struct {
 func (e *Error) Error() string   { return e.Message }
 func (e *Error) HTTPStatus() int { return e.Status }
 func New(db Database, c Config) (*Service, error) {
-	if db == nil || c.Token == "" || c.ProjectID == "" || c.TeamID == "" || strings.ContainsAny(c.Token, "\r\n") {
-		return nil, errors.New("Vercel domain database, project, team and token are required")
+	integration := c.IntegrationClientID != "" || c.IntegrationClientSecret != "" || c.IntegrationInstallationID != ""
+	if db == nil || c.ProjectID == "" || c.TeamID == "" || (c.Token == "" && !integration) || (c.Token != "" && integration) || (c.Token != "" && !validBearer(c.Token)) || (integration && (c.IntegrationClientID == "" || c.IntegrationClientSecret == "" || !strings.HasPrefix(c.IntegrationInstallationID, "icfg_") || strings.ContainsAny(c.IntegrationClientID+c.IntegrationClientSecret+c.IntegrationInstallationID, "\r\n"))) {
+		return nil, errors.New("Vercel domain database, project, team and exactly one complete credential mode are required")
 	}
-	return &Service{db: db, config: c, resolver: net.DefaultResolver, http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, api: "https://api.vercel.com"}, nil
+	return &Service{db: db, config: c, resolver: net.DefaultResolver, http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, api: "https://api.vercel.com", now: time.Now}, nil
 }
 func (s *Service) hostname(raw string) (string, error) {
 	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(raw), "."))
@@ -129,13 +136,25 @@ func (s *Service) call(ctx context.Context, method, path string, body any, out a
 	if e != nil {
 		return e
 	}
-	req.Header.Set("Authorization", "Bearer "+s.config.Token)
+	token, e := s.accessToken(ctx)
+	if e != nil {
+		return e
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	res, e := s.http.Do(req)
 	if e != nil {
 		return &Error{503, "Vercel domain API unavailable"}
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusUnauthorized && s.config.Token == "" {
+		s.tokenMu.Lock()
+		if s.cachedToken == token {
+			s.cachedToken = ""
+			s.tokenExpiry = time.Time{}
+		}
+		s.tokenMu.Unlock()
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		status := 503
 		message := "Vercel domain provisioning unavailable"
