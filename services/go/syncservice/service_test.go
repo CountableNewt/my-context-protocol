@@ -396,3 +396,26 @@ func TestNativeProviderMustResolveImmutableRevision(t *testing.T) {
 		t.Fatalf("unresolved native release published: err=%v published=%d failed=%d", err, store.published, store.failed)
 	}
 }
+
+type resolvingNativeProvider struct {
+	*nativeProvider
+	resolved bool
+}
+
+func (p *resolvingNativeProvider) ResolveRepositoryCommit(_ context.Context, c Connection) (string, error) {
+	p.resolved = true
+	if c.Provider != "tangled" || c.AccountEncryptedToken != "" {
+		return "", errors.New("invalid native connection")
+	}
+	return strings.Repeat("b", 40), nil
+}
+func TestNativeCommitResolutionUsesProviderAdapter(t *testing.T) {
+	service, store, github := setup(t)
+	store.connection.Provider = "tangled"
+	provider := &resolvingNativeProvider{nativeProvider: &nativeProvider{fetcher: &fakeFetcher{root: github.root}, unresolved: true}}
+	service.config.Providers = map[string]RepositoryProvider{"tangled": provider}
+	_, err := service.Run(context.Background(), "project", "")
+	if err != nil || !provider.resolved || github.calls != 0 || store.published != 1 {
+		t.Fatalf("native revision dispatch failed: err=%v resolved=%v published=%d", err, provider.resolved, store.published)
+	}
+}

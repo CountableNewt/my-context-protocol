@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/atidentity"
+	"github.com/CountableNewt/my-context-protocol/services/go/atproto"
 	"github.com/CountableNewt/my-context-protocol/services/go/control"
 	"github.com/CountableNewt/my-context-protocol/services/go/githubapp"
 	"github.com/CountableNewt/my-context-protocol/services/go/mcp"
@@ -21,7 +23,7 @@ func normalizedCreate(sql string) string {
 }
 
 func additiveMigrations() []migrations.Migration {
-	return []migrations.Migration{{Version: "002_mcp_shared_state", SQL: mcp.MigrationSQL}, {Version: "003_sync_jobs", SQL: syncservice.MigrationSQL}, {Version: "004_github_operations", SQL: githubapp.MigrationSQL}, {Version: "005_maintenance_indexes", SQL: control.MaintenanceSQL}}
+	return []migrations.Migration{{Version: "002_mcp_shared_state", SQL: mcp.MigrationSQL}, {Version: "003_sync_jobs", SQL: syncservice.MigrationSQL}, {Version: "004_github_operations", SQL: githubapp.MigrationSQL}, {Version: "005_maintenance_indexes", SQL: control.MaintenanceSQL}, {Version: "006_atproto_private_oauth", SQL: atidentity.MigrationSQL}, {Version: "007_atproto_publication_intents", SQL: atproto.MigrationSQL}}
 }
 
 // Only shipped schema objects can accompany a staged import. In particular,

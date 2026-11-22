@@ -57,7 +57,8 @@ type Fetcher interface {
 }
 
 // RepositoryProvider receives provider-native connection identity. It must resolve
-// its own credentials; GitHub account credentials are never passed to adapters.
+// its own credentials; GitHub account credentials are never passed to other
+// providers.
 type RepositoryProvider interface {
 	FetchRepository(context.Context, Connection) (reposync.Outcome, error)
 }

@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/atidentity"
+	"github.com/CountableNewt/my-context-protocol/services/go/atproto"
 	"github.com/CountableNewt/my-context-protocol/services/go/control"
 	"github.com/CountableNewt/my-context-protocol/services/go/githubapp"
 	"github.com/CountableNewt/my-context-protocol/services/go/mcp"
@@ -30,7 +32,7 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	e = migrations.Apply(ctx, db, migrations.Options{Initialize: *initialize, AdoptLegacy: *adopt, Additions: []migrations.Migration{{Version: "002_mcp_shared_state", SQL: mcp.MigrationSQL}, {Version: "003_sync_jobs", SQL: syncservice.MigrationSQL}, {Version: "004_github_operations", SQL: githubapp.MigrationSQL}, {Version: "005_maintenance_indexes", SQL: control.MaintenanceSQL}}})
+	e = migrations.Apply(ctx, db, migrations.Options{Initialize: *initialize, AdoptLegacy: *adopt, Additions: []migrations.Migration{{Version: "002_mcp_shared_state", SQL: mcp.MigrationSQL}, {Version: "003_sync_jobs", SQL: syncservice.MigrationSQL}, {Version: "004_github_operations", SQL: githubapp.MigrationSQL}, {Version: "005_maintenance_indexes", SQL: control.MaintenanceSQL}, {Version: "006_atproto_private_oauth", SQL: atidentity.MigrationSQL}, {Version: "007_atproto_publication_intents", SQL: atproto.MigrationSQL}}})
 	if e != nil {
 		log.Fatal(e)
 	}
