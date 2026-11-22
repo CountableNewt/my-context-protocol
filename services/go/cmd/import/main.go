@@ -76,7 +76,7 @@ func run(args []string) error {
 		if e != nil {
 			return e
 		}
-		snapshot, e := snapshotimport.ExportRemote(ctx, db, *output, snapshotimport.RemoteExportOptions{WritersPaused: *writersPaused})
+		snapshot, e := snapshotimport.ExportRemote(ctx, readOnlyDatabase{query: db}, *output, snapshotimport.RemoteExportOptions{WritersPaused: *writersPaused})
 		if e != nil {
 			return e
 		}
@@ -139,7 +139,7 @@ func run(args []string) error {
 			if *initialize || *resume {
 				return fmt.Errorf("verify is read-only and does not accept initialize/resume")
 			}
-			report, e := snapshotimport.Verify(ctx, db, *path)
+			report, e := snapshotimport.Verify(ctx, readOnlyDatabase{query: db}, *path)
 			if e != nil {
 				return e
 			}
