@@ -291,3 +291,22 @@ func TestDeadlineDuringExtraction(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestResolveCommitSHAFallback(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	for _, tc := range []struct {
+		status     int
+		body, want string
+	}{{200, `{"sha":"` + sha + `"}`, sha}, {200, `{"sha":"short"}`, ""}, {404, `{}`, ""}} {
+		client := &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+			if r.URL.EscapedPath() != "/repos/owner/repo/commits/feature%2Fnested" {
+				t.Fatal(r.URL)
+			}
+			return response(tc.status, []byte(tc.body)), nil
+		})}
+		got, err := (Fetcher{Client: client}).ResolveCommitSHA(context.Background(), "owner", "repo", "feature/nested", "")
+		if err != nil || got != tc.want {
+			t.Fatalf("%s %v", got, err)
+		}
+	}
+}

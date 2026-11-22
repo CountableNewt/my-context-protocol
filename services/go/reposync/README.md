@@ -19,5 +19,5 @@ case-sensitively. Multi-directory archives retain the extraction root; a single
 visible directory becomes the repository root. Full trailing archive-directory
 SHAs are retained when available.
 
-This package provides fetch/extraction only. It does not yet connect the sync
-pipeline, GitHub commit API fallback, database writes, or HTTP webhook handlers.
+This package provides fetch/extraction and a bounded commit-API SHA fallback. It does not yet connect the sync
+pipeline, database writes, or HTTP webhook handlers.

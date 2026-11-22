@@ -15,6 +15,10 @@ import (
 const emptyResult = `{"cols":[],"rows":[],"affected_row_count":0,"last_insert_rowid":null}`
 
 func wireResult(kind, result string) string {
+	if kind == "execute" {
+		kind = "batch"
+		result = fmt.Sprintf(`{"step_results":[%s,%s],"step_errors":[null,null]}`, emptyResult, result)
+	}
 	return fmt.Sprintf(`{"results":[{"type":"ok","response":{"type":%q,"result":%s}},{"type":"ok","response":{"type":"close"}}]}`, kind, result)
 }
 func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -40,7 +44,11 @@ func TestExecuteBindsValuesAndClosesStream(t *testing.T) {
 		if len(body.Requests) != 2 || body.Requests[1].Type != "close" {
 			t.Fatal("stream not closed")
 		}
-		stmt := body.Requests[0].Statement
+		steps := body.Requests[0].Batch.Steps
+		if len(steps) != 2 || steps[0].Statement.SQL != "PRAGMA foreign_keys=ON" || steps[1].Condition == nil || *steps[1].Condition.Step != 0 {
+			t.Fatal("application SQL is not conditional on foreign key setup")
+		}
+		stmt := &steps[1].Statement
 		if stmt.SQL != "SELECT ?" || stmt.Args[0].Value != "9007199254740993" {
 			t.Fatal("integer precision lost")
 		}
@@ -61,18 +69,18 @@ func TestBatchTransactionConditions(t *testing.T) {
 			t.Fatal(err)
 		}
 		steps := body.Requests[0].Batch.Steps
-		if len(steps) != 5 || steps[0].Statement.SQL != "BEGIN IMMEDIATE" || steps[3].Statement.SQL != "COMMIT" || steps[4].Statement.SQL != "ROLLBACK" {
+		if len(steps) != 6 || steps[0].Statement.SQL != "PRAGMA foreign_keys=ON" || steps[1].Statement.SQL != "BEGIN IMMEDIATE" || steps[4].Statement.SQL != "COMMIT" || steps[5].Statement.SQL != "ROLLBACK" {
 			t.Fatal("missing transaction boundaries")
 		}
-		for i := 1; i <= 3; i++ {
+		for i := 1; i <= 4; i++ {
 			if steps[i].Condition.Type != "ok" || *steps[i].Condition.Step != i-1 {
 				t.Fatal("statement can execute after failed predecessor")
 			}
 		}
-		if steps[4].Condition.Type != "not" || *steps[4].Condition.Cond.Step != 3 {
+		if steps[5].Condition.Type != "not" || *steps[5].Condition.Cond.Step != 4 {
 			t.Fatal("rollback must depend on commit failure")
 		}
-		fmt.Fprint(w, wireResult("batch", fmt.Sprintf(`{"step_results":[%s,%s,%s,%s,null],"step_errors":[null,null,null,null,null]}`, emptyResult, emptyResult, emptyResult, emptyResult)))
+		fmt.Fprint(w, wireResult("batch", fmt.Sprintf(`{"step_results":[%s,%s,%s,%s,%s,null],"step_errors":[null,null,null,null,null,null]}`, emptyResult, emptyResult, emptyResult, emptyResult, emptyResult)))
 	})
 	results, err := client.Batch(context.Background(), []Statement{{SQL: "INSERT INTO accounts VALUES (?)", Args: []Value{Text("id")}}, {SQL: "UPDATE accounts SET name = ?", Args: []Value{Text("name")}}})
 	if err != nil || len(results) != 2 {
@@ -81,7 +89,7 @@ func TestBatchTransactionConditions(t *testing.T) {
 }
 func TestBatchRejectsSQLErrorInsideHTTP200(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, wireResult("batch", fmt.Sprintf(`{"step_results":[%s,null,null,%s],"step_errors":[null,{"code":"SQLITE_CONSTRAINT","message":"secret token"},null,null]}`, emptyResult, emptyResult)))
+		fmt.Fprint(w, wireResult("batch", fmt.Sprintf(`{"step_results":[%s,%s,null,null,%s],"step_errors":[null,null,{"code":"SQLITE_CONSTRAINT","message":"secret token"},null,null]}`, emptyResult, emptyResult, emptyResult)))
 	})
 	_, err := client.Batch(context.Background(), []Statement{{SQL: "INSERT INTO x VALUES (1)"}})
 	var dbErr *DatabaseError

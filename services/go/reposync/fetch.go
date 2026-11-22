@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -356,4 +357,32 @@ func FindSkillFiles(ctx context.Context, root string, max int) ([]string, error)
 	})
 	sort.Strings(files)
 	return files, err
+}
+
+// ResolveCommitSHA is the GitHub API fallback when a tarball layout omits a full
+// commit SHA. HTTP rejection means unresolved; transport/cancellation failures
+// remain errors so a failed network operation is not hidden as a valid revision.
+func (f Fetcher) ResolveCommitSHA(ctx context.Context, owner, repository, ref, token string) (string, error) {
+	endpoint, err := ArchiveURL(owner, repository, ref)
+	if err != nil {
+		return "", err
+	}
+	endpoint = strings.Replace(endpoint, "/tarball/", "/commits/", 1)
+	ctx, cancel := context.WithTimeout(ctx, f.Limits.defaults().FetchTimeout)
+	defer cancel()
+	data, err := f.download(ctx, endpoint, token, 1<<20)
+	if err != nil {
+		var status *StatusError
+		if errors.As(err, &status) {
+			return "", nil
+		}
+		return "", err
+	}
+	var result struct {
+		SHA string `json:"sha"`
+	}
+	if json.Unmarshal(data, &result) != nil || len(result.SHA) != 40 || shaPattern.FindString(result.SHA) != result.SHA {
+		return "", nil
+	}
+	return result.SHA, nil
 }

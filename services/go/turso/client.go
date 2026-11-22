@@ -112,15 +112,18 @@ type pipeline struct {
 
 // Execute runs one statement and closes its stream in the same HTTP request.
 func (c *Client) Execute(ctx context.Context, stmt Statement) (*Result, error) {
-	results, err := c.send(ctx, request{Type: "execute", Statement: &stmt})
+	raw, err := c.send(ctx, request{Type: "batch", Batch: &batch{Steps: []step{
+		{Statement: Statement{SQL: "PRAGMA foreign_keys=ON"}},
+		{Condition: ok(0), Statement: stmt},
+	}}})
 	if err != nil {
 		return nil, err
 	}
-	var result Result
-	if err = json.Unmarshal(results, &result); err != nil {
-		return nil, errors.New("invalid Turso statement result")
+	results, err := decodeBatch(raw, 2, 1)
+	if err != nil {
+		return nil, err
 	}
-	return &result, nil
+	return results[1], nil
 }
 
 // Batch executes all statements in one explicit transaction. Each step depends
@@ -131,7 +134,7 @@ func (c *Client) Batch(ctx context.Context, statements []Statement) ([]Result, e
 	if len(statements) == 0 || len(statements) > MaxStatements {
 		return nil, fmt.Errorf("batch requires 1 to %d statements", MaxStatements)
 	}
-	steps := []step{{Statement: Statement{SQL: "BEGIN IMMEDIATE"}}}
+	steps := []step{{Statement: Statement{SQL: "PRAGMA foreign_keys=ON"}}, {Condition: ok(0), Statement: Statement{SQL: "BEGIN IMMEDIATE"}}}
 	for _, stmt := range statements {
 		steps = append(steps, step{Condition: ok(len(steps) - 1), Statement: stmt})
 	}
@@ -142,17 +145,29 @@ func (c *Client) Batch(ctx context.Context, statements []Statement) ([]Result, e
 	if err != nil {
 		return nil, err
 	}
+	results, err := decodeBatch(raw, len(steps), commitIndex)
+	if err != nil {
+		return nil, err
+	}
+	output := make([]Result, len(statements))
+	for i := range output {
+		output[i] = *results[i+2]
+	}
+	return output, nil
+}
+
+func decodeBatch(raw json.RawMessage, count, requiredThrough int) ([]*Result, error) {
 	var result struct {
 		Results []*Result        `json:"step_results"`
 		Errors  []*DatabaseError `json:"step_errors"`
 	}
-	if err = json.Unmarshal(raw, &result); err != nil {
+	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, errors.New("invalid Turso batch result")
 	}
-	if len(result.Results) != len(steps) || len(result.Errors) != len(steps) {
+	if len(result.Results) != count || len(result.Errors) != count {
 		return nil, errors.New("incomplete Turso batch result")
 	}
-	for i := 0; i <= commitIndex; i++ {
+	for i := 0; i <= requiredThrough; i++ {
 		if result.Errors[i] != nil {
 			return nil, result.Errors[i]
 		}
@@ -160,11 +175,7 @@ func (c *Client) Batch(ctx context.Context, statements []Statement) ([]Result, e
 			return nil, fmt.Errorf("Turso transaction step %d did not execute", i)
 		}
 	}
-	output := make([]Result, len(statements))
-	for i := range output {
-		output[i] = *result.Results[i+1]
-	}
-	return output, nil
+	return result.Results, nil
 }
 
 func (c *Client) send(ctx context.Context, operation request) (json.RawMessage, error) {

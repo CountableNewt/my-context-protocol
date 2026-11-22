@@ -163,6 +163,20 @@ func (s *Service) initiate(w http.ResponseWriter, r *http.Request, cli bool) {
 	}
 	http.Redirect(w, r, "https://github.com/login/oauth/authorize?"+query.Encode(), 302)
 }
+
+// MCPLoginURL is called only after the OAuth service validates a persisted
+// pending authorization. Ordinary browser login keeps its frontend-only policy.
+func (s *Service) MCPLoginURL(returnTo string) (string, error) {
+	if _, err := validateReturnTo(returnTo, s.config.OAuthReturnOrigins); err != nil {
+		return "", err
+	}
+	state, err := signState(s.key, returnTo, s.now())
+	if err != nil {
+		return "", err
+	}
+	query := url.Values{"client_id": {s.config.ClientID}, "redirect_uri": {s.config.RedirectURI}, "state": {state}, "scope": {"read:user user:email"}}
+	return "https://github.com/login/oauth/authorize?" + query.Encode(), nil
+}
 func addQuery(raw, key, value string) string {
 	u, _ := url.Parse(raw)
 	query := u.Query()
