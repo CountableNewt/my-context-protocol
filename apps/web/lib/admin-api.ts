@@ -31,11 +31,6 @@ export async function fetchAdminDashboardTimeseries(
   return api.get<AdminDashboardTimeseries>(`/admin/timeseries?range=${q}`);
 }
 
-/** Triggers rollup refresh (admin session). Run hourly via cron/Supabase or manually. */
-export async function postAdminAnalyticsRollupRefresh(): Promise<void> {
-  await api.post<void>("/admin/analytics/rollup-refresh");
-}
-
 export async function adminLookup(
   body:
     | { github_login: string }
