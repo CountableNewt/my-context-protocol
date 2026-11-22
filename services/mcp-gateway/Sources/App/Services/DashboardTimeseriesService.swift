@@ -8,14 +8,6 @@ enum DashboardTimeseriesService {
         "1h", "24h", "7d", "1mo", "3mo", "6mo", "1y", "ytd", "all",
     ]
 
-    /// Ranges longer than seven days require Pro (`Account.hasProEntitlements`).
-    static func rangeRequiresPro(_ key: String) -> Bool {
-        switch key.lowercased() {
-        case "1h", "24h", "7d": return false
-        default: return true
-        }
-    }
-
     static func normalizeRangeKey(_ raw: String?) throws -> String {
         let k = (raw ?? "24h").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard allowedRangeKeys.contains(k) else {

@@ -8,7 +8,7 @@ struct InternalController {
     ///
     /// Returns 200 if Caddy should provision a TLS certificate for `domain`, 422 otherwise.
     /// Two classes of domain are allowed:
-    ///   1. Allocated, non-suspended project subdomains of `SAAS_MCP_BASE_DOMAIN`
+    ///   1. Allocated project subdomains of `SAAS_MCP_BASE_DOMAIN`
     ///   2. A verified custom domain stored in the `projects` table
     ///
     /// Caddy normally calls this from localhost before completing a TLS handshake. Configure
@@ -37,8 +37,7 @@ struct InternalController {
             if host.hasSuffix("." + base) {
                 let prefix = String(host.dropLast(base.count + 1))
                 guard !prefix.isEmpty,
-                      let project = try await Project.query(on: req.db).filter(\.$subdomain == prefix).first(),
-                      project.suspendedAt == nil else {
+                      try await Project.query(on: req.db).filter(\.$subdomain == prefix).first() != nil else {
                     return Response(status: .unprocessableEntity)
                 }
                 return Response(status: .ok)
@@ -48,11 +47,6 @@ struct InternalController {
         // Allow verified custom domains — same filter pattern as TenantHostMiddleware.
         if let project = try await Project.query(on: req.db).filter(\.$customDomain == host).first(),
            project.customDomainVerifiedAt != nil {
-            guard let account = try await Account.find(project.$account.id, on: req.db),
-                  account.hasProEntitlements else {
-                req.logger.warning("verify-for-tls rejected domain=\(host) reason=pro_required")
-                return Response(status: .unprocessableEntity)
-            }
             return Response(status: .ok)
         }
 

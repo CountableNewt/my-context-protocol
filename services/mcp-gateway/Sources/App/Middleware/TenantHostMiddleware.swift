@@ -15,9 +15,6 @@ struct TenantHostMiddleware: AsyncMiddleware {
 
         switch try await Self.resolveProject(for: host, request: request) {
         case .resolved(let project, let message):
-            if project.suspendedAt != nil {
-                return Response(status: .paymentRequired, body: .init(string: "This project is suspended. The account owner must select an active project or upgrade to Pro."))
-            }
             request.storage[ResolvedHostProjectKey.self] = project
             request.logger.devTrace(message)
         case .denied(let status, let message):
@@ -39,13 +36,6 @@ struct TenantHostMiddleware: AsyncMiddleware {
         let customHost = McpUrlBuilder.canonicalCustomDomainHost(host) ?? host
         if let byCustom = try await Project.query(on: request.db).filter(\.$customDomain == customHost).first(),
            byCustom.customDomainVerifiedAt != nil {
-            guard let account = try await Account.find(byCustom.$account.id, on: request.db),
-                  account.hasProEntitlements else {
-                return .denied(
-                    .paymentRequired,
-                    "Custom domain routing requires an active Pro entitlement. The domain remains verified and will resume when the account upgrades."
-                )
-            }
             return .resolved(
                 byCustom,
                 "tenant_host resolved=verified_custom_domain host=\(customHost) projectId=\(byCustom.id?.uuidString ?? "nil")"

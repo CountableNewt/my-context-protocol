@@ -1,4 +1,5 @@
 import Crypto
+import Fluent
 import Foundation
 import NIOCore
 import Testing
@@ -8,8 +9,115 @@ import VaporTesting
 
 @Suite("Security finding mitigations", .serialized)
 struct SecurityFindingMitigationTests {
-    @Test("Stripe downgrade suspends all but earliest free project")
-    func stripeDowngradeSuspendsExcessProjects() async throws {
+    @Test("Accounts can create more projects than the former paid limit")
+    func unlimitedProjectCreation() async throws {
+        try await withHardeningApp(appEnv: "prod", env: [
+            "USE_MEMORY_SESSIONS": "1",
+            "FREE_PROJECT_LIMIT": "1",
+            "PRO_PROJECT_LIMIT": "5",
+            "FRONTEND_URL": "https://app.example.com",
+            "DATABASE_URL": nil,
+            "SUPABASE_DB_URL": nil,
+        ]) { app in
+            let account = Account(githubId: 910_010, login: "full-access")
+            try await account.save(on: app.db)
+            app.post("test-create-project") { req async throws -> ProjectResponse in
+                req.storage[AccountKey.self] = account
+                return try await ProjectController.create(req: req)
+            }
+            for index in 0..<7 {
+                try await app.testing().test(
+                    .POST, "/test-create-project",
+                    body: ByteBuffer(string: "{\"name\":\"Project \(index)\",\"slug\":\"project-\(index)\"}"),
+                    beforeRequest: { req in
+                        req.headers.contentType = .json
+                        req.headers.replaceOrAdd(name: .origin, value: "https://app.example.com")
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .ok)
+                    }
+                )
+            }
+            #expect(try await Project.query(on: app.db).count() == 7)
+            #expect(try await AuthController.computeNeedsProjectSelection(account: account, db: app.db) == false)
+        }
+    }
+
+    @Test("Payment bypass flags grant no admin access and cannot be managed")
+    func paymentBypassIsInert() async throws {
+        try await withHardeningApp(appEnv: "prod", env: [
+            "FRONTEND_URL": "https://app.example.com",
+            "DATABASE_URL": nil,
+            "SUPABASE_DB_URL": nil,
+        ]) { app in
+            let legacy = Account(githubId: 910_012, login: "legacy-bypass")
+            legacy.paywallBypass = true
+            try await legacy.save(on: app.db)
+            let admin = Account(githubId: 910_013, login: "admin-access")
+            admin.isAdmin = true
+            try await admin.save(on: app.db)
+            app.get("test-admin-directory") { req async throws -> [AdminPrivilegedAccountRow] in
+                try await AdminController.listPrivilegedAccounts(req: req)
+            }
+            app.post("test-admin-flags") { req async throws -> Response in
+                try await AdminController.updateFlags(req: req)
+            }
+            try await app.testing().test(.GET, "/test-admin-directory", afterResponse: { res in
+                let rows = try res.content.decode([AdminPrivilegedAccountRow].self)
+                #expect(rows.count == 1)
+                #expect(rows.first?.account_id == admin.id!.uuidString)
+                #expect(rows.first?.paywall_bypass == false)
+            })
+            try await app.testing().test(.POST, "/test-admin-flags",
+                body: ByteBuffer(string: "{\"account_id\":\"\(legacy.id!.uuidString)\",\"paywall_bypass\":false}"),
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.headers.replaceOrAdd(name: .origin, value: "https://app.example.com")
+                }, afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+            let unchanged = try #require(try await Account.find(legacy.id, on: app.db))
+            #expect(unchanged.paywallBypass == true)
+            #expect(unchanged.isAdmin == false)
+        }
+    }
+
+    @Test("Payment endpoints are unavailable")
+    func paymentEndpointsAreRemoved() async throws {
+        try await withHardeningApp(appEnv: "prod", env: [
+            "FRONTEND_URL": "https://app.example.com",
+            "DATABASE_URL": nil,
+            "SUPABASE_DB_URL": nil,
+        ]) { app in
+            for path in ["/billing/checkout-session", "/billing/portal-session", "/webhooks/stripe"] {
+                try await app.testing().test(.POST, path, beforeRequest: { req in
+                    req.headers.replaceOrAdd(name: .origin, value: "https://app.example.com")
+                }, afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+            }
+        }
+    }
+
+    @Test("Payment removal migration restores existing suspended projects")
+    func migrationRestoresLegacyProjects() async throws {
+        try await withHardeningApp(appEnv: "prod", env: ["DATABASE_URL": nil, "SUPABASE_DB_URL": nil]) { app in
+            let account = Account(githubId: 910_011, login: "legacy-access")
+            account.subscriptionStatus = "canceled"
+            try await account.save(on: app.db)
+            let project = Project(accountId: account.id!, name: "Legacy", slug: "legacy", subdomain: "legacy-access")
+            project.suspendedAt = Date()
+            try await project.save(on: app.db)
+            try await RemoveProjectPaymentSuspensions().prepare(on: app.db)
+            let restored = try #require(try await Project.find(project.id, on: app.db))
+            #expect(restored.suspendedAt == nil)
+            let restoredAccount = try #require(try await Account.find(account.id, on: app.db))
+            #expect(restoredAccount.subscriptionStatus == "canceled")
+        }
+    }
+
+    @Test("Canceled accounts keep every project active")
+    func canceledAccountsKeepEveryProjectActive() async throws {
         try await withHardeningApp(appEnv: "prod", env: [
             "USE_SQLITE": "1",
             "USE_MEMORY_SESSIONS": "1",
@@ -22,7 +130,7 @@ struct SecurityFindingMitigationTests {
             let account = Account(githubId: 910_001, login: "downgrade-user", email: "downgrade@example.com")
             account.stripeCustomerId = "cus_downgrade"
             account.stripeSubscriptionId = "sub_downgrade"
-            account.subscriptionStatus = "active"
+            account.subscriptionStatus = "canceled"
             try await account.save(on: app.db)
 
             let first = Project(accountId: account.id!, name: "First", slug: "first", subdomain: "first")
@@ -30,18 +138,17 @@ struct SecurityFindingMitigationTests {
             try await first.save(on: app.db)
             try await second.save(on: app.db)
 
-            let payload = stripeSubscriptionPayload(type: "customer.subscription.updated", subscriptionId: "sub_downgrade", customerId: "cus_downgrade", status: "canceled")
-            try await postStripeWebhook(app: app, payload: payload, secret: "test_stripe_secret")
+            try await ProjectEntitlementReconciler.reconcileProjects(for: account, db: app.db)
 
             let updatedFirst = try #require(try await Project.find(first.id, on: app.db))
             let updatedSecond = try #require(try await Project.find(second.id, on: app.db))
             #expect(updatedFirst.suspendedAt == nil)
-            #expect(updatedSecond.suspendedAt != nil)
+            #expect(updatedSecond.suspendedAt == nil)
         }
     }
 
-    @Test("Stripe delete suspends all but earliest free project")
-    func stripeDeleteSuspendsExcessProjects() async throws {
+    @Test("Accounts without a subscription keep every project active")
+    func accountsWithoutSubscriptionKeepEveryProjectActive() async throws {
         try await withHardeningApp(appEnv: "prod", env: [
             "USE_SQLITE": "1",
             "USE_MEMORY_SESSIONS": "1",
@@ -53,8 +160,8 @@ struct SecurityFindingMitigationTests {
         ]) { app in
             let account = Account(githubId: 910_002, login: "delete-user", email: "delete@example.com")
             account.stripeCustomerId = "cus_delete"
-            account.stripeSubscriptionId = "sub_delete"
-            account.subscriptionStatus = "active"
+            account.stripeSubscriptionId = nil
+            account.subscriptionStatus = "none"
             try await account.save(on: app.db)
 
             let first = Project(accountId: account.id!, name: "First", slug: "first", subdomain: "deletefirst")
@@ -62,18 +169,17 @@ struct SecurityFindingMitigationTests {
             try await first.save(on: app.db)
             try await second.save(on: app.db)
 
-            let payload = stripeSubscriptionPayload(type: "customer.subscription.deleted", subscriptionId: "sub_delete", customerId: "cus_delete", status: nil)
-            try await postStripeWebhook(app: app, payload: payload, secret: "test_stripe_secret")
+            try await ProjectEntitlementReconciler.reconcileProjects(for: account, db: app.db)
 
             let updatedFirst = try #require(try await Project.find(first.id, on: app.db))
             let updatedSecond = try #require(try await Project.find(second.id, on: app.db))
             #expect(updatedFirst.suspendedAt == nil)
-            #expect(updatedSecond.suspendedAt != nil)
+            #expect(updatedSecond.suspendedAt == nil)
         }
     }
 
-    @Test("Stripe reactivation unsuspends projects")
-    func stripeReactivationUnsuspendsProjects() async throws {
+    @Test("Legacy payment suspensions are cleared without a subscription")
+    func legacyPaymentSuspensionsAreCleared() async throws {
         try await withHardeningApp(appEnv: "prod", env: [
             "USE_SQLITE": "1",
             "USE_MEMORY_SESSIONS": "1",
@@ -96,8 +202,7 @@ struct SecurityFindingMitigationTests {
             try await first.save(on: app.db)
             try await second.save(on: app.db)
 
-            let payload = stripeSubscriptionPayload(type: "customer.subscription.updated", subscriptionId: "sub_reactivate", customerId: "cus_reactivate", status: "active")
-            try await postStripeWebhook(app: app, payload: payload, secret: "test_stripe_secret")
+            try await ProjectEntitlementReconciler.reconcileProjects(for: account, db: app.db)
 
             let updatedFirst = try #require(try await Project.find(first.id, on: app.db))
             let updatedSecond = try #require(try await Project.find(second.id, on: app.db))
@@ -106,11 +211,12 @@ struct SecurityFindingMitigationTests {
         }
     }
 
-    @Test("Verified custom domain requires current Pro entitlement to route")
-    func verifiedCustomDomainRequiresCurrentProEntitlement() async throws {
+    @Test("Verified custom domain routes without a subscription")
+    func verifiedCustomDomainRoutesWithoutSubscription() async throws {
         try await withHardeningApp(appEnv: "prod", env: [
             "USE_SQLITE": "1",
             "USE_MEMORY_SESSIONS": "1",
+            "MCP_OAUTH_ENABLED": "0",
             "SAAS_MCP_BASE_DOMAIN": "mcp.test",
             "DATABASE_URL": nil,
             "SUPABASE_DB_URL": nil,
@@ -135,8 +241,8 @@ struct SecurityFindingMitigationTests {
                     req.headers.replaceOrAdd(name: .host, value: "mcp.free.example")
                 },
                 afterResponse: { res in
-                    #expect(res.status == .paymentRequired)
-                    #expect(res.body.string.contains("Custom domain routing requires an active Pro entitlement"))
+                    #expect(res.status == .ok)
+                    #expect(res.body.string == "MyContextProtocol")
                 }
             )
         }
@@ -298,7 +404,7 @@ struct SecurityFindingMitigationTests {
                     req.headers.replaceOrAdd(name: "X-Internal-TLS-Ask-Secret", value: "tls-ask-secret")
                 },
                 afterResponse: { res in
-                    #expect(res.status == .unprocessableEntity)
+                    #expect(res.status == .ok)
                 }
             )
         }
@@ -480,36 +586,6 @@ private func withHardeningApp(
         }
         try await app.asyncShutdown()
     }
-}
-
-private func postStripeWebhook(app: Application, payload: String, secret: String) async throws {
-    let header = stripeSignatureHeader(payload: payload, secret: secret)
-    try await app.testing().test(
-        .POST,
-        "/webhooks/stripe",
-        body: ByteBuffer(string: payload),
-        beforeRequest: { req in
-            req.headers.replaceOrAdd(name: "Stripe-Signature", value: header)
-            req.headers.replaceOrAdd(name: .contentType, value: "application/json")
-        },
-        afterResponse: { res in
-            #expect(res.status == .ok, "stripe webhook status=\(res.status) body=\(res.body.string)")
-        }
-    )
-}
-
-private func stripeSubscriptionPayload(type: String, subscriptionId: String, customerId: String, status: String?) -> String {
-    let statusField = status.map { #","status":"\#($0)""# } ?? ""
-    return #"{"type":"\#(type)","data":{"object":{"id":"\#(subscriptionId)","customer":"\#(customerId)"\#(statusField)}}}"#
-}
-
-private func stripeSignatureHeader(payload: String, secret: String) -> String {
-    let ts = String(Int(Date().timeIntervalSince1970))
-    let signed = Data((ts + ".").utf8) + Data(payload.utf8)
-    let key = StripeWebhookSignature.signingKey(from: secret)
-    let mac = HMAC<SHA256>.authenticationCode(for: signed, using: SymmetricKey(data: key))
-    let hex = mac.map { String(format: "%02x", $0) }.joined()
-    return "t=\(ts),v1=\(hex)"
 }
 
 private func githubSignatureHeader(payload: String, secret: String) -> String {
