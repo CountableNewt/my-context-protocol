@@ -9,6 +9,11 @@ cd "$ROOT"
 export CI="${CI:-true}"
 export NEXT_PUBLIC_APP_ENV="${NEXT_PUBLIC_APP_ENV:-test}"
 
+# Draft contract structure is checked during incremental implementation. The
+# separate --require-complete gate must pass before an ATProto release.
+python3 scripts/check-lexicons.py
+python3 scripts/check-lexicons_test.py
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

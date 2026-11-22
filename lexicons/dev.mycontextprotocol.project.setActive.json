@@ -1,0 +1,55 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.project.setActive",
+  "description": "Unpublished draft for project.setActive",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "project_id"
+          ],
+          "properties": {
+            "project_id": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.project.defs#projectView"
+        }
+      }
+    }
+  }
+}

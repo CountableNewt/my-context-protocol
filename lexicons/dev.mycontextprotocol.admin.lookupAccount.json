@@ -1,0 +1,74 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.admin.lookupAccount",
+  "description": "Unpublished draft for admin.lookupAccount",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "github_login": {
+              "type": "string"
+            },
+            "github_id": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "account_id",
+            "is_admin",
+            "paywall_bypass"
+          ],
+          "properties": {
+            "account_id": {
+              "type": "string"
+            },
+            "is_admin": {
+              "type": "boolean"
+            },
+            "paywall_bypass": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

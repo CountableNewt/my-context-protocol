@@ -17,6 +17,7 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
 	"github.com/CountableNewt/my-context-protocol/services/go/session"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpc"
 )
 
 type DB interface {
@@ -36,6 +37,8 @@ type DomainProvider interface {
 	Verify(context.Context, string) (map[string]any, error)
 }
 type Config struct {
+	// XRPCVerifier explicitly enables verified API authorization; nil keeps XRPC disabled.
+	XRPCVerifier          xrpc.Verifier
 	CronSecret            string
 	MaintenanceRows       int
 	MaintenanceRollupRows int
@@ -52,6 +55,7 @@ type Config struct {
 	SyncWindowSeconds     int64
 }
 type Service struct {
+	xrpc *xrpc.Handler
 	db   DB
 	auth Auth
 	cfg  Config
@@ -83,11 +87,27 @@ func New(db DB, auth Auth, cfg Config) (*Service, error) {
 	if cfg.MCPPath == "" {
 		cfg.MCPPath = "/mcp"
 	}
-	return &Service{db: db, auth: auth, cfg: cfg, now: time.Now}, nil
+	s := &Service{db: db, auth: auth, cfg: cfg, now: time.Now}
+	if cfg.XRPCVerifier != nil {
+		handler, err := xrpc.New(xrpc.Config{Verifier: cfg.XRPCVerifier, Invoker: controlXRPCInvoker{service: s}})
+		if err != nil {
+			return nil, err
+		}
+		s.xrpc = handler
+	}
+	return s, nil
 }
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if r.URL.Path == "/xrpc" || strings.HasPrefix(r.URL.Path, "/xrpc/") {
+		if s.xrpc == nil {
+			http.NotFound(w, r)
+		} else {
+			s.xrpc.ServeHTTP(w, r)
+		}
+		return
+	}
 	if r.URL.Path == "/internal/maintenance" {
 		s.maintenance(w, r)
 		return
@@ -322,6 +342,16 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	return nil, 0, missing("Not found")
 }
 func (s *Service) account(r *http.Request) (*identity.Account, error) {
+	if authorization, ok := s.verifiedXRPC(r.Context()); ok {
+		account, err := s.auth.Account(r.Context(), authorization.accountID)
+		if err != nil {
+			return nil, err
+		}
+		if account == nil || !strings.EqualFold(account.ID, authorization.accountID) {
+			return nil, apiError{401, "Invalid API account"}
+		}
+		return account, nil
+	}
 	c, e := r.Cookie("vapor-session")
 	if e != nil || len(c.Value) != 64 {
 		return nil, apiError{401, "Not authenticated"}
@@ -347,6 +377,9 @@ func (s *Service) account(r *http.Request) (*identity.Account, error) {
 	return a, nil
 }
 func (s *Service) validOrigin(r *http.Request) bool {
+	if _, ok := s.verifiedXRPC(r.Context()); ok {
+		return true
+	}
 	raw := strings.TrimSpace(r.Header.Get("Origin"))
 	if raw == "" {
 		u, e := url.Parse(r.Header.Get("Referer"))

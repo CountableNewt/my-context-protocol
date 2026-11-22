@@ -1,0 +1,52 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.project.getProject",
+  "description": "Unpublished draft for project.getProject",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "required": [
+          "project_id"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.project.defs#projectView"
+        }
+      }
+    }
+  }
+}
