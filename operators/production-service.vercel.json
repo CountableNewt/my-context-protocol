@@ -5,9 +5,15 @@
       "root": "services/go",
       "framework": "go",
       "entrypoint": "cmd/operator-service/main.go",
-      "buildCommand": "go build -buildvcs=false -o server ./cmd/operator-service",
-      "maxDuration": 300
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/operator-service"
     }
   },
-  "rewrites": [{"source":"/operator","destination":{"service":"operator"}}]
+  "rewrites": [
+    {
+      "source": "/operator",
+      "destination": {
+        "service": "operator"
+      }
+    }
+  ]
 }
