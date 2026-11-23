@@ -40,8 +40,8 @@ class ContractChecks(unittest.TestCase):
     def test_current_inventory_is_consistent(self):
         schemas, operations, pending = checker.check(self.root)
         self.assertGreater(schemas, 0)
-        self.assertGreater(operations, schemas)
-        self.assertGreater(pending, 0)
+        self.assertGreaterEqual(schemas, operations)
+        self.assertEqual(pending, 0)
 
     def test_unimplemented_operations_cannot_pass_release_gate(self):
         with self.assertRaisesRegex(AssertionError, 'incomplete operation'):

@@ -1,0 +1,115 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "activation_mode": {
+            "type": "string"
+          },
+          "canonical_json": {
+            "type": "string"
+          },
+          "canonical_schema_version": {
+            "type": "integer"
+          },
+          "clarification_json": {
+            "type": "string"
+          },
+          "clarification_required": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "enforcement": {
+            "type": "string"
+          },
+          "exposure_type": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "repo_specific": {
+            "type": "boolean"
+          },
+          "risk_level": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "skill_package_id": {
+            "type": "string"
+          },
+          "source_checksum": {
+            "type": "string"
+          },
+          "source_policy_base_checksum": {
+            "type": "string"
+          },
+          "source_policy_json": {
+            "type": "string"
+          },
+          "source_policy_stale": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "yaml_frontmatter_present": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "release_id",
+          "skill_package_id",
+          "path",
+          "name",
+          "exposure_type",
+          "risk_level",
+          "repo_specific",
+          "status",
+          "yaml_frontmatter_present",
+          "canonical_schema_version",
+          "clarification_required",
+          "source_policy_stale"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.frontmatter",
+  "lexicon": 1
+}

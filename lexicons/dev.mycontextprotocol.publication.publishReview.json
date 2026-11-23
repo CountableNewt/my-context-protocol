@@ -1,0 +1,89 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.publication.publishReview",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /projects/{project_id}/atproto/publication. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "review_digest": {
+              "type": "string"
+            },
+            "public": {
+              "type": "boolean"
+            },
+            "telemetry": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "project_id",
+            "review_digest",
+            "public",
+            "telemetry"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "completed": {
+              "type": "integer"
+            },
+            "total": {
+              "type": "integer"
+            },
+            "uri": {
+              "type": "string"
+            },
+            "cid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "digest"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.agent.discoverSkills",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "mcp operation discover_skills. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "type": "string",
+              "maxLength": 65536
+            },
+            "event": {
+              "type": "string"
+            },
+            "context": {
+              "type": "ref",
+              "ref": "dev.mycontextprotocol.types.defs#context"
+            },
+            "user": {
+              "type": "string"
+            },
+            "organization": {
+              "type": "string"
+            },
+            "workspace": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            },
+            "current_skill_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "available_tools": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#availableTool"
+              }
+            },
+            "query": {
+              "type": "string"
+            },
+            "skill_id": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#resolution"
+        }
+      }
+    }
+  }
+}

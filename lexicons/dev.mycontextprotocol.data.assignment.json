@@ -1,0 +1,59 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "activation_mode": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "repo_connection_id": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "skill_id",
+          "scope",
+          "activation_mode",
+          "required",
+          "priority",
+          "target_type",
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.assignment",
+  "lexicon": 1
+}

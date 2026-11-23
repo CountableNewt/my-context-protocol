@@ -1,0 +1,64 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "external_issue_url": {
+            "type": "string"
+          },
+          "issue_draft_json": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "skill_version": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "source_revision": {
+            "type": "string"
+          },
+          "suggested_change": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "skill_id",
+          "skill_version",
+          "source_path",
+          "category",
+          "summary",
+          "issue_draft_json"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.feedback",
+  "lexicon": 1
+}

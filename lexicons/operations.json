@@ -11,7 +11,7 @@
       "source": "services/go/control/service.go",
       "authorization": "account",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -22,7 +22,7 @@
       "source": "services/go/control/service.go",
       "authorization": "account",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -33,7 +33,7 @@
       "source": "services/go/control/service.go",
       "authorization": "account",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -44,7 +44,7 @@
       "source": "services/go/control/service.go",
       "authorization": "account",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -55,7 +55,7 @@
       "source": "services/go/control/service.go",
       "authorization": "account",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -65,8 +65,8 @@
       "nsid": "dev.mycontextprotocol.security.listKeys",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -76,8 +76,8 @@
       "nsid": "dev.mycontextprotocol.security.createKey",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -87,8 +87,8 @@
       "nsid": "dev.mycontextprotocol.security.updateKey",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -98,8 +98,8 @@
       "nsid": "dev.mycontextprotocol.security.revokeKey",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -109,8 +109,8 @@
       "nsid": "dev.mycontextprotocol.release.listReleases",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -120,8 +120,8 @@
       "nsid": "dev.mycontextprotocol.release.activateRelease",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -131,8 +131,8 @@
       "nsid": "dev.mycontextprotocol.release.getValidation",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -142,8 +142,8 @@
       "nsid": "dev.mycontextprotocol.release.listCompiledSkills",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -153,8 +153,8 @@
       "nsid": "dev.mycontextprotocol.release.updateCompiledSkill",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -164,8 +164,8 @@
       "nsid": "dev.mycontextprotocol.release.proposeMetadataChange",
       "source": "services/go/control/projects.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -175,8 +175,8 @@
       "nsid": "dev.mycontextprotocol.analytics.listRequestLogs",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -186,8 +186,8 @@
       "nsid": "dev.mycontextprotocol.repository.connectRepository",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -197,8 +197,8 @@
       "nsid": "dev.mycontextprotocol.repository.getConnection",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -208,8 +208,8 @@
       "nsid": "dev.mycontextprotocol.telemetry.getUsage",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -219,8 +219,8 @@
       "nsid": "dev.mycontextprotocol.runtime.getSettings",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -230,8 +230,8 @@
       "nsid": "dev.mycontextprotocol.runtime.updateSettings",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -241,8 +241,8 @@
       "nsid": "dev.mycontextprotocol.catalog.getCatalog",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -252,8 +252,8 @@
       "nsid": "dev.mycontextprotocol.catalog.updateMarkdown",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -263,8 +263,8 @@
       "nsid": "dev.mycontextprotocol.repository.syncRepository",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -274,8 +274,8 @@
       "nsid": "dev.mycontextprotocol.domain.getDomain",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -285,8 +285,8 @@
       "nsid": "dev.mycontextprotocol.domain.setDomain",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -296,8 +296,8 @@
       "nsid": "dev.mycontextprotocol.domain.verifyDomain",
       "source": "services/go/control/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -307,8 +307,8 @@
       "nsid": "dev.mycontextprotocol.analytics.getAccountSummary",
       "source": "services/go/control/analytics.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -318,8 +318,8 @@
       "nsid": "dev.mycontextprotocol.analytics.getAccountTimeseries",
       "source": "services/go/control/analytics.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -329,8 +329,8 @@
       "nsid": "dev.mycontextprotocol.analytics.getProjectSummary",
       "source": "services/go/control/analytics.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -340,8 +340,8 @@
       "nsid": "dev.mycontextprotocol.analytics.getProjectTimeseries",
       "source": "services/go/control/analytics.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -352,7 +352,7 @@
       "source": "services/go/control/admin.go",
       "authorization": "admin",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -362,8 +362,8 @@
       "nsid": "dev.mycontextprotocol.admin.listPrivilegedAccounts",
       "source": "services/go/control/admin.go",
       "authorization": "admin",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -374,7 +374,7 @@
       "source": "services/go/control/admin.go",
       "authorization": "admin",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -385,7 +385,7 @@
       "source": "services/go/control/admin.go",
       "authorization": "admin",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -395,8 +395,8 @@
       "nsid": "dev.mycontextprotocol.admin.getTimeseries",
       "source": "services/go/control/admin.go",
       "authorization": "admin",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -407,7 +407,7 @@
       "source": "services/go/control/admin.go",
       "authorization": "admin",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -417,8 +417,8 @@
       "nsid": "dev.mycontextprotocol.account.getAccount",
       "source": "services/go/identity/service.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -429,7 +429,7 @@
       "source": "services/go/identity/service.go",
       "authorization": "account",
       "contract": "draft",
-      "runtime": "pending",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -439,8 +439,8 @@
       "nsid": "dev.mycontextprotocol.repository.listRepositories",
       "source": "services/go/githubapp/http.go",
       "authorization": "account",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -450,8 +450,8 @@
       "nsid": "dev.mycontextprotocol.repository.getSyncJob",
       "source": "services/go/syncservice/service.go",
       "authorization": "internal",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -461,8 +461,8 @@
       "nsid": "dev.mycontextprotocol.agent.resolveContext",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -472,8 +472,8 @@
       "nsid": "dev.mycontextprotocol.agent.discoverSkills",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -483,8 +483,8 @@
       "nsid": "dev.mycontextprotocol.agent.listCapabilities",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -494,8 +494,8 @@
       "nsid": "dev.mycontextprotocol.agent.getCatalog",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -505,8 +505,8 @@
       "nsid": "dev.mycontextprotocol.agent.getSkill",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -516,8 +516,8 @@
       "nsid": "dev.mycontextprotocol.agent.reportFeedback",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -527,8 +527,8 @@
       "nsid": "dev.mycontextprotocol.agent.reportUsage",
       "source": "services/go/mcp/tools.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -538,8 +538,8 @@
       "nsid": "dev.mycontextprotocol.agent.listTools",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -549,8 +549,8 @@
       "nsid": "dev.mycontextprotocol.agent.listResources",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -560,8 +560,8 @@
       "nsid": "dev.mycontextprotocol.agent.listPrompts",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -571,8 +571,8 @@
       "nsid": "dev.mycontextprotocol.agent.readResource",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -582,8 +582,8 @@
       "nsid": "dev.mycontextprotocol.agent.getPrompt",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -593,8 +593,8 @@
       "nsid": "dev.mycontextprotocol.agent.subscribeResource",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     },
     {
@@ -604,8 +604,52 @@
       "nsid": "dev.mycontextprotocol.agent.unsubscribeResource",
       "source": "services/go/mcp/service.go",
       "authorization": "tenant",
-      "contract": "pending",
-      "runtime": "pending",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/atproto/publication",
+      "nsid": "dev.mycontextprotocol.publication.getReview",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/publication",
+      "nsid": "dev.mycontextprotocol.publication.publishReview",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/reconcile",
+      "nsid": "dev.mycontextprotocol.publication.reconcileProject",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/repositories/tangled",
+      "nsid": "dev.mycontextprotocol.repository.listTangledRepositories",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
       "publication": "pending"
     }
   ],
@@ -869,6 +913,69 @@
       "path": "tools/call:{compiled_capability_name}",
       "reason": "Dynamic legacy compiled tool aliases serve skill instructions; use the typed agent.getSkill companion rather than minting an NSID for each repository-defined name.",
       "source": "services/go/mcp/tools.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto/status",
+      "reason": "Public authentication-provider metadata; native authentication transport.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto/client-metadata.json",
+      "reason": "ATProto OAuth client metadata document.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto",
+      "reason": "ATProto OAuth browser initiation redirect.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/cli/atproto",
+      "reason": "ATProto OAuth CLI browser initiation redirect.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto/callback",
+      "reason": "ATProto OAuth browser-bound callback.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "POST"
+      ],
+      "path": "/auth/atproto/link",
+      "reason": "Proof-of-both account linking OAuth initiation protocol.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "POST"
+      ],
+      "path": "/auth/github/link",
+      "reason": "Proof-of-both account linking OAuth initiation protocol.",
+      "source": "services/go/identity/service.go"
     }
   ],
   "frontend": {

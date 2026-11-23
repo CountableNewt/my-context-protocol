@@ -1,11 +1,10 @@
 {
   "lexicon": 1,
   "id": "dev.mycontextprotocol.project.listProjects",
-  "description": "Unpublished draft for project.listProjects",
   "defs": {
     "main": {
       "type": "query",
-      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "description": "control operation /projects. Authorization and resource ownership are required.",
       "errors": [
         {
           "name": "InvalidRequest"
@@ -31,25 +30,24 @@
       ],
       "parameters": {
         "type": "params",
-        "required": [],
         "properties": {}
       },
       "output": {
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": [
-            "projects"
-          ],
           "properties": {
             "projects": {
               "type": "array",
               "items": {
                 "type": "ref",
-                "ref": "dev.mycontextprotocol.project.defs#projectView"
+                "ref": "dev.mycontextprotocol.types.defs#project"
               }
             }
-          }
+          },
+          "required": [
+            "projects"
+          ]
         }
       }
     }

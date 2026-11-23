@@ -1,0 +1,93 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.repository.listTangledRepositories",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "control operation /repositories/tangled. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "repository_did": {
+                    "type": "string"
+                  },
+                  "owner_did": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "default_branch": {
+                    "type": "string"
+                  },
+                  "uri": {
+                    "type": "string"
+                  },
+                  "cid": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repository_did",
+                  "owner_did",
+                  "name",
+                  "default_branch",
+                  "uri",
+                  "cid"
+                ]
+              }
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "private_repository_selection": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider",
+            "repositories",
+            "private_repository_selection"
+          ]
+        }
+      }
+    }
+  }
+}

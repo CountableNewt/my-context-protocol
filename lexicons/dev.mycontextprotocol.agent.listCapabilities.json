@@ -1,0 +1,119 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.agent.listCapabilities",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "mcp operation list_capabilities. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "type": "string",
+              "maxLength": 65536
+            },
+            "event": {
+              "type": "string"
+            },
+            "context": {
+              "type": "ref",
+              "ref": "dev.mycontextprotocol.types.defs#context"
+            },
+            "user": {
+              "type": "string"
+            },
+            "organization": {
+              "type": "string"
+            },
+            "workspace": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            },
+            "current_skill_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "available_tools": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#availableTool"
+              }
+            },
+            "skill_id": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "integer"
+            },
+            "knownCapabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "bindings": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#binding"
+              }
+            },
+            "unresolvedRequirements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "knownCapabilities",
+            "bindings",
+            "unresolvedRequirements"
+          ]
+        }
+      }
+    }
+  }
+}

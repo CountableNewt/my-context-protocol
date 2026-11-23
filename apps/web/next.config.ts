@@ -31,6 +31,7 @@ const proxiedApiPrefixes = [
   "admin",
   "dashboard",
   "projects",
+  "repositories",
   "github",
   "webhooks",
 ] as const;

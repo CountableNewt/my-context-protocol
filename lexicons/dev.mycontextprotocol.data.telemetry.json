@@ -1,0 +1,67 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "client_identity": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "detail_json": {
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "reason_code": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "request_hash": {
+            "type": "string"
+          },
+          "score": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "skill_version": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_checksum": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "trace_id",
+          "event_type",
+          "detail_json"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.telemetry",
+  "lexicon": 1
+}

@@ -1,0 +1,59 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "base_checksum": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "is_stale": {
+            "type": "boolean"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "metadata_json": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "repo_connection_id": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "source_checksum": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "writeback_pr_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "skill_id",
+          "scope",
+          "metadata_json",
+          "is_stale"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.runtimeOverride",
+  "lexicon": 1
+}

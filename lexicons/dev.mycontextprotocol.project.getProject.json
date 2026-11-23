@@ -1,11 +1,10 @@
 {
   "lexicon": 1,
   "id": "dev.mycontextprotocol.project.getProject",
-  "description": "Unpublished draft for project.getProject",
   "defs": {
     "main": {
       "type": "query",
-      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "description": "control operation /projects/{project_id}. Authorization and resource ownership are required.",
       "errors": [
         {
           "name": "InvalidRequest"
@@ -31,20 +30,20 @@
       ],
       "parameters": {
         "type": "params",
-        "required": [
-          "project_id"
-        ],
         "properties": {
           "project_id": {
             "type": "string"
           }
-        }
+        },
+        "required": [
+          "project_id"
+        ]
       },
       "output": {
         "encoding": "application/json",
         "schema": {
           "type": "ref",
-          "ref": "dev.mycontextprotocol.project.defs#projectView"
+          "ref": "dev.mycontextprotocol.types.defs#project"
         }
       }
     }

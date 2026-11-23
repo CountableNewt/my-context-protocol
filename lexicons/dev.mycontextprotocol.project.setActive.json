@@ -1,11 +1,10 @@
 {
   "lexicon": 1,
   "id": "dev.mycontextprotocol.project.setActive",
-  "description": "Unpublished draft for project.setActive",
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "description": "control operation /projects/{project_id}/set-active. Authorization and resource ownership are required.",
       "errors": [
         {
           "name": "InvalidRequest"
@@ -33,21 +32,21 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": [
-            "project_id"
-          ],
           "properties": {
             "project_id": {
               "type": "string"
             }
-          }
+          },
+          "required": [
+            "project_id"
+          ]
         }
       },
       "output": {
         "encoding": "application/json",
         "schema": {
           "type": "ref",
-          "ref": "dev.mycontextprotocol.project.defs#projectView"
+          "ref": "dev.mycontextprotocol.types.defs#project"
         }
       }
     }

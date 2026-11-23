@@ -1,0 +1,43 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "handler_type": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "schema_json": {
+            "type": "string"
+          },
+          "skill_package_id": {
+            "type": "string"
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "skill_package_id",
+          "tool_name",
+          "handler_type"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.tool",
+  "lexicon": 1
+}

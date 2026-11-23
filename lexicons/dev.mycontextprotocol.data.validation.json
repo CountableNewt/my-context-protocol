@@ -1,0 +1,36 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "report_json": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "release_id",
+          "report_json"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.validation",
+  "lexicon": 1
+}

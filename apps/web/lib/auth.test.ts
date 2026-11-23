@@ -18,7 +18,7 @@ vi.mock("./api", () => ({
 
 import { stubNextPublicAuthDefaultsUnset } from "@/lib/testing/stub-public-env";
 import { ApiError } from "./api";
-import { confirmAuth, getCurrentUser, getGitHubLoginUrl, logout } from "./auth";
+import { confirmAuth, getCurrentUser, getGitHubLoginUrl, getATProtoLoginUrl, getATProtoStatus, linkATProto, linkGitHub, logout } from "./auth";
 
 describe("getGitHubLoginUrl (server / no window)", () => {
   const originalWindow = globalThis.window;
@@ -79,6 +79,15 @@ describe("getGitHubLoginUrl (browser)", () => {
     expect(getGitHubLoginUrl("/account", true)).toContain("&prompt=select_account");
     expect(getGitHubLoginUrl("/account")).not.toContain("prompt=");
   });
+
+  it("builds ATProto browser initiation with an encoded handle and safe local return path", () => {
+    const value = new URL(getATProtoLoginUrl(" samclemente.me ", "/projects?view=all"), "https://app.example.com");
+    expect(value.pathname).toBe("/api/auth/atproto");
+    expect(value.searchParams.get("handle")).toBe("samclemente.me");
+    expect(value.searchParams.get("return_to")).toBe("https://app.example.com/projects?view=all");
+    const unsafe = new URL(getATProtoLoginUrl("samclemente.me", "//evil.example/path"), "https://app.example.com");
+    expect(unsafe.searchParams.get("return_to")).toBe("https://app.example.com/");
+  });
 });
 
 describe("auth api wrappers", () => {
@@ -91,6 +100,33 @@ describe("auth api wrappers", () => {
     post.mockResolvedValueOnce(undefined);
     await logout();
     expect(post).toHaveBeenCalledWith("/auth/logout");
+  });
+
+  it("preserves separate ATProto and GitHub account state", async () => {
+    get.mockResolvedValueOnce({ id: "native", login: "samclemente.me", atproto_did: "did:plc:owner", atproto_handle: "samclemente.me", atproto_enabled: true, github_connected: false });
+    const user = await getCurrentUser();
+    expect(user).toMatchObject({ github_connected: false, atproto_enabled: true, atproto_did: "did:plc:owner", atproto_handle: "samclemente.me" });
+  });
+
+  it("hides ATProto entry when configuration lookup fails", async () => {
+    get.mockRejectedValueOnce(new Error("unavailable"));
+    expect(await getATProtoStatus()).toBe(false);
+    get.mockResolvedValueOnce({ enabled: true });
+    expect(await getATProtoStatus()).toBe(true);
+  });
+
+  it("links identities through authenticated POST operations", async () => {
+    post.mockResolvedValueOnce({ authorization_url: "https://auth.example/authorize?request_uri=one-use" });
+    expect(await linkATProto(" samclemente.me ")).toContain("https://auth.example/authorize");
+    expect(post).toHaveBeenLastCalledWith("/auth/atproto/link", expect.objectContaining({ handle: "samclemente.me" }));
+    post.mockResolvedValueOnce({ authorization_url: "https://github.com/login/oauth/authorize?state=one-use" });
+    expect(await linkGitHub()).toContain("https://github.com/login/oauth/authorize");
+    expect(post).toHaveBeenLastCalledWith("/auth/github/link", expect.objectContaining({ return_to: expect.stringContaining("/account") }));
+  });
+
+  it.each(["javascript:alert(1)", "http://auth.example/authorize", "https://user:secret@auth.example/authorize", "https://auth.example/authorize#secret"])("rejects unsafe authorization redirect %s", async (authorization_url) => {
+    post.mockResolvedValueOnce({ authorization_url });
+    await expect(linkATProto("samclemente.me")).rejects.toThrow();
   });
 
   it("confirmAuth normalizes user", async () => {

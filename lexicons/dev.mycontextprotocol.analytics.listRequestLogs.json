@@ -1,0 +1,70 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.analytics.listRequestLogs",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "control operation /projects/{project_id}/request-logs. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "project_id"
+        ]
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "logs": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#requestLog"
+              }
+            }
+          },
+          "required": [
+            "logs"
+          ]
+        }
+      }
+    }
+  }
+}

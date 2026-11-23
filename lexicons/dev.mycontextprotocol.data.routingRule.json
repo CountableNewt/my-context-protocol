@@ -1,0 +1,44 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "avoid_when_json": {
+            "type": "string"
+          },
+          "compiled_skill_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "failure_modes_json": {
+            "type": "string"
+          },
+          "invoke_first": {
+            "type": "integer"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "use_when_json": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "compiled_skill_id"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.routingRule",
+  "lexicon": 1
+}

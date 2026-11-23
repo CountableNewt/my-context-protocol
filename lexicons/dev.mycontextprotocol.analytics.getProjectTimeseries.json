@@ -1,0 +1,54 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.analytics.getProjectTimeseries",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "control operation /projects/{project_id}/dashboard/timeseries. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ]
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#timeseries"
+        }
+      }
+    }
+  }
+}

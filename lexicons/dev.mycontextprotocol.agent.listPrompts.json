@@ -1,0 +1,65 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.agent.listPrompts",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "mcp operation prompts/list. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "cursor": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "prompts": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#prompt"
+              }
+            },
+            "nextCursor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompts"
+          ]
+        }
+      }
+    }
+  }
+}

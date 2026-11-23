@@ -1,4 +1,4 @@
-export type BackendService = "identity" | "control" | "sync";
+export type BackendService = "identity" | "control" | "sync" | "mcp";
 
 /** Runtime bindings keep server requests in the current branch deployment. */
 export function getBackendOrigin(service: BackendService = "identity"): string {
@@ -6,6 +6,7 @@ export function getBackendOrigin(service: BackendService = "identity"): string {
     identity: process.env.IDENTITY_SERVICE_URL,
     control: process.env.CONTROL_SERVICE_URL,
     sync: process.env.SYNC_SERVICE_URL,
+    mcp: process.env.MCP_SERVICE_URL,
   }[service]?.trim();
   if (binding) return binding.replace(/\/$/, "");
   if (process.env.VERCEL_SERVICE_MODE === "1") {

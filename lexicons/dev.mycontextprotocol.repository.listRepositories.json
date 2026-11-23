@@ -1,0 +1,63 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.repository.listRepositories",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "githubapp operation /github/repos. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#repository"
+              }
+            }
+          },
+          "required": [
+            "repositories"
+          ]
+        }
+      }
+    }
+  }
+}

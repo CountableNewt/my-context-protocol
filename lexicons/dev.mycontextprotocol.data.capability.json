@@ -1,0 +1,47 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "capability_name": {
+            "type": "string"
+          },
+          "compiled_skill_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "schema_json": {
+            "type": "string"
+          },
+          "side_effect_level": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "compiled_skill_id",
+          "capability_name",
+          "type",
+          "side_effect_level"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.capability",
+  "lexicon": 1
+}

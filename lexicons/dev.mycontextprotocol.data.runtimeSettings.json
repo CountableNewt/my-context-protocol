@@ -1,0 +1,53 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "embedding_model": {
+            "type": "string"
+          },
+          "embedding_provider": {
+            "type": "string"
+          },
+          "feedback_issue_creation_enabled": {
+            "type": "boolean"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "provider_preferences_json": {
+            "type": "string"
+          },
+          "semantic_enabled": {
+            "type": "boolean"
+          },
+          "telemetry_enabled": {
+            "type": "boolean"
+          },
+          "telemetry_retention_days": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "telemetry_enabled",
+          "telemetry_retention_days",
+          "semantic_enabled",
+          "feedback_issue_creation_enabled"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.runtimeSettings",
+  "lexicon": 1
+}

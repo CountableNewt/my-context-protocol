@@ -1,5 +1,37 @@
 import { api, ApiError } from "./api";
 import type { User } from "./types";
+import { safeReturnPath } from "./safe-redirect";
+
+function authReturnUrl(returnTo: string): string {
+  const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  return `${origin}${safeReturnPath(returnTo)}`;
+}
+
+export function getATProtoLoginUrl(handle: string, returnTo = "/"): string {
+  const base = typeof window !== "undefined" ? "/api" : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+  const query = new URLSearchParams({ handle: handle.trim(), return_to: authReturnUrl(returnTo) });
+  return `${base.replace(/\/$/, "")}/auth/atproto?${query}`;
+}
+
+export async function getATProtoStatus(): Promise<boolean> {
+  try { return (await api.get<{ enabled: boolean }>("/auth/atproto/status")).enabled === true; } catch { return false; }
+}
+
+function checkedAuthorizationUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("The authorization server returned an invalid redirect");
+  return url.href;
+}
+
+export async function linkATProto(handle: string, returnTo = "/account"): Promise<string> {
+  const result = await api.post<{ authorization_url: string }>("/auth/atproto/link", { handle: handle.trim(), return_to: authReturnUrl(returnTo) });
+  return checkedAuthorizationUrl(result.authorization_url);
+}
+
+export async function linkGitHub(returnTo = "/account"): Promise<string> {
+  const result = await api.post<{ authorization_url: string }>("/auth/github/link", { return_to: authReturnUrl(returnTo) });
+  return checkedAuthorizationUrl(result.authorization_url);
+}
 
 export function getGitHubLoginUrl(returnTo = "/", selectAccount = false): string {
   const baseUrl =
@@ -28,6 +60,10 @@ function normalizeUser(u: {
   can_manage_subscription?: boolean | null;
   app_env?: string | null;
   non_production_bypasses?: boolean | null;
+  github_connected?: boolean | null;
+  atproto_enabled?: boolean | null;
+  atproto_did?: string | null;
+  atproto_handle?: string | null;
 }): User {
   const rawEnv = u.app_env?.trim().toLowerCase();
   const app_env =
@@ -37,6 +73,10 @@ function normalizeUser(u: {
     email: u.email ?? undefined,
     login: u.login ?? undefined,
     avatar_url: u.avatar_url ?? undefined,
+    github_connected: u.github_connected ?? !u.atproto_did,
+    atproto_enabled: u.atproto_enabled === true,
+    atproto_did: u.atproto_did ?? undefined,
+    atproto_handle: u.atproto_handle ?? undefined,
     plan: u.plan === "pro" ? "pro" : "free",
     is_admin: Boolean(u.is_admin),
     internal_pro_bypass: Boolean(u.internal_pro_bypass),

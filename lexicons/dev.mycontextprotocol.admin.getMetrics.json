@@ -1,11 +1,10 @@
 {
   "lexicon": 1,
   "id": "dev.mycontextprotocol.admin.getMetrics",
-  "description": "Unpublished draft for admin.getMetrics",
   "defs": {
     "main": {
       "type": "query",
-      "description": "Draft contract; runtime exposure and authoritative publication are tracked separately.",
+      "description": "control operation /admin/metrics. Authorization and resource ownership are required.",
       "errors": [
         {
           "name": "InvalidRequest"
@@ -31,32 +30,28 @@
       ],
       "parameters": {
         "type": "params",
-        "required": [],
         "properties": {}
       },
       "output": {
         "encoding": "application/json",
         "schema": {
           "type": "object",
+          "properties": {
+            "total_users": {
+              "type": "integer"
+            },
+            "total_projects": {
+              "type": "integer"
+            },
+            "total_mcp_calls": {
+              "type": "integer"
+            }
+          },
           "required": [
             "total_users",
             "total_projects",
             "total_mcp_calls"
-          ],
-          "properties": {
-            "total_users": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "total_projects": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "total_mcp_calls": {
-              "type": "integer",
-              "minimum": 0
-            }
-          }
+          ]
         }
       }
     }

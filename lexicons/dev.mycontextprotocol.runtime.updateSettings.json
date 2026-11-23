@@ -1,0 +1,74 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.runtime.updateSettings",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /projects/{project_id}/skill-runtime. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "telemetry_enabled": {
+              "type": "boolean"
+            },
+            "telemetry_retention_days": {
+              "type": "integer"
+            },
+            "feedback_issue_creation_enabled": {
+              "type": "boolean"
+            },
+            "provider_preferences_json": {
+              "type": "string"
+            },
+            "assignments": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#assignment"
+              },
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "project_id"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#settings"
+        }
+      }
+    }
+  }
+}

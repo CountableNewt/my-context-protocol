@@ -6,6 +6,7 @@ const services: Record<string, BackendService> = {
   auth: "identity",
   github: "identity",
   projects: "control",
+  repositories: "control",
   dashboard: "control",
   admin: "control",
   health: "control",

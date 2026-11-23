@@ -1,0 +1,55 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.release.getValidation",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "control operation /projects/{project_id}/releases/{release_id}/validation. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "release_id"
+        ]
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#validation"
+        }
+      }
+    }
+  }
+}

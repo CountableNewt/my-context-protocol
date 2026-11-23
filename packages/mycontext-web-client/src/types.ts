@@ -339,6 +339,10 @@ export interface ProjectDashboardSummary {
 export type AppEnv = "local" | "dev" | "prod";
 
 export interface User {
+  github_connected?: boolean;
+  atproto_enabled?: boolean;
+  atproto_did?: string;
+  atproto_handle?: string;
   id: string;
   email?: string;
   login?: string;

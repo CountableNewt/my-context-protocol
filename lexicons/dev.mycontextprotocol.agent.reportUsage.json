@@ -1,0 +1,81 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.agent.reportUsage",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "mcp operation report_skill_usage. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "trace_id": {
+              "type": "string"
+            },
+            "skills": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#usageItem"
+              },
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "required": [
+            "report_id",
+            "skills"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "recorded_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "status",
+            "recorded_count"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "auth_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "repo_name": {
+            "type": "string"
+          },
+          "repo_owner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "provider",
+          "repo_owner",
+          "repo_name",
+          "default_branch",
+          "auth_type"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.repository",
+  "lexicon": 1
+}
