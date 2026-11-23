@@ -150,3 +150,11 @@ work remains before declaring first-class parity or publication complete:
    up only its exact recipient coordination prefix and task-created automation
    credentials, and retain the durable private recovery bundle. Record remaining
    acceptance evidence before closing PR #85 or declaring the rollout complete.
+
+### Temporary migration access retired
+
+After owner approval, deleted the unaliased operator deployment
+`dpl_4WbPmZo6LhxqYrJHfGLpuipS3tAy` and removed only its task-created automation
+protection bypass. Production remains unpaused and healthy; Vercel SSO protection
+remains enabled. Private recovery material is retained. Chrome still shows the
+Northsky password step, so authority linking and Lexicon publication remain pending.
