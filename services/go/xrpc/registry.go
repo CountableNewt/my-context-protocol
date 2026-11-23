@@ -12,18 +12,24 @@ type Field struct {
 	Boolean   bool
 	MinLength int
 	MaxLength int
+	kind      string
+	schema    *contractNode
 }
 
 // Operation identifies an application operation independently of its transport.
 // RESTPath is a template for the application adapter, never an authorization rule.
 type Operation struct {
-	NSID       string
-	Method     string
-	RESTMethod string
-	RESTPath   string
-	Admin      bool
-	NoOutput   bool
-	Fields     []Field
+	NSID         string
+	Service      string
+	Envelope     string
+	inputSchema  *contractNode
+	outputSchema *contractNode
+	Method       string
+	RESTMethod   string
+	RESTPath     string
+	Admin        bool
+	NoOutput     bool
+	Fields       []Field
 }
 
 // Scope is a normalized verified permission, not a wire OAuth scope parser.
@@ -31,18 +37,7 @@ type Operation struct {
 // granting this permission. Wildcard strings never imply access here.
 func (o Operation) Scope() string { return "rpc:" + o.NSID }
 
-var operations = []Operation{
-	{NSID: Namespace + "project.listProjects", Method: "GET", RESTMethod: "GET", RESTPath: "/projects"},
-	{NSID: Namespace + "project.getProject", Method: "GET", RESTMethod: "GET", RESTPath: "/projects/{project_id}", Fields: []Field{{Name: "project_id", Required: true}}},
-	{NSID: Namespace + "project.createProject", Method: "POST", RESTMethod: "POST", RESTPath: "/projects", Fields: []Field{{Name: "name", Required: true, MinLength: 1, MaxLength: 256}, {Name: "slug", Required: true, MinLength: 1, MaxLength: 128}}},
-	{NSID: Namespace + "project.updateProject", Method: "POST", RESTMethod: "PATCH", RESTPath: "/projects/{project_id}", Fields: []Field{{Name: "project_id", Required: true}, {Name: "name", Required: true, MinLength: 1, MaxLength: 256}}},
-	{NSID: Namespace + "project.setActive", Method: "POST", RESTMethod: "POST", RESTPath: "/projects/{project_id}/set-active", Fields: []Field{{Name: "project_id", Required: true}}},
-	{NSID: Namespace + "admin.getMetrics", Method: "GET", RESTMethod: "GET", RESTPath: "/admin/metrics", Admin: true},
-	{NSID: Namespace + "admin.refreshRollups", Method: "POST", RESTMethod: "POST", RESTPath: "/admin/analytics/rollup-refresh", Admin: true, NoOutput: true},
-	{NSID: Namespace + "admin.lookupAccount", Method: "POST", RESTMethod: "POST", RESTPath: "/admin/lookup", Admin: true, Fields: []Field{{Name: "github_login"}, {Name: "github_id"}, {Name: "email"}}},
-	{NSID: Namespace + "admin.updateAccountFlags", Method: "POST", RESTMethod: "POST", RESTPath: "/admin/account-flags", Admin: true, Fields: []Field{{Name: "account_id", Required: true}, {Name: "is_admin", Required: true, Boolean: true}}},
-	{NSID: Namespace + "account.logout", Method: "POST", RESTMethod: "POST", RESTPath: "/auth/logout", NoOutput: true},
-}
+var operations = loadOperations()
 
 // Operations returns detached registry entries so callers cannot mutate routing.
 func Operations() []Operation {
@@ -66,3 +61,6 @@ func lookup(path string) (Operation, bool) {
 	}
 	return Operation{}, false
 }
+
+// Lookup returns the reviewed operation for a fully qualified method NSID.
+func Lookup(nsid string) (Operation, bool) { return lookup("/xrpc/" + nsid) }

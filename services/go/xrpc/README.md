@@ -1,9 +1,11 @@
 # XRPC transport boundary
 
-This package implements the ten currently typed draft contracts in `lexicons/`.
-It does not mount production routes, issue tokens, validate OAuth proofs, or publish
-schemas. Remaining inventory operations deliberately return `NotFound` until their
-contracts and application adapters are implemented.
+This package implements typed contracts for every operation in
+`lexicons/operations.json`. `scripts/generate-xrpc.py` generates Lexicon JSON,
+embedded Go transport metadata and TypeScript bindings from reviewed typed views.
+Run it with `--check` to reject stale artifacts. It does not issue tokens, validate
+OAuth proofs, or publish schemas. Registry presence never installs an application
+adapter or grants access.
 
 Construct with `New(Config{Verifier: ..., Invoker: ...})`. `Verifier.Verify` must
 validate credential signatures/proofs, issuer, expiry, replay protections, service
@@ -21,12 +23,17 @@ an HTTP request without validating and escaping path identifiers. Reuse applicat
 logic rather than manufacturing session cookies or bypassing authorization.
 
 Return `Result{Value: typedOutput}` on success. Methods without a Lexicon output
-produce 204; others require a non-nil JSON result. Project lists use the declared
-`projects` envelope; optional values in views omit SQL nulls. Return reviewed
+produce 204; others require a non-nil JSON result. Lists use declared envelopes
+(`projects`, `keys`, `releases`, `skills`, `logs`, or `accounts`). Optional SQL nulls
+are omitted. Decimal measurements are base-10 strings because Lexicon does not
+have a floating-point type. Return reviewed
 `*Error` values for public errors; unexpected failures are sanitized. Rate limits
 may include `RetryAfterSeconds`.
 
-Input bounds, exact methods and scopes, duplicate and unknown properties, body/query
-separation, and draft registry parity are tested. Output-schema validation and the
-application adapter remain integration responsibilities. Keep inventory runtime and
-publication flags pending until those integrations and public-resolution checks pass.
+Input bounds, exact methods and scopes, nested types, duplicate and unknown properties,
+body/query separation, and registry parity are tested. Output views are projected onto
+their declared schema and checked for required fields/types without changing REST
+values. The control adapter shares all control operations with REST, including current
+account/admin and project ownership checks. Identity, repository and MCP invokers
+retain their own protocol-specific boundaries. Keep public-publication flags pending
+until authoritative public resolution passes.

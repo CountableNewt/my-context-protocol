@@ -68,3 +68,22 @@ their connection credentials, and must return an immutable revision (or implemen
 The default GitHub path retains existing archive-host and credential protections.
 Registering a provider does not imply repository discovery or writeback parity;
 those capabilities must be implemented before exposing that provider in clients.
+
+## Canonical publication continuation
+
+For migrated projects the SQL projection bridge enables private durable sync
+plans. Apply `PublicationMigrationSQL` explicitly before enabling this path.
+Compilation pins every row ID, revision, timestamp, blob and statement before
+public publication begins; the complete plan is staged privately with checksums.
+Each request advances at most one chunk (32 product statements plus private
+transaction guards). The chunk and its cursor commit together only after the
+canonical PDS mutation is confirmed. Status `publishing` and `ErrPending` preserve
+the original job/release and lease; subsequent requests resume without fetching or
+compiling again. The dashboard can pause or continue these bounded requests.
+
+A release becomes ready and active only in the last transaction, which checks
+the previous active release and current owner lease. Incomplete private staging
+fails explicitly after the original lease expires, preserving the active release.
+Corrupt plans are rejected. Maintenance must retain jobs and project locks for
+active `staging`/`publishing` plans. Legacy projects retain the existing synchronous
+publication path; canonical publication introduces no perpetual hosted worker.

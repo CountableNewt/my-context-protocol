@@ -1,5 +1,6 @@
-// Package tangled implements bounded public repository reads against pinned
-// Tangled knot contracts. It does not claim private-access or proposal parity.
+// Package tangled implements bounded native repository reads, authenticated
+// Bobbin discovery/private reads, and ticket/patch submission against pinned
+// Tangled contracts. Git branch creation is a separate writeback prerequisite.
 package tangled
 
 import (
@@ -52,6 +53,9 @@ type Client struct {
 	Directory identity.Directory
 	Limits    reposync.Limits
 	TempDir   string
+	// ReadService is the authenticated Bobbin endpoint used for private reads.
+	ReadService *ReadService
+	Tokens      ServiceTokens
 }
 
 func (c Client) httpClient() *http.Client {

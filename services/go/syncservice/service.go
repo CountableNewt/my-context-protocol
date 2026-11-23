@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/compiler"
+	"github.com/CountableNewt/my-context-protocol/services/go/domainrecords"
 	"github.com/CountableNewt/my-context-protocol/services/go/reposync"
 )
 
@@ -74,10 +75,11 @@ func (c Connection) provider() string {
 }
 
 type Config struct {
-	Providers    map[string]RepositoryProvider
-	Store        Store
-	Fetcher      Fetcher
-	DecryptToken func(string) (string, error)
+	ProjectContext func(context.Context, string) (context.Context, error)
+	Providers      map[string]RepositoryProvider
+	Store          Store
+	Fetcher        Fetcher
+	DecryptToken   func(string) (string, error)
 	// GitHub App installations must be resolved explicitly, never replaced silently
 	// with an account token that may have different repository permissions.
 	InstallationToken            func(context.Context, string, string) (string, error)
@@ -111,15 +113,54 @@ func New(config Config) (*Service, error) {
 }
 func (s *Service) SyncProject(ctx context.Context, projectID string) (map[string]any, error) {
 	job, err := s.Run(ctx, projectID, "")
-	return map[string]any{"job_id": job.ID, "release_id": job.ReleaseID, "status": job.Status, "error_code": job.ErrorCode}, err
+	return map[string]any{"job_id": job.ID, "project_id": job.ProjectID, "release_id": job.ReleaseID, "status": job.Status, "error_code": job.ErrorCode}, err
 }
 func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err error) {
 	ctx, cancel := context.WithTimeout(ctx, s.config.WorkTimeout)
 	defer cancel()
+	var reserved Job
+	waiting := false
+	resumer, canResume := s.config.Store.(PublicationResumer)
+	if canResume {
+		reserved, waiting, err = resumer.PendingPublication(ctx, projectID)
+		if err != nil {
+			return reserved, err
+		}
+	}
+	if s.config.ProjectContext != nil {
+		ctx, err = s.config.ProjectContext(ctx, projectID)
+		if err != nil {
+			if waiting && (errors.Is(err, domainrecords.ErrPending) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+				reserved.Status = "publishing"
+				return reserved, errors.Join(ErrPending, err)
+			}
+			return reserved, err
+		}
+	}
+	resumeReservation := false
+	if waiting {
+		resumed, found, resumeErr := resumer.ResumePublication(ctx, projectID, time.Now().UTC())
+		if found || resumeErr != nil {
+			return resumed, resumeErr
+		}
+		// Scope can complete a native final cursor before this request resumes.
+		reserved, err = s.config.Store.Job(ctx, reserved.ID)
+		if err != nil {
+			return reserved, err
+		}
+		if reserved.Status == "ready" {
+			return reserved, nil
+		}
+		if reserved.Status == "failed" {
+			return reserved, ErrInvalid
+		}
+		resumeReservation = true
+	}
 	connection, err := s.config.Store.Connection(ctx, projectID)
 	if err != nil {
-		return job, err
+		return reserved, err
 	}
+
 	provider := connection.provider()
 	adapter := s.config.Providers[provider]
 	if provider != "github" && adapter == nil {
@@ -131,12 +172,24 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 		connection.InstallationID = ""
 		connection.WebhookSecret = ""
 	}
-	job, claimed, err := s.config.Store.Claim(ctx, connection, key, time.Now().UTC())
-	if err != nil || !claimed {
-		return job, err
+	if resumeReservation {
+		job = reserved
+		store, ok := s.config.Store.(claimResumer)
+		if !ok {
+			return job, ErrUnsupported
+		}
+		if err = store.ResumeClaim(ctx, connection, job, time.Now().UTC()); err != nil {
+			return job, err
+		}
+	} else {
+		var claimed bool
+		job, claimed, err = s.config.Store.Claim(ctx, connection, key, time.Now().UTC())
+		if err != nil || !claimed {
+			return job, err
+		}
 	}
 	defer func() {
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrPending) {
 			code := "sync_failed"
 			switch {
 			case errors.Is(err, ErrUnsupported):
@@ -290,6 +343,9 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 		compiled = append(compiled, c)
 	}
 	if err = s.config.Store.Publish(ctx, connection, job, revision, compiled, report, time.Now().UTC()); err != nil {
+		if errors.Is(err, ErrPending) {
+			job.Status = "publishing"
+		}
 		return job, err
 	}
 	if !report.Valid {
@@ -361,6 +417,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job, err := s.Run(r.Context(), input.ProjectID, input.IdempotencyKey)
+	if errors.Is(err, ErrPending) {
+		write(w, 202, job)
+		return
+	}
 	if err != nil {
 		respondError(w, err)
 		return
@@ -471,6 +531,8 @@ func write(w http.ResponseWriter, status int, v any) {
 func respondError(w http.ResponseWriter, err error) {
 	status, code := 500, "sync_failed"
 	switch {
+	case errors.Is(err, ErrPending):
+		status, code = 202, "publishing"
 	case errors.Is(err, ErrProviderUnsupported):
 		status, code = 501, "unsupported_provider"
 	case errors.Is(err, ErrNotFound):

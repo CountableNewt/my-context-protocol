@@ -58,7 +58,7 @@ func TestTransportGuards(t *testing.T) {
 		{name: "large input", method: "POST", path: "project.createProject", body: `{"name":"abcdefgh","slug":"c"}`, scope: "project.createProject", limit: 8, status: 413},
 		{name: "long name", method: "POST", path: "project.createProject", body: `{"name":"` + strings.Repeat("x", 257) + `","slug":"c"}`, scope: "project.createProject", status: 400},
 		{name: "empty name", method: "POST", path: "project.createProject", body: `{"name":"","slug":"c"}`, scope: "project.createProject", status: 400},
-		{name: "logout", method: "POST", path: "account.logout", body: `{}`, scope: "account.logout", status: 204},
+		{name: "logout", method: "POST", path: "account.logout", body: `{"session_id":"id"}`, scope: "account.logout", status: 204},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
@@ -72,7 +72,7 @@ func TestTransportGuards(t *testing.T) {
 				if tc.name == "query" && i.Parameters["project_id"] != "p" {
 					t.Fatal("lost input")
 				}
-				return Result{Value: map[string]any{"ok": true}}, nil
+				return Result{Value: map[string]any{"id": "id", "account_id": "account", "name": "Project", "slug": "project", "subdomain": "project", "created_at": "2026-11-22T00:00:00Z", "is_admin": true, "paywall_bypass": false, "total_users": 0, "total_projects": 0, "total_mcp_calls": 0}}, nil
 			})})
 			if err != nil {
 				t.Fatal(err)
@@ -192,8 +192,9 @@ func TestRegistryMatchesDrafts(t *testing.T) {
 		}
 	}
 	copied := Operations()
+	originalName := copied[1].Fields[0].Name
 	copied[1].Fields[0].Name = "corrupted"
-	if Operations()[1].Fields[0].Name != "project_id" {
+	if Operations()[1].Fields[0].Name != originalName {
 		t.Fatal("registry mutated")
 	}
 }
@@ -204,7 +205,7 @@ func TestConfigurationAndCredentialBoundaries(t *testing.T) {
 		t.Fatal("unexpected invocation")
 		return Result{}, nil
 	})
-	for _, config := range []Config{{}, {Verifier: verifier}, {Invoker: invoker}, {Verifier: verifier, Invoker: invoker, MaxInputBytes: -1}, {Verifier: verifier, Invoker: invoker, MaxInputBytes: 3 << 20}} {
+	for _, config := range []Config{{}, {Verifier: verifier}, {Invoker: invoker}, {Verifier: verifier, Invoker: invoker, MaxInputBytes: -1}, {Verifier: verifier, Invoker: invoker, MaxInputBytes: 5 << 20}} {
 		if _, err := New(config); err == nil {
 			t.Fatal("accepted unsafe configuration")
 		}

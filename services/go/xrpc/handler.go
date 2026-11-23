@@ -17,6 +17,9 @@ import (
 type Principal struct {
 	AccountID string
 	DID       string
+	// ProjectID and ClientID are set only by tenant-scoped credential verification.
+	ProjectID string
+	ClientID  string
 	Scopes    map[string]bool
 	IsAdmin   bool
 }
@@ -31,7 +34,8 @@ type Input struct {
 }
 
 type Result struct {
-	Value any
+	Value  any
+	Status int
 }
 
 // Invoker must perform current account, tenant and resource ownership checks,
@@ -39,6 +43,18 @@ type Result struct {
 // Transport permission is necessary but does not establish resource ownership.
 type Invoker interface {
 	Invoke(context.Context, Principal, Operation, Input) (Result, error)
+}
+
+type InvokerFunc func(context.Context, Principal, Operation, Input) (Result, error)
+
+func (f InvokerFunc) Invoke(ctx context.Context, p Principal, o Operation, i Input) (Result, error) {
+	return f(ctx, p, o, i)
+}
+
+type VerifierFunc func(context.Context, *http.Request) (Principal, error)
+
+func (f VerifierFunc) Verify(ctx context.Context, r *http.Request) (Principal, error) {
+	return f(ctx, r)
 }
 
 type Config struct {
@@ -65,10 +81,10 @@ func New(config Config) (*Handler, error) {
 		return nil, errors.New("XRPC verifier and invoker are required")
 	}
 	if config.MaxInputBytes == 0 {
-		config.MaxInputBytes = 64 << 10
+		config.MaxInputBytes = 4 << 20
 	}
-	if config.MaxInputBytes < 1 || config.MaxInputBytes > 2<<20 {
-		return nil, errors.New("XRPC input limit must be between 1 byte and 2 MiB")
+	if config.MaxInputBytes < 1 || config.MaxInputBytes > 4<<20 {
+		return nil, errors.New("XRPC input limit must be between 1 byte and 4 MiB")
 	}
 	return &Handler{config: config}, nil
 }
@@ -82,9 +98,24 @@ func failure(w http.ResponseWriter, status int, code, message string) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// XRPC accepts explicit API credentials and never ambient browser cookies.
+	// Public CORS permits third-party clients without credentialed cookie access.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Expose-Headers", "Retry-After, WWW-Authenticate")
 	op, ok := lookup(r.URL.Path)
 	if !ok || r.URL.EscapedPath() != r.URL.Path {
 		failure(w, 404, "NotFound", "Unknown XRPC method")
+		return
+	}
+	if r.Method == http.MethodOptions {
+		if requested := r.Header.Get("Access-Control-Request-Method"); requested != op.Method {
+			failure(w, 405, "InvalidRequest", "Requested method does not match this XRPC method")
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Methods", op.Method)
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, DPoP")
+		w.Header().Set("Access-Control-Max-Age", "600")
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method != op.Method {
@@ -132,6 +163,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if op.NoOutput {
+		if result.Status != 0 && result.Status != http.StatusOK && result.Status != http.StatusNoContent {
+			failure(w, 503, "ServiceUnavailable", "Service returned an invalid success status")
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -139,13 +174,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		failure(w, 503, "ServiceUnavailable", "Service returned no result")
 		return
 	}
-	raw, err := json.Marshal(result.Value)
+	normalized, err := NormalizeOutput(op, result.Value)
 	if err != nil {
 		failure(w, 503, "ServiceUnavailable", "Service returned an invalid result")
 		return
 	}
+	raw, err := json.Marshal(normalized)
+	if err != nil || len(raw) > 4<<20 {
+		failure(w, 503, "ServiceUnavailable", "Service returned an invalid result")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	status := result.Status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	if status != http.StatusOK && status != http.StatusAccepted {
+		failure(w, 503, "ServiceUnavailable", "Service returned an invalid success status")
+		return
+	}
+	w.WriteHeader(status)
 	_, _ = w.Write(append(raw, '\n'))
 }
 
@@ -172,7 +220,7 @@ func (h *Handler) input(w http.ResponseWriter, r *http.Request, op Operation) (I
 			if !ok {
 				return input, errors.New("Unknown query parameter")
 			}
-			if err := validateString(field, value); err != nil {
+			if err := validateQuery(field, value); err != nil {
 				return input, err
 			}
 		}
@@ -212,19 +260,14 @@ func (h *Handler) input(w http.ResponseWriter, r *http.Request, op Operation) (I
 			if err := decoder.Decode(&value); err != nil {
 				return input, invalidJSON(err)
 			}
-			if field.Boolean {
-				if string(value) != "true" && string(value) != "false" {
-					return input, errors.New("Expected boolean property")
-				}
-			} else {
-				var text string
-				if len(value) == 0 || value[0] != '"' || json.Unmarshal(value, &text) != nil {
-					return input, errors.New("Expected string property")
-				}
-				if err := validateString(field, text); err != nil {
-					return input, err
-				}
+			decoded, err := decodeValue(value)
+			if err != nil {
+				return input, err
 			}
+			if err := validateContract(field.schema, decoded, name, 0); err != nil {
+				return input, err
+			}
+
 			input.Body[name] = value
 		}
 		if _, err := decoder.Token(); err != nil {
