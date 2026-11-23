@@ -1,3 +1,5 @@
 # Ephemeral public inputs copied only for an explicit operator deployment.
 recipient.pem
 review.json
+production-operator-linux-amd64
+migrate-linux-amd64

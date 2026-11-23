@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "true",
-  "buildCommand": "cd services/go && go run ./cmd/production-operator apply --writers-paused --expected-host my-context-protocol-production-countablenewt.aws-us-east-2.turso.io",
+  "buildCommand": "cd services/go && ../../operators/production-operator-linux-amd64 apply --writers-paused --expected-host my-context-protocol-production-countablenewt.aws-us-east-2.turso.io",
   "outputDirectory": ".operator-output"
 }

@@ -11,6 +11,45 @@ build or copy production credentials into Preview. The database host is pinned
 independently in both configurations. The command also checks `VERCEL_ENV` and
 the exact project's system ID before accessing the database.
 
+Create an isolated deployment source from the reviewed checkpoint commit:
+
+```sh
+umask 077
+mkdir -m 700 /private/tmp/myctx-production-operator-source-20261122
+git archive HEAD services/go operators .vercelignore | tar -x -C /private/tmp/myctx-production-operator-source-20261122
+cp operators/production-preflight.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
+(cd services/go && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+  -o /private/tmp/myctx-production-operator-source-20261122/operators/production-operator-linux-amd64 ./cmd/production-operator)
+(cd services/go && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+  -o /private/tmp/myctx-production-operator-source-20261122/operators/migrate-linux-amd64 ./cmd/migrate)
+chmod 700 /private/tmp/myctx-production-operator-source-20261122/operators/*-linux-amd64
+```
+
+The chosen operator configuration **must replace `vercel.json` in the uploaded
+source**. In this Services project, `--local-config` alone was observed to retain
+the normal root Services build remotely. Do not assume CLI local selection changes
+the cloud's root file. The Other/static build image does not provide `go` (confirmed by hosted preflight).
+Cross-compile both static Linux/amd64 executables locally from the reviewed commit;
+the remote job invokes those fixed binaries and installs no toolchain. Keep their
+hashes with the deployment-input evidence. The minimal archive contains the reviewed Go tree, operator files and
+`.vercelignore`. It avoids changing the application's configuration, building the
+frontend, or uploading unrelated private local files.
+
+Before pausing production, validate the remote build environment read-only:
+
+```sh
+vercel deploy /private/tmp/myctx-production-operator-source-20261122 \
+  --project prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7 --scope sam-clemente-s-team \
+  --prod --skip-domain --force
+```
+
+Confirm remote logs run `production-operator preflight`, not the application
+Services build. This checks the exact project/environment/database host, executes
+only `SELECT 1` and the migration-registry row count, and publishes aggregate
+`status.json`. It requires no pause declaration, recipient or review receipt.
+It verifies binary execution and Production Secret injection before starting an outage.
+Never promote it.
+
 Before starting, the release operator must stop and drain **all** production
 writers: production/old deployment URLs, custom/tenant hosts, provider callbacks,
 webhooks, MCP telemetry, cron and any direct database jobs. Vercel project pause
@@ -30,7 +69,7 @@ cd services/go
 go run ./cmd/production-operator keygen \
   --directory /private/tmp/myctx-production-operator-20261122/keys
 cd ../..
-cp /private/tmp/myctx-production-operator-20261122/keys/recipient.pem operators/recipient.pem
+cp /private/tmp/myctx-production-operator-20261122/keys/recipient.pem /private/tmp/myctx-production-operator-source-20261122/operators/recipient.pem
 ```
 
 Inspect deployment inputs first (`vercel deploy --dry --json`) and verify no
@@ -39,8 +78,10 @@ upload. `operators/recipient.pem` is a public key; the private key stays local.
 Use the existing linked project and target **Production without assigning domains**:
 
 ```sh
-vercel deploy --prod --skip-domain --force \
-  --local-config operators/production-snapshot.vercel.json
+cp operators/production-snapshot.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
+vercel deploy /private/tmp/myctx-production-operator-source-20261122 \
+  --project prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7 --scope sam-clemente-s-team \
+  --prod --skip-domain --force
 ```
 
 Do not use `--prebuilt`: the remote build needs the existing Production Secrets.
@@ -62,7 +103,7 @@ go run ./cmd/production-operator review \
   --envelope /private/tmp/myctx-production-operator-20261122/snapshot.enc \
   --directory /private/tmp/myctx-production-operator-20261122/reviewed
 cd ../..
-cp /private/tmp/myctx-production-operator-20261122/reviewed/review.json operators/review.json
+cp /private/tmp/myctx-production-operator-20261122/reviewed/review.json /private/tmp/myctx-production-operator-source-20261122/operators/review.json
 ```
 
 `review` refuses broad private-key permissions, authenticates/decrypts the backup,
@@ -75,8 +116,10 @@ existing evidence is never replaced. Keep the original backup and private key.
 Only after reviewing that successful reconstruction, run the separate apply job:
 
 ```sh
-vercel deploy --prod --skip-domain --force \
-  --local-config operators/production-apply.vercel.json
+cp operators/production-apply.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
+vercel deploy /private/tmp/myctx-production-operator-source-20261122 \
+  --project prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7 --scope sam-clemente-s-team \
+  --prod --skip-domain --force
 ```
 
 Apply verifies the locally signed receipt using the same public recipient. It

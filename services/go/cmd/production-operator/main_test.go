@@ -102,3 +102,40 @@ func TestPostMigrationComparisonRejectsSourceChanges(t *testing.T) {
 		t.Fatal("changed rows accepted")
 	}
 }
+
+func TestMigrationExecutableRequiresFixedRegularBinary(t *testing.T) {
+	root := t.TempDir()
+	working := filepath.Join(root, "services", "go")
+	if err := os.MkdirAll(working, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "operators"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(working)
+	if migrationBinary() == nil {
+		t.Fatal("missing migration binary accepted")
+	}
+	path := filepath.Join(root, "operators", "migrate-linux-amd64")
+	if err := os.WriteFile(path, []byte("reviewed executable"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if migrationBinary() == nil {
+		t.Fatal("nonexecutable migration binary accepted")
+	}
+	if err := os.Chmod(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrationBinary(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path, path+".real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(path+".real", path); err != nil {
+		t.Fatal(err)
+	}
+	if migrationBinary() == nil {
+		t.Fatal("symlink migration executable accepted")
+	}
+}

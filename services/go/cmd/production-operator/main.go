@@ -161,6 +161,11 @@ func run(args []string) error {
 				return err
 			}
 		}
+		if args[0] == "apply" {
+			if err := migrationBinary(); err != nil {
+				return err
+			}
+		}
 		db, err := turso.New(os.Getenv("TURSO_DATABASE_URL"), os.Getenv("TURSO_AUTH_TOKEN"))
 		if err != nil {
 			return errors.New("invalid production database configuration")
@@ -198,7 +203,7 @@ func run(args []string) error {
 		}
 		// The fixed existing operator command owns the migration registry. Neither
 		// credentials nor arbitrary SQL are accepted in arguments or emitted here.
-		cmd := exec.CommandContext(ctx, "go", "run", "./cmd/migrate")
+		cmd := exec.CommandContext(ctx, "../../operators/migrate-linux-amd64")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err = cmd.Run(); err != nil {
@@ -308,6 +313,16 @@ func preserved(before, after *snapshotimport.Snapshot) error {
 		if current == nil || current.Count != prior.Count || current.Digest != prior.Digest || strings.Join(current.Columns, "\x00") != strings.Join(prior.Columns, "\x00") {
 			return errors.New("post-migration source table differs: " + prior.Name + "; keep writers paused")
 		}
+	}
+	return nil
+}
+
+// The operator source carries binaries cross-compiled from the reviewed commit.
+// There is no shell, toolchain installation, or caller-selected executable.
+func migrationBinary() error {
+	info, err := os.Lstat("../../operators/migrate-linux-amd64")
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		return errors.New("reviewed executable migration binary is missing")
 	}
 	return nil
 }
