@@ -255,3 +255,31 @@ func TestReconciliationDoesNotAdvanceHeadAfterFailedSync(t *testing.T) {
 		t.Fatal("successful sync did not advance checkpoint")
 	}
 }
+
+func TestCompletedProposalRetriesUnpersistedMetadataLink(t *testing.T) {
+	h, db, fake := fixture(t)
+	connect(t, h)
+	seedCompiled(t, db)
+	if _, err := db.Execute(context.Background(), statement("INSERT INTO skill_runtime_overrides(id,project_id,skill_id,metadata_json,scope) VALUES('override','project','guide','{}','repository')")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Writeback(context.Background(), "account", "project", "release", "compiled"); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate failed final projection persistence after the external proposal and
+	// attestations were durably confirmed. Retry must repair only the local link.
+	if _, err := db.Execute(context.Background(), statement("UPDATE skill_runtime_overrides SET writeback_pr_url=NULL")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := h.Writeback(context.Background(), "account", "project", "release", "compiled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := h.query(context.Background(), "SELECT writeback_pr_url FROM skill_runtime_overrides WHERE id='override'")
+	if err != nil || len(rows) != 1 || scalar(rows[0], 0) != result["pull_request_url"] {
+		t.Fatal("completed retry skipped metadata link", rows, err)
+	}
+	if fake.writes != 1 || fake.proposals != 1 {
+		t.Fatal("retry duplicated external work")
+	}
+}

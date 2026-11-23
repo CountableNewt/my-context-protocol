@@ -90,9 +90,6 @@ func (h *Hub) Writeback(ctx context.Context, account, project, release, compiled
 	if state.Actor != binding.ActorDID || state.Repo != binding.RepositoryDID || state.BaseBranch != binding.Branch {
 		return nil, problem(409, "Repository identity changed since the metadata operation began")
 	}
-	if state.Status == "complete" {
-		return proposalResult(state, scalar(connection, 2), scalar(connection, 3)), nil
-	}
 	if state.Status == "proposal_started" || state.Status == "patch_started" {
 		return nil, problem(409, "The prior Tangled proposal outcome is uncertain; reconcile its external records before retrying")
 	}

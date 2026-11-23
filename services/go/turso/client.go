@@ -131,17 +131,23 @@ func (c *Client) Execute(ctx context.Context, stmt Statement) (*Result, error) {
 // if COMMIT did not succeed. close also releases the stream on any error.
 // SQL is application-owned; callers must not pass transaction-control SQL here.
 func (c *Client) Batch(ctx context.Context, statements []Statement) ([]Result, error) {
-	return c.batch(ctx, statements, false)
+	return c.batch(ctx, statements, false, false)
 }
 
 // SchemaBatch is restricted to explicit operator migrations which rebuild a
 // referenced table. Foreign keys are checked inside the transaction before it
 // can commit; ordinary application writes must use Batch with enforcement on.
 func (c *Client) SchemaBatch(ctx context.Context, statements []Statement) ([]Result, error) {
-	return c.batch(ctx, statements, true)
+	return c.batch(ctx, statements, true, false)
 }
 
-func (c *Client) batch(ctx context.Context, statements []Statement, rebuild bool) ([]Result, error) {
+// DryRunBatch evaluates owned application commands in order and always rolls
+// them back. It is used to derive canonical changes without publishing SQL state.
+func (c *Client) DryRunBatch(ctx context.Context, statements []Statement) ([]Result, error) {
+	return c.batch(ctx, statements, false, true)
+}
+
+func (c *Client) batch(ctx context.Context, statements []Statement, rebuild, dryRun bool) ([]Result, error) {
 	if len(statements) == 0 || len(statements) > MaxStatements {
 		return nil, fmt.Errorf("batch requires 1 to %d statements", MaxStatements)
 	}
@@ -163,7 +169,11 @@ func (c *Client) batch(ctx context.Context, statements []Statement, rebuild bool
 		}
 	}
 	commitIndex := len(steps)
-	steps = append(steps, step{Condition: ok(commitIndex - 1), Statement: Statement{SQL: "COMMIT"}})
+	end := "COMMIT"
+	if dryRun {
+		end = "ROLLBACK"
+	}
+	steps = append(steps, step{Condition: ok(commitIndex - 1), Statement: Statement{SQL: end}})
 	steps = append(steps, step{Condition: &condition{Type: "not", Cond: ok(commitIndex)}, Statement: Statement{SQL: "ROLLBACK"}})
 	raw, err := c.send(ctx, request{Type: "batch", Batch: &batch{Steps: steps}})
 	if err != nil {

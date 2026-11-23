@@ -306,3 +306,18 @@ func TestCanonicalIncompleteStagingFailsOnlyAfterLeaseExpires(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestFailedCanonicalPlanAllowsFreshDeliveryReservation(t *testing.T) {
+	s, db, c, old := planFixture(t, 20)
+	ctx := context.Background()
+	if _, e := db.Execute(ctx, stmt("UPDATE sync_publication_chunks SET payload=? WHERE chunk_index=(SELECT next_chunk FROM sync_publication_plans)", turso.Blob([]byte("corrupt")))); e != nil {
+		t.Fatal(e)
+	}
+	if _, _, e := s.ResumePublication(ctx, "project", time.Now().UTC()); !errors.Is(e, ErrInvalid) {
+		t.Fatal(e)
+	}
+	next, claimed, e := s.Claim(ctx, c, "delivery", time.Now().UTC())
+	if e != nil || !claimed || next.ID == old.ID || next.ReleaseID == old.ReleaseID {
+		t.Fatal(next, claimed, e)
+	}
+}

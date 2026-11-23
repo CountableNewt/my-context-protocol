@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/xrpc"
@@ -30,7 +31,7 @@ type controlXRPCInvoker struct{ service *Service }
 func (a controlXRPCInvoker) Invoke(ctx context.Context, principal xrpc.Principal, operation xrpc.Operation, input xrpc.Input) (xrpc.Result, error) {
 	// The reviewed control adapter deliberately excludes identity.logout and all
 	// pending operations; the registry alone never enables another service's API.
-	if !strings.HasPrefix(operation.NSID, xrpc.Namespace+"project.") && !strings.HasPrefix(operation.NSID, xrpc.Namespace+"admin.") {
+	if operation.Service != "control" {
 		return xrpc.Result{}, &xrpc.Error{Status: 404, Code: "NotFound", Message: "XRPC method is not served by control"}
 	}
 	accountID, err := uuid(principal.AccountID)
@@ -42,20 +43,30 @@ func (a controlXRPCInvoker) Invoke(ctx context.Context, principal xrpc.Principal
 	for key, value := range input.Body {
 		body[key] = value
 	}
-	if strings.Contains(path, "{project_id}") {
-		projectID := input.Parameters["project_id"]
-		if operation.Method == "POST" {
-			if json.Unmarshal(body["project_id"], &projectID) != nil {
-				return xrpc.Result{}, badXRPC("Invalid project ID")
-			}
-			delete(body, "project_id")
-		}
-		projectID, err = uuid(projectID)
-		if err != nil {
-			return xrpc.Result{}, badXRPC("Invalid project ID")
-		}
-		path = strings.ReplaceAll(path, "{project_id}", url.PathEscape(projectID))
+	parameters := url.Values{}
+	for key, value := range input.Parameters {
+		parameters.Set(key, value)
 	}
+	for _, match := range regexp.MustCompile(`\{([a-z_]+)\}`).FindAllStringSubmatch(path, -1) {
+		key := match[1]
+		id := input.Parameters[key]
+		if operation.Method == "POST" {
+			if json.Unmarshal(body[key], &id) != nil {
+				return xrpc.Result{}, badXRPC("Invalid resource ID")
+			}
+			delete(body, key)
+		}
+		id, err = uuid(id)
+		if err != nil {
+			return xrpc.Result{}, badXRPC("Invalid resource ID")
+		}
+		path = strings.ReplaceAll(path, match[0], url.PathEscape(id))
+		parameters.Del(key)
+	}
+	if len(parameters) > 0 {
+		path += "?" + parameters.Encode()
+	}
+
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return xrpc.Result{}, err
@@ -66,26 +77,15 @@ func (a controlXRPCInvoker) Invoke(ctx context.Context, principal xrpc.Principal
 		return xrpc.Result{}, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	value, _, err := a.service.serve(request)
+	value, status, err := a.service.serve(request)
 	if err != nil {
 		return xrpc.Result{}, a.applicationError(err)
 	}
-	if strings.HasPrefix(operation.NSID, xrpc.Namespace+"project.") {
-		if operation.NSID == xrpc.Namespace+"project.listProjects" {
-			rows, ok := value.([]row)
-			if !ok {
-				return xrpc.Result{}, errors.New("invalid project list result")
-			}
-			projects := make([]row, 0, len(rows))
-			for _, item := range rows {
-				projects = append(projects, omitNulls(item))
-			}
-			value = row{"projects": projects}
-		} else if item, ok := value.(row); ok {
-			value = omitNulls(item)
-		}
+	if operation.Envelope != "" {
+		value = row{operation.Envelope: value}
 	}
-	return xrpc.Result{Value: value}, nil
+
+	return xrpc.Result{Value: value, Status: status}, nil
 }
 
 func omitNulls(input row) row {
@@ -101,6 +101,7 @@ func badXRPC(message string) error {
 	return &xrpc.Error{Status: 400, Code: "InvalidRequest", Message: message}
 }
 func (a controlXRPCInvoker) applicationError(err error) error {
+	err = recordError(err)
 	status, message := 503, "Control service temporarily unavailable"
 	var application apiError
 	if errors.As(err, &application) {

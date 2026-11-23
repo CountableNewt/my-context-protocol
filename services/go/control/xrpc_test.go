@@ -2,9 +2,11 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -108,7 +110,7 @@ func TestXRPCDoesNotRelaxRESTAuthenticationOrCSRF(t *testing.T) {
 	p.Scopes = map[string]bool{"rpc:" + xrpc.Namespace + "project.*": true}
 	expectStatus(t, apiCall(t, s, "POST", "project.updateProject", body), 403)
 	p = principalFor(ownerID, false, "account.logout")
-	expectStatus(t, apiCall(t, s, "POST", "account.logout", `{}`), 404)
+	expectStatus(t, apiCall(t, s, "POST", "account.logout", `{"session_id":"id"}`), 404)
 }
 
 func TestXRPCDisabledUnlessExplicitlyConfigured(t *testing.T) {
@@ -146,4 +148,70 @@ func TestXRPCVerifierFailureCannotUseCookie(t *testing.T) {
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	expectStatus(t, w, 401)
+}
+
+func TestEveryProjectXRPCOperationRetainsOwnerIsolation(t *testing.T) {
+	p := principalFor(otherID, false)
+	for _, op := range xrpc.Operations() {
+		p.Scopes[op.Scope()] = true
+	}
+	s := xrpcFixture(t, &p)
+	for _, op := range xrpc.Operations() {
+		if op.Service != "control" || !strings.Contains(op.RESTPath, "{project_id}") {
+			continue
+		}
+		t.Run(op.NSID, func(t *testing.T) {
+			body := map[string]any{}
+			query := url.Values{}
+			for _, field := range op.Fields {
+				if !field.Required {
+					continue
+				}
+				value := "value"
+				switch field.Name {
+				case "project_id":
+					value = projectID
+				case "release_id":
+					value = releaseID
+				case "skill_id", "key_id":
+					value = skillID
+				}
+				if op.Method == "GET" {
+					query.Set(field.Name, value)
+				} else if field.Boolean {
+					body[field.Name] = true
+				} else {
+					body[field.Name] = value
+				}
+			}
+			method := strings.TrimPrefix(op.NSID, xrpc.Namespace)
+			if len(query) > 0 {
+				method += "?" + query.Encode()
+			}
+			raw, _ := json.Marshal(body)
+			input := string(raw)
+			if op.Method == "GET" {
+				input = ""
+			}
+			expectStatus(t, apiCall(t, s, op.Method, method, input), 404)
+		})
+	}
+}
+
+func TestXRPCKeyManagementAndTypedQueryParameters(t *testing.T) {
+	p := principalFor(ownerID, false, "security.listKeys", "security.createKey", "security.updateKey", "security.revokeKey", "analytics.getAccountTimeseries")
+	s := xrpcFixture(t, &p)
+	w := apiCall(t, s, "POST", "security.createKey", `{"project_id":"`+projectID+`","name":"Agent"}`)
+	expectStatus(t, w, 200)
+	key := object(t, w)
+	id := key["id"].(string)
+	expectStatus(t, apiCall(t, s, "POST", "security.updateKey", `{"project_id":"`+projectID+`","key_id":"`+id+`","name":"Updated"}`), 200)
+	w = apiCall(t, s, "GET", "security.listKeys?project_id="+projectID+"&include_revoked=true", "")
+	expectStatus(t, w, 200)
+	if !strings.Contains(w.Body.String(), "Updated") {
+		t.Fatal(w.Body.String())
+	}
+	expectStatus(t, apiCall(t, s, "POST", "security.revokeKey", `{"project_id":"`+projectID+`","key_id":"`+id+`"}`), 204)
+	expectStatus(t, apiCall(t, s, "GET", "security.listKeys?project_id="+projectID+"&include_revoked=not-a-boolean", ""), 400)
+	expectStatus(t, apiCall(t, s, "GET", "analytics.getAccountTimeseries?range=24h", ""), 200)
 }

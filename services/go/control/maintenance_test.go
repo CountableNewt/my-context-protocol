@@ -229,3 +229,51 @@ func TestMaintenanceCleanupTransactionRollsBackOnSchemaFailure(t *testing.T) {
 		t.Fatal("cleanup partially committed")
 	}
 }
+
+func TestCanonicalMaintenancePreservesPublicTelemetryAndPendingSync(t *testing.T) {
+	s := maintenanceFixture(t)
+	for _, sql := range []string{
+		"CREATE TABLE domain_canonical_projects(project_id TEXT PRIMARY KEY)",
+		"CREATE TABLE domain_native_intents(project_id TEXT,status TEXT)",
+		"CREATE TABLE sync_publication_plans(project_id TEXT,job_id TEXT,state TEXT)",
+		"INSERT INTO domain_canonical_projects(project_id) VALUES('project')",
+	} {
+		mustExec(t, s, sql)
+	}
+	s.cfg.CanonicalMaintenance = true
+	// Use existing fixture project ID rather than assuming a production identity.
+	p, e := s.one(context.Background(), "SELECT id FROM projects ORDER BY id LIMIT 1")
+	if e != nil {
+		t.Fatal(e)
+	}
+	id := str(p["id"])
+	mustExec(t, s, "INSERT OR IGNORE INTO domain_canonical_projects(project_id) VALUES(?)", id)
+	mustExec(t, s, "INSERT INTO skill_runtime_events(id,project_id,trace_id,event_type,detail_json,created_at) VALUES('canonical-retained',?,'trace','surfaced','{}',1)", id)
+	mustExec(t, s, "INSERT INTO releases(id,project_id,commit_sha,status) VALUES('pending-canonical',?,'revision','pending')", id)
+	mustExec(t, s, "INSERT INTO sync_jobs(id,project_id,delivery_key,release_id,status,created_at,updated_at,lease_until) VALUES('pending-job',?,'delivery','pending-canonical','running',1,1,1)", id)
+	mustExec(t, s, "INSERT INTO sync_project_locks(project_id,job_id,lease_until) VALUES(?,'pending-job',1)", id)
+	mustExec(t, s, "INSERT INTO sync_publication_plans(project_id,job_id,state) VALUES(?,'pending-job','publishing')", id)
+	called := false
+	s.cfg.ExtraMaintenance = func(context.Context) (map[string]any, error) { called = true; return map[string]any{"ok": true}, nil }
+	if _, e = s.runMaintenance(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	job, e := s.one(context.Background(), "SELECT status FROM sync_jobs WHERE id='pending-job'")
+	if e != nil || str(job["status"]) != "running" {
+		t.Fatal("pending publication job failed", e)
+	}
+	if tableCount(t, s, "sync_project_locks") != 1 {
+		t.Fatal("pending publication lock deleted")
+	}
+	release, e := s.one(context.Background(), "SELECT status FROM releases WHERE id='pending-canonical'")
+	if e != nil || str(release["status"]) != "pending" {
+		t.Fatal("canonical release changed outside PDS", e)
+	}
+	if !called {
+		t.Fatal("record-aware callback skipped")
+	}
+	r, e := s.one(context.Background(), "SELECT COUNT(*) AS count FROM skill_runtime_events WHERE id='canonical-retained'")
+	if e != nil || num(r["count"]) != 1 {
+		t.Fatal("canonical telemetry deleted outside PDS", e)
+	}
+}

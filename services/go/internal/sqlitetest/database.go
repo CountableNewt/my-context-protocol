@@ -54,19 +54,18 @@ func (db *DB) Execute(ctx context.Context, s turso.Statement) (*turso.Result, er
 	return &r[0], nil
 }
 func (db *DB) Batch(ctx context.Context, statements []turso.Statement) ([]turso.Result, error) {
-	return db.batch(ctx, statements, false)
+	return db.batch(ctx, statements, "runtime")
 }
 func (db *DB) SchemaBatch(ctx context.Context, statements []turso.Statement) ([]turso.Result, error) {
-	return db.batch(ctx, statements, true)
+	return db.batch(ctx, statements, "schema")
 }
-func (db *DB) batch(ctx context.Context, statements []turso.Statement, rebuild bool) ([]turso.Result, error) {
+func (db *DB) DryRunBatch(ctx context.Context, statements []turso.Statement) ([]turso.Result, error) {
+	return db.batch(ctx, statements, "dryrun")
+}
+func (db *DB) batch(ctx context.Context, statements []turso.Statement, mode string) ([]turso.Result, error) {
 	input, e := json.Marshal(statements)
 	if e != nil {
 		return nil, e
-	}
-	mode := "runtime"
-	if rebuild {
-		mode = "schema"
 	}
 	cmd := exec.CommandContext(ctx, db.python, "-c", driver, db.path, mode)
 	cmd.Stdin = bytes.NewReader(input)
@@ -107,7 +106,10 @@ try:
   out.append({'cols':[{'name':c[0]} for c in cursor.description] if cursor.description else [],'rows':[[encode(v) for v in row] for row in rows],'affected_row_count':max(cursor.rowcount,0)})
  if sys.argv[2]=='schema' and conn.execute('PRAGMA foreign_key_check').fetchone() is not None:
   raise ValueError('schema migration foreign key violation')
- conn.commit()
+ if sys.argv[2]=='dryrun':
+  conn.rollback()
+ else:
+  conn.commit()
  print(json.dumps(out))
 except:
  conn.rollback()
