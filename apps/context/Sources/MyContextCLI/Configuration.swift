@@ -29,7 +29,7 @@ struct Options {
   ]
   static let values: Set<String> = [
     "url", "web-url", "profile", "config", "project", "id", "release-id", "compiled-skill-id",
-    "key-id", "data", "query", "set", "timeout",
+    "key-id", "data", "query", "set", "timeout", "provider", "handle",
   ]
   var words: [String] = []
   var flags: [String: [String]] = [:]

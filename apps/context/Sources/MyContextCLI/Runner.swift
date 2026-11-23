@@ -80,7 +80,7 @@ public struct CLI {
     if !options["help"].isEmpty || name.isEmpty || options.words.first == "help" {
       let prefix = options.words.filter { $0 != "help" }.joined(separator: " ")
       output(
-        "MyContextCLI — agent-friendly MyContextProtocol CLI\n\nUsage: myctx <group> <command> [flags]\nHosted API: https://mycontextprotocol.dev/api (plain origins retain legacy gateway routing)\n\nAuthentication: auth login [--no-browser] | auth login --session-stdin | auth status | auth logout\nConfiguration: config show | config set --url API_BASE [--project ID]\nDiscovery: commands (JSON) | api operations (JSON) | help\nRaw API: api METHOD /path [--data JSON|@file|-] [--query key=value]\n\nGlobal flags: --url API_BASE --web-url ORIGIN --profile NAME --config FILE --project ID --timeout 30s --compact --json\nRequest flags: --id ID --release-id ID --compiled-skill-id ID --key-id ID\n               --data JSON|@file|- --set field=JSON --query key=value (repeatable)\nEnvironment: MYCTX_URL, MYCTX_WEB_URL, MYCTX_SESSION, MYCTX_PROFILE, MYCTX_CONFIG, MYCTX_PROJECT (legacy CONTEXT_* also supported)\n\nCommands:\n"
+        "MyContextCLI — agent-friendly MyContextProtocol CLI\n\nUsage: myctx <group> <command> [flags]\nHosted API: https://mycontextprotocol.dev/api (plain origins retain legacy gateway routing)\n\nAuthentication: auth login [--provider github|atproto] [--handle HANDLE_OR_DID] [--no-browser] | auth login --session-stdin | auth status | auth logout\nConfiguration: config show | config set --url API_BASE [--project ID]\nDiscovery: commands (JSON) | api operations (JSON) | help\nRaw API: api METHOD /path [--data JSON|@file|-] [--query key=value]\n\nGlobal flags: --url API_BASE --web-url ORIGIN --profile NAME --config FILE --project ID --timeout 30s --compact --json\nRequest flags: --id ID --release-id ID --compiled-skill-id ID --key-id ID\n               --data JSON|@file|- --set field=JSON --query key=value (repeatable)\nEnvironment: MYCTX_URL, MYCTX_WEB_URL, MYCTX_SESSION, MYCTX_PROFILE, MYCTX_CONFIG, MYCTX_PROJECT (legacy CONTEXT_* also supported)\n\nCommands:\n"
       )
       var lastGroup = ""
       for operation in operations
@@ -142,6 +142,21 @@ public struct CLI {
       origin: origin, session: session, webOrigin: web.isEmpty ? "" : try validateOrigin(web),
       timeout: timeout)
     if name == "auth login" {
+      let provider = options["provider"].isEmpty ? "github" : options["provider"]
+      guard ["github", "atproto"].contains(provider) else {
+        throw CLIError.usage("--provider must be github or atproto")
+      }
+      if provider == "atproto" && options["handle"].isEmpty {
+        throw CLIError.usage("ATProto login requires --handle HANDLE_OR_DID")
+      }
+      if provider == "github" && !options["handle"].isEmpty {
+        throw CLIError.usage("--handle is supported only with --provider atproto")
+      }
+      if !options["session-stdin"].isEmpty
+        && (!options["provider"].isEmpty || !options["handle"].isEmpty)
+      {
+        throw CLIError.usage("--session-stdin cannot be combined with provider login options")
+      }
       let credential: String
       if !options["session-stdin"].isEmpty {
         let raw = try boundedRead(input, limit: 8192)
@@ -155,7 +170,8 @@ public struct CLI {
         _ = try await client.checked("GET", "/auth/me")
       } else {
         credential = try await browserLogin(
-          client: &client, noBrowser: !options["no-browser"].isEmpty, diagnostics: diagnostics)
+          client: &client, noBrowser: !options["no-browser"].isEmpty, provider: provider,
+          handle: options["handle"], diagnostics: diagnostics)
       }
       if profile.url != origin { profile.project = "" }
       profile.url = origin

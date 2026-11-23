@@ -20,11 +20,14 @@ type statePayload struct {
 }
 
 func signState(key []byte, returnTo string, now time.Time) (string, error) {
+	return signStateOfKind(key, returnTo, now, "gh_oauth_v1")
+}
+func signStateOfKind(key []byte, returnTo string, now time.Time, kind string) (string, error) {
 	nonce, err := UUID()
 	if err != nil {
 		return "", err
 	}
-	body, err := json.Marshal(statePayload{Kind: "gh_oauth_v1", ReturnTo: returnTo, Expires: now.Unix() + 600, Nonce: nonce})
+	body, err := json.Marshal(statePayload{Kind: kind, ReturnTo: returnTo, Expires: now.Unix() + 600, Nonce: nonce})
 	if err != nil {
 		return "", err
 	}
@@ -33,6 +36,9 @@ func signState(key []byte, returnTo string, now time.Time) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(body) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 func verifyState(key []byte, state string, now time.Time) (string, error) {
+	return verifyStateOfKind(key, state, now, "gh_oauth_v1")
+}
+func verifyStateOfKind(key []byte, state string, now time.Time, kind string) (string, error) {
 	if len(state) > 8192 {
 		return "", errors.New("invalid state")
 	}
@@ -54,7 +60,7 @@ func verifyState(key []byte, state string, now time.Time) (string, error) {
 		return "", errors.New("invalid state")
 	}
 	var payload statePayload
-	if json.Unmarshal(body, &payload) != nil || payload.Kind != "gh_oauth_v1" || payload.Expires < now.Unix() || payload.Nonce == "" {
+	if json.Unmarshal(body, &payload) != nil || payload.Kind != kind || payload.Expires < now.Unix() || payload.Nonce == "" {
 		return "", errors.New("invalid state")
 	}
 	return payload.ReturnTo, nil

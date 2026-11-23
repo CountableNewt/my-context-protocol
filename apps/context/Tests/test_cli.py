@@ -272,6 +272,63 @@ class CLITests(unittest.TestCase):
                 self.assertNotIn("Open this URL", result.stderr)
                 self.assertFalse(self.config.exists())
 
+    def test_atproto_login_opens_account_initiation_in_browser(self):
+        calls = []
+        callback_done = threading.Event()
+        def gateway(method, path, headers, body):
+            calls.append((method, path, headers))
+            parsed = urllib.parse.urlsplit(path)
+            if parsed.path == "/api/auth/atproto/status":
+                return 200, {}, b'{"enabled":true}'
+            if parsed.path == "/api/auth/cli/atproto":
+                query = urllib.parse.parse_qs(parsed.query)
+                self.assertEqual(query["handle"], ["alice.example.com"])
+                callback = query["return_to"][0]
+                def handoff():
+                    urllib.request.urlopen(callback + "&auth_token=atproto-handoff").read()
+                    callback_done.set()
+                threading.Thread(target=handoff, daemon=True).start()
+                return 200, {"Set-Cookie": "atproto-login=browser-only; Path=/; HttpOnly"}, b"authorized"
+            if parsed.path == "/api/auth/confirm":
+                self.assertEqual(urllib.parse.parse_qs(parsed.query), {"token": ["atproto-handoff"]})
+                return 200, {"Set-Cookie": "vapor-session=atproto-session; Path=/; HttpOnly"}, b"{}"
+            return 200, {}, b'{"id":"native-account"}'
+        with server(gateway) as origin:
+            process = subprocess.Popen([BINARY, "auth", "login", "--provider", "atproto", "--handle",
+                                        "alice.example.com", "--no-browser", "--url", origin + "/api"],
+                                       env=dict(self.env, MYCTX_SESSION="old-secret"),
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.addCleanup(lambda: process.kill() if process.poll() is None else None)
+            self.assertIn("authenticate with ATProto", process.stderr.readline())
+            initiation = process.stderr.readline().strip()
+            self.assertEqual(urllib.parse.urlsplit(initiation).netloc, urllib.parse.urlsplit(origin).netloc)
+            self.assertEqual(urllib.parse.urlsplit(initiation).path, "/api/auth/cli/atproto")
+            self.assertEqual(len(calls), 1, "CLI must not fetch browser-bound initiation itself")
+            self.assertNotIn("Cookie", calls[0][2])
+            urllib.request.urlopen(initiation).read()
+            stdout, stderr = process.communicate(timeout=10)
+            self.assertEqual(process.returncode, 0, stderr)
+            self.assertTrue(callback_done.wait(1))
+        self.assertEqual(json.loads(self.config.read_text())["profiles"]["default"]["session"], "atproto-session")
+
+    def test_atproto_login_rejects_disabled_and_redirected_preflight(self):
+        for status, headers, body in [(200, {}, b'{"enabled":false}'),
+                                      (302, {"Location":"https://evil.example/steal"}, b""),
+                                      (200, {}, b'{"enabled":"true"}')]:
+            with self.subTest(status=status, body=body), server(lambda *args:(status, headers, body)) as origin:
+                result = self.run_cli("auth", "login", "--provider", "atproto", "--handle",
+                                      "alice.example.com", "--no-browser", "--url", origin)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertNotIn("Open this URL", result.stderr)
+                self.assertFalse(self.config.exists())
+
+    def test_provider_arguments_are_validated_before_authentication(self):
+        for flags in [("--provider", "unknown"), ("--provider", "atproto"),
+                      ("--handle", "alice.example.com"), ("--provider", "github", "--session-stdin")]:
+            result = self.run_cli("auth", "login", *flags)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertNotIn("Open this URL", result.stderr)
+
     def test_browser_login_cancellation(self):
         with server(lambda *args: (302, {"Location": "https://github.com/login/oauth/authorize?client_id=c&state=s"}, b"")) as origin:
             process = subprocess.Popen([BINARY, "auth", "login", "--no-browser", "--url", origin],

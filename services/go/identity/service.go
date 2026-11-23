@@ -17,6 +17,7 @@ import (
 )
 
 type Config struct {
+	ATProto             *ATProtoConfig
 	ClientID            string
 	ClientSecret        string
 	RedirectURI         string
@@ -38,6 +39,9 @@ type Service struct {
 }
 
 func New(config Config, store Store, github GitHub) (*Service, error) {
+	if config.ATProto != nil && (config.ATProto.Client == nil || config.ATProto.Accounts == nil) {
+		return nil, errors.New("ATProto authentication requires OAuth and account stores")
+	}
 	if store == nil || github == nil {
 		return nil, errors.New("identity store and GitHub client are required")
 	}
@@ -79,6 +83,10 @@ func New(config Config, store Store, github GitHub) (*Service, error) {
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if strings.HasPrefix(r.URL.Path, "/auth/atproto") || r.URL.Path == "/auth/cli/atproto" {
+		s.serveATProto(w, r)
+		return
+	}
 	switch r.URL.Path {
 	case "/health":
 		if r.Method != "GET" {
@@ -93,6 +101,12 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.initiate(w, r, false)
+	case "/auth/github/link":
+		if r.Method != "POST" {
+			s.method(w)
+			return
+		}
+		s.startGitHubLink(w, r)
 	case "/auth/cli/github":
 		if r.Method != "GET" {
 			s.method(w)
@@ -186,6 +200,10 @@ func addQuery(raw, key, value string) string {
 }
 func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
+	if target, err := verifyStateOfKind(s.key, state, s.now(), "gh_link_v1"); err == nil {
+		s.callbackGitHubLink(w, r, target)
+		return
+	}
 	target, err := verifyState(s.key, state, s.now())
 	if err != nil {
 		code := "oauth_invalid_state"
@@ -244,6 +262,11 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, addQuery(target, "auth_token", handoff), 302)
 }
 func (s *Service) admin(login string, id int64) bool {
+	// GitHub bootstrap allowlists must never grant privileges to an ATProto
+	// account whose mutable handle happens to match a GitHub login.
+	if id <= 0 {
+		return false
+	}
 	for _, allowed := range s.config.AdminLogins {
 		if strings.EqualFold(strings.TrimSpace(allowed), login) {
 			return true
@@ -315,7 +338,7 @@ func (s *Service) account(r *http.Request) (*Account, error) {
 }
 func (s *Service) respondUser(w http.ResponseWriter, r *http.Request, account *Account) {
 	suggest := false
-	if s.config.GitHubAppConfigured {
+	if s.config.GitHubAppConfigured && account.GitHubID > 0 {
 		var err error
 		suggest, err = s.store.SuggestedGitHubApp(r.Context(), account.ID)
 		if err != nil {
@@ -324,7 +347,19 @@ func (s *Service) respondUser(w http.ResponseWriter, r *http.Request, account *A
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"id": account.ID, "email": account.Email, "login": account.Login, "avatar_url": account.AvatarURL, "plan": "free", "is_admin": account.IsAdmin, "internal_pro_bypass": false, "can_manage_subscription": false, "suggested_github_app_install": suggest, "app_env": s.config.AppEnvironment, "non_production_bypasses": false, "needs_project_selection": false})
+	result := map[string]any{"id": account.ID, "email": account.Email, "login": account.Login, "avatar_url": account.AvatarURL, "plan": "free", "is_admin": account.IsAdmin, "internal_pro_bypass": false, "can_manage_subscription": false, "suggested_github_app_install": suggest, "app_env": s.config.AppEnvironment, "non_production_bypasses": false, "needs_project_selection": false, "github_connected": account.GitHubID > 0, "atproto_enabled": s.config.ATProto != nil}
+	if s.config.ATProto != nil {
+		ident, err := s.config.ATProto.Accounts.ATProtoIdentity(r.Context(), account.ID)
+		if err != nil {
+			s.fail(w, 503, "Auth service temporarily unavailable")
+			return
+		}
+		if ident != nil {
+			result["atproto_did"] = ident.DID
+			result["atproto_handle"] = ident.Handle
+		}
+	}
+	json.NewEncoder(w).Encode(result)
 }
 func (s *Service) me(w http.ResponseWriter, r *http.Request) {
 	account, err := s.account(r)

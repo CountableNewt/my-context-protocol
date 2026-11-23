@@ -128,6 +128,12 @@ func Apply(ctx context.Context, db Database, options Options) error {
 			}
 			continue
 		}
+		if m.Version == AccountIdentityVersion {
+			if e := rebuildAccounts(ctx, db, m); e != nil {
+				return fmt.Errorf("account identity migration failed: %w", e)
+			}
+			continue
+		}
 		sqls, e := SplitSQL(m.SQL)
 		if e != nil {
 			return e

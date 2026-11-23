@@ -84,7 +84,7 @@ func Export(ctx context.Context, source, output string) (*Snapshot, error) {
 		temporary.Close()
 		return nil, e
 	}
-	settings, _ := json.Marshal(map[string]any{"baseline": migrations.BaselineSQL, "allowed": allowed, "excluded": []string{"go_schema_migrations", runTable, progressTable}})
+	settings, _ := json.Marshal(map[string]any{"baseline": migrations.BaselineSQL, "allowed": allowed, "account_identity_schema": migrations.AccountIdentityDDL, "excluded": []string{"go_schema_migrations", runTable, progressTable}})
 	cmd.Stdin = bytes.NewReader(settings)
 	cmd.Stdout = temporary
 	cmd.Stderr = io.Discard

@@ -64,7 +64,7 @@ def main():
     actual = objects(source)
     if not set(expected_objects).issubset(actual):
         raise ValueError('source baseline missing')
-    if any(name not in settings['allowed'] or normalized(sql) != normalized(settings['allowed'][name]) for name, sql in actual.items()):
+    if any(name not in settings['allowed'] or (normalized(sql) != normalized(settings['allowed'][name]) and not (name == 'accounts' and normalized(sql) == normalized(settings['account_identity_schema']))) for name, sql in actual.items()):
         raise ValueError('source schema is not shipped')
     actual = {name: sql for name, sql in actual.items() if name not in settings['excluded']}
     names = sorted(row[0] for row in source.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'") if row[0] not in settings['excluded'])
@@ -73,7 +73,7 @@ def main():
         columns = [row[1] for row in source.execute('PRAGMA table_info(' + quoted(name) + ')')]
         count = source.execute('SELECT COUNT(*) FROM ' + quoted(name)).fetchone()[0]
         tables.append({'name': name, 'columns': columns, 'rows': count})
-    legacy = set(actual) == set(expected_objects)
+    legacy = set(actual) == set(expected_objects) and all(normalized(actual[name]) == normalized(sql) for name, sql in expected_objects.items())
     emit({'format': 'mycontext-sqlite-snapshot-v1' if legacy else 'mycontext-sqlite-snapshot-v2', 'schema': actual, 'tables': tables})
     for table in tables:
         columns = ','.join(quoted(name) for name in table['columns'])

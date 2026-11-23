@@ -4,6 +4,8 @@ import (
 	"errors"
 	"sort"
 	"strings"
+
+	"github.com/CountableNewt/my-context-protocol/services/go/migrations"
 )
 
 const CurrentFormat = "mycontext-sqlite-snapshot-v2"
@@ -68,7 +70,7 @@ func snapshotDefinitions(format string, actual map[string]string) (map[string]st
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(actual) <= len(base) {
+	if len(actual) <= len(base) && normalizedCreate(actual["accounts"]) != normalizedCreate(migrations.AccountIdentityDDL) {
 		return nil, nil, errors.New("current snapshot must include additive application schema")
 	}
 	return currentDefinitions(actual)

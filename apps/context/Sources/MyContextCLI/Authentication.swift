@@ -97,7 +97,7 @@ final class CallbackListener: @unchecked Sendable {
           let tokens = query.filter { $0.name == "auth_token" }
           if errors.count == 1 && !(errors[0].value ?? "").isEmpty {
             denied = true
-            message = "GitHub authorization failed. Return to MyContextCLI to retry."
+            message = "Authorization failed. Return to MyContextCLI to retry."
           } else if tokens.count == 1, let value = tokens[0].value, !value.isEmpty {
             token = value
             status = "200 OK"
@@ -117,7 +117,7 @@ final class CallbackListener: @unchecked Sendable {
       }
       if denied {
         throw CLIError.request(
-          "GitHub authorization was declined or failed; run auth login to try again")
+          "Authorization was declined or failed; run auth login to try again")
       }
       if let token { return token }
     }
@@ -132,9 +132,26 @@ func constantTimeEqual(_ left: String, _ right: String) -> Bool {
   for index in a.indices { difference |= a[index] ^ b[index] }
   return difference == 0
 }
-func authorizationURL(client: Client, callback: String) async throws -> String {
+func authorizationURL(
+  client: Client, callback: String, provider: String = "github", handle: String = ""
+) async throws -> String {
   var anonymous = client
   anonymous.session = ""
+  if provider == "atproto" {
+    let (data, response) = try await anonymous.request("GET", "/auth/atproto/status")
+    guard response.statusCode == 200,
+      case .object(let fields) = try JSON(data: data), fields["enabled"] == .bool(true)
+    else { throw CLIError.request("Server does not support ATProto login") }
+    // Open the trusted account API initiation route in the browser. Fetching a
+    // provider redirect in the CLI would strand its browser-binding cookie here.
+    return try anonymous.requestURL(
+      "/auth/cli/atproto",
+      query: [
+        URLQueryItem(name: "handle", value: handle),
+        URLQueryItem(name: "return_to", value: callback),
+      ]
+    ).absoluteString
+  }
   let (_, response) = try await anonymous.request(
     "GET", "/auth/cli/github", query: [URLQueryItem(name: "return_to", value: callback)])
   if response.statusCode == 404 {
@@ -157,7 +174,10 @@ func authorizationURL(client: Client, callback: String) async throws -> String {
   }
   return location
 }
-func browserLogin(client: inout Client, noBrowser: Bool, diagnostics: (String) -> Void) async throws
+func browserLogin(
+  client: inout Client, noBrowser: Bool, provider: String = "github", handle: String = "",
+  diagnostics: (String) -> Void
+) async throws
   -> String
 {
   let listener = try CallbackListener()
@@ -167,8 +187,10 @@ func browserLogin(client: inout Client, noBrowser: Bool, diagnostics: (String) -
       of: "/", with: "_"
     ).replacingOccurrences(of: "=", with: "")
   let callback = "http://127.0.0.1:\(listener.port)/callback?state=\(nonce)"
-  let url = try await authorizationURL(client: client, callback: callback)
-  diagnostics("Open this URL to authenticate with GitHub:\n\(url)\n")
+  let url = try await authorizationURL(
+    client: client, callback: callback, provider: provider, handle: handle)
+  let providerName = provider == "atproto" ? "ATProto" : "GitHub"
+  diagnostics("Open this URL to authenticate with \(providerName):\n\(url)\n")
   if !noBrowser {
     let process = Process()
     #if os(macOS)

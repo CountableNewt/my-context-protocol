@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/migrations"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
 
@@ -57,6 +58,9 @@ func ExportRemote(ctx context.Context, db Database, output string, options Remot
 			format = CurrentFormat
 		}
 	} else {
+		if normalizedCreate(schema["accounts"]) == normalizedCreate(migrations.AccountIdentityDDL) {
+			return nil, errors.New("ATProto account schema requires current-schema export")
+		}
 		for _, name := range []string{"atproto_oauth_requests", "atproto_oauth_sessions", "atproto_publication_intents"} {
 			if _, ok := schema[name]; !ok {
 				continue

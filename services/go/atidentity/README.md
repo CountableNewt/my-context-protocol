@@ -20,11 +20,20 @@ resolved PDS, including SDK nonce retries and refresh. Callers must coordinate
 refreshes of the same persisted session across processes; the SDK only locks
 within a single session object. This package does not yet supply that lease.
 
-These primitives are not mounted login routes. Remaining identity work includes
-browser-bound authorization state, proof-of-both account linking, ATProto-only
-account creation without synthetic GitHub IDs, CLI handoffs, current identity/PDS
-revalidation, refresh leases, revocation integration, and Chrome acceptance.
-Do not enable an authentication UI until those boundaries are implemented.
+The identity service mounts browser-bound login and proof-of-both account linking
+when `ATPROTO_ENABLED` is configured. `FlowClient` persists PAR state before
+redirecting and exposes its state for the identity service's one-use browser
+binding. The CLI opens that account initiation route in the browser, ensuring
+the browser receives its binding cookie rather than stranding it in a CLI fetch.
+ATProto-only accounts use a null GitHub ID; linking another identity never merges
+accounts by handle or email. Live OAuth/PDS migration and Chrome acceptance still
+need validation against configured hosted accounts.
+
+`ServiceAuth` permissions specify exact DID service references (including their
+`#service` fragment) and exact method NSIDs. They are serialized and validated by
+the official SDK. No wildcard/transitional permissions are synthesized. Dynamic
+Tangled audiences require an incremental authorization flow before requesting
+new service-auth tokens.
 
 Apply schema additions only with the explicit `cmd/migrate` operator command.
 Never publish OAuth state, tokens, signing keys or session payloads as records.

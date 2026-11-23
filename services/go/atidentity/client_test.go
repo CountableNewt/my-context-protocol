@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
+	"github.com/bluesky-social/indigo/atproto/auth"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/util/ssrf"
@@ -113,6 +114,34 @@ func TestSocketPolicyRejectsResolvedPrivateAddress(t *testing.T) {
 	for _, address := range []string{"127.0.0.1:443", "10.0.0.1:443", "169.254.169.254:443", "[::1]:443", "8.8.8.8:22"} {
 		if err := ssrf.PublicOnlyControl("tcp4", address, nil); err == nil {
 			t.Fatalf("unsafe resolved address accepted: %s", address)
+		}
+	}
+}
+
+func TestServiceAuthScopesAreExactAndProtocolValid(t *testing.T) {
+	config := testClientConfig(t)
+	config.ServiceAuth = []ServicePermission{{Audience: "did:web:mycontextprotocol.dev#mycontextprotocol", Method: "dev.mycontextprotocol.project.listProjects"}}
+	_, metadata, err := NewClient(config, oauth.NewMemStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, scope := range strings.Fields(metadata.Scope) {
+		if strings.HasPrefix(scope, "rpc:") {
+			permission, e := auth.ParsePermissionString(scope)
+			if e != nil || permission.Audience != config.ServiceAuth[0].Audience || len(permission.Endpoint) != 1 || permission.Endpoint[0] != config.ServiceAuth[0].Method {
+				t.Fatalf("invalid service scope %s: %v", scope, e)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("missing service permission")
+	}
+	for _, bad := range []ServicePermission{{Audience: "*", Method: "dev.mycontextprotocol.project.listProjects"}, {Audience: "did:web:mycontextprotocol.dev", Method: "*"}, {Audience: "", Method: "dev.mycontextprotocol.project.listProjects"}, {Audience: "not-a-did", Method: "dev.mycontextprotocol.project.listProjects"}} {
+		config.ServiceAuth = []ServicePermission{bad}
+		if _, _, err := NewClient(config, oauth.NewMemStore()); err == nil {
+			t.Fatalf("unsafe permission accepted: %+v", bad)
 		}
 	}
 }

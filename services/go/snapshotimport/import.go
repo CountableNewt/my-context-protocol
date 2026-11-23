@@ -303,6 +303,9 @@ func checkBaselineSubset(actual map[string]string) error {
 		return e
 	}
 	for name, sql := range expected {
+		if name == "accounts" && normalizedCreate(actual[name]) == normalizedCreate(migrations.AccountIdentityDDL) {
+			continue
+		}
 		if normalized(actual[name]) != sql {
 			return errors.New("destination baseline schema mismatch")
 		}
@@ -318,6 +321,9 @@ func checkOwnedSchema(schema map[string]string) error {
 		return e
 	}
 	for name, actual := range schema {
+		if name == "accounts" && normalizedCreate(actual) == normalizedCreate(migrations.AccountIdentityDDL) {
+			continue
+		}
 		ddl, ok := expected[name]
 		if !ok || normalizedCreate(actual) != normalizedCreate(ddl) {
 			return errors.New("destination contains an unknown or altered schema object")

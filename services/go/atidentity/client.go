@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
+	"github.com/bluesky-social/indigo/atproto/auth"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -23,8 +24,16 @@ type ClientConfig struct {
 	ClientID    string
 	CallbackURL string
 	Collections []string
+	ServiceAuth []ServicePermission
 	PrivateKey  atcrypto.PrivateKey
 	KeyID       string
+}
+
+// ServicePermission grants one exact method at one exact service DID/ref. It
+// authorizes PDS getServiceAuth for that target, never a wildcard audience.
+type ServicePermission struct {
+	Audience string `json:"audience"`
+	Method   string `json:"method"`
 }
 
 // NewClient delegates PAR, PKCE, DPoP, and client assertions to the pinned Indigo
@@ -62,6 +71,22 @@ func NewClient(c ClientConfig, store oauth.ClientAuthStore) (*oauth.ClientApp, o
 			if !slices.Contains(scopes, scope) {
 				scopes = append(scopes, scope)
 			}
+		}
+	}
+	if len(c.ServiceAuth) > 256 {
+		return nil, empty, errors.New("too many OAuth service permissions")
+	}
+	for _, permission := range c.ServiceAuth {
+		if permission.Audience == "" || permission.Audience == "*" || permission.Method == "*" {
+			return nil, empty, errors.New("exact service audience and method are required")
+		}
+		p := auth.Permission{Resource: "rpc", Audience: permission.Audience, Endpoint: []string{permission.Method}}
+		scope := p.ScopeString()
+		if _, err := auth.ParsePermissionString(scope); err != nil {
+			return nil, empty, fmt.Errorf("invalid OAuth service permission: %w", err)
+		}
+		if !slices.Contains(scopes, scope) {
+			scopes = append(scopes, scope)
 		}
 	}
 	config := oauth.NewPublicConfig(c.ClientID, c.CallbackURL, scopes)
