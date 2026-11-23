@@ -74,7 +74,7 @@ export function CreateProjectDialog() {
           <DialogTitle>Create Project</DialogTitle>
           <DialogDescription>
             Create a new MCP project. A unique platform subdomain is assigned automatically.
-            You can connect a GitHub repo after creation.
+            You can connect a GitHub or Tangled repository after creation.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

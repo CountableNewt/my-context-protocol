@@ -156,5 +156,31 @@ work remains before declaring first-class parity or publication complete:
 After owner approval, deleted the unaliased operator deployment
 `dpl_4WbPmZo6LhxqYrJHfGLpuipS3tAy` and removed only its task-created automation
 protection bypass. Production remains unpaused and healthy; Vercel SSO protection
-remains enabled. Private recovery material is retained. Chrome still shows the
-Northsky password step, so authority linking and Lexicon publication remain pending.
+remains enabled. Private recovery material is retained. Authority linking was subsequently
+confirmed in Chrome as recorded below.
+
+### Authority linked; publication awaits deployment capacity
+
+Chrome account settings now confirm both `CountableNewt` and `samclemente.me`
+(`did:plc:qy5pluw2bsuq2x6albsgkvx3`) on the existing account. The existing
+`CountableNewt/skills` repository connection and its configured change detection
+remain visible. Linking alone has not authorized publication of existing project
+data; its publication review remains explicit.
+
+Prepared an isolated, unaliased Production Go build that runs the existing fixed
+`cmd/lexicon --publish` for the exact linked account and reviewed 96 schemas,
+followed by a normal Go build only on success. Upload inspection verified the
+exact schema bytes and absence of local credentials/recovery files. Independent
+public verification is a separate credential-free `--verify` step. Never promote
+this temporary publication deployment.
+
+Vercel rejected deployment creation with `api-deployments-free-per-day` again,
+so the publisher did not execute. Independent paginated public PDS inspection
+confirms **0 of 96** product schemas published; `--verify` returns canonical
+record not found. Retain the owner's choice to wait for quota capacity, with no
+billing upgrade or team change. DNS delegation is ready but publication and full
+repository/CLI acceptance remain incomplete.
+
+A copy-only follow-up corrects project creation's GitHub-only description to name
+both GitHub and Tangled. This follow-up is on the feature branch and requires the
+next application deployment before it appears in production.
