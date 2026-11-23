@@ -52,6 +52,11 @@ func (s *Service) Maintenance(ctx context.Context, projectLimit, rowLimit int, n
 	return map[string]any{"projects_completed": completed, "projects_deferred": deferred, "records_collected": deleted, "more_work": more || len(rows.Rows) >= projectLimit || deferred > 0}, nil
 }
 func (s *Service) maintainProject(ctx context.Context, account, project string, limit int, now time.Time, deleted *int, more *bool) error {
+	if err := s.WithEngine(ctx, account, func(ctx context.Context, owner string, e *domainrecords.Engine) error {
+		return e.Audit(ctx, account, owner, project)
+	}); err != nil {
+		return err
+	}
 	scoped, err := s.Scope(ctx, account, project)
 	if err != nil {
 		return err

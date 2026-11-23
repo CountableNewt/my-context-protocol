@@ -23,7 +23,14 @@ func TestPostCutoverWritesSurviveRemoteExportAndOfflineRestore(t *testing.T) {
 	if _, e := Transfer(ctx, db, artifact, Options{Initialize: true}); e != nil {
 		t.Fatal(e)
 	}
-	if e := migrations.Apply(ctx, db, migrations.Options{Additions: additiveMigrations()}); e != nil {
+	// Legacy rollback remains supported only before the explicit account schema cutover.
+	legacyAdditions := []migrations.Migration{}
+	for _, migration := range additiveMigrations() {
+		if migration.Version != migrations.AccountIdentityVersion {
+			legacyAdditions = append(legacyAdditions, migration)
+		}
+	}
+	if e := migrations.Apply(ctx, db, migrations.Options{Additions: legacyAdditions}); e != nil {
 		t.Fatal(e)
 	}
 	// Application data and historical Fluent records survive, while Go-only quota

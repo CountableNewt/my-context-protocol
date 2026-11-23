@@ -19,6 +19,7 @@ func TestCurrentSnapshotPreservesOAuthAndPublicationState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Batch(ctx, []turso.Statement{
+		{SQL: `INSERT INTO accounts(id,login) VALUES('ATPROTO-NATIVE','native')`},
 		{SQL: `INSERT INTO atproto_oauth_requests(state_hash,payload_encrypted,expires_at) VALUES('request-hash','encrypted-request',1234)`},
 		{SQL: `INSERT INTO atproto_oauth_sessions(did,session_hash,payload_encrypted,updated_at,revoked) VALUES('did:plc:aaaaaaaaaaaaaaaaaaaaaaaa','session-hash','encrypted-session',1234,1)`},
 		{SQL: `INSERT INTO atproto_publication_intents(owner_did,intent_key,digest,mutation_json,record_uri,status,created_at,updated_at) VALUES('did:plc:aaaaaaaaaaaaaaaaaaaaaaaa','intent','digest','{"private":"unpublished Ω"}','at://did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/dev.mycontextprotocol.project.record/key','pending',1234,1235)`},
