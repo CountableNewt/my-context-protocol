@@ -110,6 +110,17 @@ func (s *Service) runMaintenance(ctx context.Context) (row, error) {
 	if s.cfg.CanonicalMaintenance {
 		// Global operational cleanup must not mutate owner-record projections or
 		// remove the leases/jobs needed to resume interrupted publication.
+		// OAuth states are consumed on success; only expired abandoned requests
+		// remain here. Replay hashes outlive their token validity, and stale
+		// leases retain a five-minute grace period. Durable publication and
+		// attestation ledgers have no TTL: deleting them would break retries.
+		categories = append(categories,
+			cleanup{"atproto_oauth_requests", `DELETE FROM atproto_oauth_requests WHERE state_hash IN(SELECT state_hash FROM atproto_oauth_requests WHERE expires_at<=? ORDER BY expires_at,state_hash LIMIT ?)`, []any{now, limit}},
+			cleanup{"atproto_login_flows", `DELETE FROM atproto_login_flows WHERE state_hash IN(SELECT state_hash FROM atproto_login_flows WHERE expires_at<=? ORDER BY expires_at,state_hash LIMIT ?)`, []any{now, limit}},
+			cleanup{"atproto_xrpc_replays", `DELETE FROM atproto_xrpc_replays WHERE token_hash IN(SELECT token_hash FROM atproto_xrpc_replays WHERE expires_at<=? ORDER BY expires_at,token_hash LIMIT ?)`, []any{now, limit}},
+			cleanup{"atproto_session_leases", `DELETE FROM atproto_session_leases WHERE rowid IN(SELECT rowid FROM atproto_session_leases WHERE lease_until<=? ORDER BY lease_until,rowid LIMIT ?)`, []any{leaseCutoff, limit}},
+			cleanup{"provider_operation_locks", `DELETE FROM provider_operation_locks WHERE project_id IN(SELECT l.project_id FROM provider_operation_locks l WHERE l.lease_until<=? AND NOT EXISTS(SELECT 1 FROM domain_native_intents n WHERE n.project_id=l.project_id AND n.status='pending') AND NOT EXISTS(SELECT 1 FROM atproto_metadata_proposals p WHERE p.project_id=l.project_id AND p.status<>'complete') ORDER BY l.lease_until,l.project_id LIMIT ?)`, []any{leaseCutoff, limit}},
+		)
 		protectedJob := "NOT EXISTS(SELECT 1 FROM sync_publication_plans p WHERE p.job_id=sync_jobs.id AND p.state IN ('staging','publishing')) AND NOT EXISTS(SELECT 1 FROM domain_native_intents n WHERE n.project_id=sync_jobs.project_id AND n.status='pending')"
 		for i := range categories {
 			c := &categories[i]

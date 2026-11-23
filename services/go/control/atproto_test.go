@@ -144,3 +144,37 @@ func TestXRPCConflictContractsPreserveOwnerIsolationForAdmins(t *testing.T) {
 		t.Fatal("admin escaped project ownership", records)
 	}
 }
+
+type repairController struct {
+	recordController
+	auditError error
+	reconciles int
+}
+
+func (f *repairController) Scope(ctx context.Context, a, p string) (context.Context, error) {
+	f.scopes++
+	return ctx, domainrecords.ErrAuditInvalid
+}
+func (f *repairController) WithEngine(context.Context, string, func(context.Context, string, *domainrecords.Engine) error) error {
+	f.engines++
+	return f.auditError
+}
+func (f *repairController) Reconcile(context.Context, string, string) error {
+	f.reconciles++
+	return nil
+}
+func TestExplicitRepairAuditsBeforeNormalReadinessAndNativeResume(t *testing.T) {
+	s, _ := fixture(t)
+	records := &repairController{auditError: &domainrecords.PendingError{}}
+	s.cfg.Records = records
+	path := "/projects/" + projectID + "/atproto/reconcile"
+	expectStatus(t, call(t, s, "POST", path, ownerCookie, "{}", "https://app.example.com"), 202)
+	if records.scopes != 0 || records.reconciles != 0 || records.engines != 1 {
+		t.Fatal("pending repair bypassed audit", records)
+	}
+	records.auditError = nil
+	expectStatus(t, call(t, s, "POST", path, ownerCookie, "{}", "https://app.example.com"), 200)
+	if records.scopes != 0 || records.reconciles != 1 || records.engines != 2 {
+		t.Fatal("validated repair did not resume projection", records)
+	}
+}

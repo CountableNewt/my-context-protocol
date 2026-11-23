@@ -19,6 +19,7 @@ import (
 )
 
 type Config struct {
+	ProjectContext      func(context.Context, Project) (context.Context, error)
 	Path                string
 	BaseDomain          string
 	RequireTenantHost   bool
@@ -224,6 +225,14 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.plain(w, 403, "Credential does not match host")
 		return
 	}
+	if s.config.ProjectContext != nil {
+		ctx, e := s.config.ProjectContext(r.Context(), principal.Project)
+		if e != nil {
+			s.plain(w, 503, "Canonical project is temporarily unavailable")
+			return
+		}
+		r = r.WithContext(ctx)
+	}
 	revision, err := s.store.Revision(r.Context(), principal.Project.ID)
 	if err != nil {
 		s.plain(w, 503, "Catalog revision unavailable")
@@ -266,7 +275,7 @@ func (s *Service) allowOrigin(w http.ResponseWriter, r *http.Request) bool {
 		if strings.EqualFold(origin, allowed) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Expose-Headers", "WWW-Authenticate, X-MCP-Catalog-Revision, MCP-Session-Id")
+			w.Header().Set("Access-Control-Expose-Headers", "WWW-Authenticate, X-MCP-Catalog-Revision, MCP-Session-Id, X-Myctx-Telemetry-Publication")
 			w.Header().Add("Vary", "Origin")
 			return true
 		}
@@ -390,14 +399,10 @@ func (s *Service) rpc(w http.ResponseWriter, r *http.Request, principal Principa
 	}
 	if code != 0 {
 		status = rpcStatus(code)
-		s.rpcError(w, request.ID, code, message)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(encodedResponse)
 	}
-	// Persist observations before returning; unawaited tasks are unsafe on Functions.
+	var telemetryErr error
 	if snapshot.Settings.TelemetryEnabled && len(observations) > 0 {
-		_ = s.store.Record(r.Context(), snapshot.ProjectID, principal.ClientIdentity, observations)
+		telemetryErr = s.store.Record(r.Context(), snapshot.ProjectID, principal.ClientIdentity, observations)
 	}
 	kind, key := "", ""
 	switch request.Method {
@@ -411,7 +416,18 @@ func (s *Service) rpc(w http.ResponseWriter, r *http.Request, principal Principa
 		kind = "prompt"
 		key = params.Name
 	}
-	_ = s.store.Log(r.Context(), RequestLog{ProjectID: snapshot.ProjectID, ReleaseID: snapshot.ReleaseID, ClientIdentity: principal.ClientIdentity, Method: request.Method, LatencyMS: time.Since(start).Milliseconds(), Status: status, ErrorCode: code, ErrorMessage: message, CapabilityKind: kind, CapabilityKey: key})
+	if telemetryErr == nil || s.telemetryPublication(r.Context(), telemetryErr) == "" {
+		telemetryErr = s.store.Log(r.Context(), RequestLog{ProjectID: snapshot.ProjectID, ReleaseID: snapshot.ReleaseID, ClientIdentity: principal.ClientIdentity, Method: request.Method, LatencyMS: time.Since(start).Milliseconds(), Status: status, ErrorCode: code, ErrorMessage: message, CapabilityKind: kind, CapabilityKey: key})
+	}
+	if publication := s.telemetryPublication(r.Context(), telemetryErr); publication != "" {
+		w.Header().Set("X-Myctx-Telemetry-Publication", publication)
+	}
+	if code != 0 {
+		s.rpcError(w, request.ID, code, message)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(encodedResponse)
+	}
 }
 func validID(raw json.RawMessage) bool {
 	if len(raw) == 0 {

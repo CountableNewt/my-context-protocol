@@ -7,11 +7,13 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe("XRPC gateway", () => {
   it("routes only generated methods and never forwards browser credentials or injected hosts", async () => {
     vi.stubEnv("CONTROL_SERVICE_URL", "https://control.internal");
-    const fetcher = vi.fn().mockResolvedValue(new Response('{"projects":[]}', { status: 200, headers: { "content-type": "application/json" } }));
+    const fetcher = vi.fn().mockResolvedValue(new Response('{"projects":[]}', { status: 200, headers: { "content-type": "application/json", "x-myctx-telemetry-publication": "pending" } }));
     vi.stubGlobal("fetch", fetcher);
     const request = new NextRequest("https://app.example/xrpc/dev.mycontextprotocol.project.listProjects", { headers: { authorization: "Bearer signed", cookie: "secret", "x-forwarded-host": "attacker.example" } });
     const response = await GET(request, { params: Promise.resolve({ method: "dev.mycontextprotocol.project.listProjects" }) });
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-myctx-telemetry-publication")).toBe("pending");
+    expect(response.headers.get("access-control-expose-headers")).toContain("x-myctx-telemetry-publication");
     const [url, init] = fetcher.mock.calls[0];
     expect(String(url)).toBe("https://control.internal/xrpc/dev.mycontextprotocol.project.listProjects");
     expect(init.headers.get("authorization")).toBe("Bearer signed");

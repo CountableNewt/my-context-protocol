@@ -56,6 +56,24 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 		}
 		return nil, 0, missing("Not found")
 	}
+	// Reconciliation must remain available while an audit blocks normal reads.
+	// Complete the owner repair audit before resuming any durable native intent.
+	if len(parts) == 1 && parts[0] == "reconcile" && r.Method == "POST" {
+		err := s.cfg.Records.WithEngine(r.Context(), account, func(ctx context.Context, owner string, e *domainrecords.Engine) error {
+			return e.Audit(ctx, account, owner, project)
+		})
+		if err == nil {
+			err = s.cfg.Records.Reconcile(r.Context(), account, project)
+		}
+		var pending *domainrecords.PendingError
+		if errors.As(err, &pending) {
+			return row{"status": "pending"}, 202, nil
+		}
+		if err != nil {
+			return nil, 0, recordError(err)
+		}
+		return row{"status": "complete"}, 200, nil
+	}
 	ctx, err := s.cfg.Records.Scope(r.Context(), account, project)
 	if err != nil {
 		return nil, 0, recordError(err)
@@ -64,13 +82,7 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 	var result any
 	status := 200
 	err = s.cfg.Records.WithEngine(r.Context(), account, func(ctx context.Context, owner string, e *domainrecords.Engine) error {
-		if len(parts) == 1 && parts[0] == "reconcile" && r.Method == "POST" {
-			if err := e.Reconcile(ctx, account, owner, project); err != nil {
-				return err
-			}
-			result = row{"status": "complete"}
-			return nil
-		}
+
 		if len(parts) != 1 || parts[0] != "publication" {
 			return missing("Not found")
 		}
@@ -132,6 +144,9 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 func recordError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, domainrecords.ErrAuditInvalid) {
+		return apiError{503, "Canonical records are missing or invalid; repair owner records and reconcile"}
 	}
 	if errors.Is(err, domainrecords.ErrConsent) {
 		return apiError{409, "Review and explicitly authorize public data and telemetry publication"}

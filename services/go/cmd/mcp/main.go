@@ -10,10 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/atplatform"
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
 	"github.com/CountableNewt/my-context-protocol/services/go/mcp"
 	"github.com/CountableNewt/my-context-protocol/services/go/oauth"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpcauth"
 )
 
 func flag(key string) bool {
@@ -30,7 +32,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	store := mcp.SQLStore{DB: db}
+	platform, err := atplatform.New(db, os.Getenv)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var appDB mcp.Database = db
+	if platform != nil {
+		appDB = platform.DB
+	}
+	store := mcp.SQLStore{DB: appDB}
 	origins := identity.FrontendOriginsFromEnvironment(os.Getenv)
 	for _, part := range strings.Split(os.Getenv("MCP_ALLOWED_ORIGINS"), ",") {
 		if strings.TrimSpace(part) != "" {
@@ -54,6 +64,11 @@ func main() {
 		mcpPath = os.Getenv("MCP_PATH")
 	}
 	config := mcp.Config{Path: mcpPath, BaseDomain: os.Getenv("SAAS_MCP_BASE_DOMAIN"), RequireTenantHost: production || flag("REQUIRE_MCP_TENANT_HOST"), TrustForwardedHost: flag("MCP_TRUST_X_FORWARDED_HOST"), TrustVercelClientIP: os.Getenv("VERCEL") == "1", AllowedOrigins: origins, FrontendOrigin: frontend, OAuthEnabled: flag("MCP_OAUTH_ENABLED"), RateLimitPerMinute: limit}
+	if platform != nil {
+		config.ProjectContext = func(ctx context.Context, project mcp.Project) (context.Context, error) {
+			return platform.Records.Scope(ctx, project.AccountID, project.ID)
+		}
+	}
 	handler, err := mcp.New(config, store)
 	if err != nil {
 		log.Fatal(err)
@@ -110,7 +125,7 @@ func main() {
 			log.Fatal(e)
 		}
 	}
-	public := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var public http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if oauthHandler != nil && oauth.Handles(r.URL.Path) {
 			if allowed, e := handler.AllowIngress(r); e != nil {
 				http.Error(w, "Rate limiting unavailable", 503)
@@ -125,6 +140,17 @@ func main() {
 		}
 		handler.ServeHTTP(w, r)
 	})
+	verifier, err := xrpcauth.FromEnvironment(db, os.Getenv)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if verifier != nil {
+		rpc, e := handler.XRPCHandler(verifier)
+		if e != nil {
+			log.Fatal(e)
+		}
+		public = xrpcauth.Route(public, rpc)
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8082"

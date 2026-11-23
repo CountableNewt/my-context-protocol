@@ -1,82 +1,144 @@
-# ATProto contracts and delivery status
+# ATProto and Tangled integration
 
-`lexicons/operations.json` inventories current product and administrative operations,
-including MCP tool companions, owning services, authorization boundaries, and native
-protocol exceptions. Next.js `/api` endpoints are adapters over these operations.
-This inventory is manually reviewed against the imperative Go routers; checking it
-cannot automatically prove that a newly added conditional route has been inventoried.
+The dashboard and Swift CLI support ATProto OAuth alongside GitHub. Accounts use
+DIDs as identity; linking proves the existing session and a fresh ATProto grant.
+Handles and PDS locations are resolved again when sessions are used. Existing
+projects retain legacy storage until their owner explicitly reviews and publishes
+them. Connecting a private repository never grants public-publication consent.
 
-Each operation tracks **contract**, **runtime**, and **publication** independently.
-A draft contract does not mean its endpoint is served or its schema publicly resolves.
-Pending operations intentionally have no placeholder schema: an `unknown` payload
-would conceal contract work still required. Do not publish these experimental drafts
-as stable schemas before the typed interfaces and transport tests are reviewed.
+## Storage and repository behavior
 
-The initial typed schemas cover project CRUD/activation, selected admin operations,
-and logout. Project lists use an XRPC `{ projects: [...] }` envelope. Optional SQL
-null fields are omitted from XRPC views while REST retains its existing behavior.
-Admin lookup requires exactly one nonempty identifier, enforced by application logic
-because Lexicon cannot express that cross-field constraint. Published schemas and
-public routes never grant admin access by themselves.
+`services/go/domainrecords` defines 19 public record families under
+`dev.mycontextprotocol.data.*`. The public allowlist includes project configuration,
+repository identity, imported frontmatter, policy/runtime overrides, assignments,
+release provenance, validation, feedback and opted-in telemetry. It excludes source
+bodies, credentials, sessions, API-key verification, security state, leases and
+operational queues. Git remains authoritative for skill files. Source hydration
+verifies immutable revision, path and checksums before activating rebuilt releases.
+Unknown authored frontmatter survives import; generated instruction bodies stay
+private. Free-text metadata and feedback still require careful publication review.
 
-Run `python3 scripts/check-lexicons.py` for local structural, reference, inventory,
-and frontend route consistency checks. This checker is deliberately narrower than
-the official Lexicon validator; the implementation must also validate with a protocol
-SDK and run wire-parity tests before publication. Use `--require-complete` as the
-release gate: it currently fails because runtime, contracts, and publication remain
-in progress. Do not change readiness flags merely to pass this gate.
+Immutable version records and bounded reference shards precede a CID-conditional
+project manifest. That manifest is the visibility boundary. Native application SQL
+is evaluated in a rolled-back transaction, saved as a private mutation intent, and
+applied atomically with the canonical receipt only after PDS publication. Pending
+operations are explicit and resumable. Concurrent external changes require an owner
+review; superseded native intents are never silently replayed over external edits.
+Turso is the rebuildable projection and private operational store. Bounded audits
+check referenced records when the repository head changes, even if the project
+manifest is unchanged. Missing or invalid records block normal reads and mutations
+until an owner repairs the PDS records and completes explicit reconciliation.
 
-## Publication checklist
+Repository dispatch covers discovery, access, immutable revisions, bounded source
+fetching, change detection and metadata proposals. GitHub remains its own adapter.
+Tangled uses pinned upstream Lexicons, authenticated Bobbin private reads, repository
+DIDs, authenticated Git writes and attested proposals. Repository names, knot/Bobbin
+locations and handles are mutable resolution data. See
+[the Tangled adapter](../../services/go/tangled/README.md) for the pinned upstream
+revision, capability constraints and bounds. There is no perpetual hosted worker.
 
-Selected authority and hosted acceptance account: `samclemente.me`,
-`did:plc:qy5pluw2bsuq2x6albsgkvx3`. DNS handle resolution and the DID document's
-`alsoKnownAs` were verified on 2026-11-22; its current PDS is
-`https://northsky.social`. Re-resolve identity and PDS before publication rather
-than treating this observed endpoint as permanent configuration. No authority
-session, publication credentials or DNS changes are implied by this selection.
+Public records can be replicated. PDS deletion and retention collection cannot
+recall copies already held elsewhere. Existing telemetry consent is separate from
+renewed consent to public telemetry. The storage interface does not assume Spaces
+capabilities; adopting Spaces requires its own capability review and migration.
 
-1. Finish typed contracts and generate client bindings; test every mapped operation.
-2. Publish reviewed JSON as `com.atproto.lexicon.schema` records with record keys equal
-   to the schema NSID, using a dedicated authority identity.
-3. Configure each group independently, for example
-   `_lexicon.project.mycontextprotocol.dev` for `dev.mycontextprotocol.project.*`.
-   The TXT value is `did=<authority DID>`; no namespace hierarchy fallback applies.
-4. Publish permission-set Lexicons only after the implemented scopes are verified.
-5. Resolve every NSID through public DNS and retrieve its authority record, checking
-   the schema and CID against the release artifact. Record this evidence before
-   marking `publication: published`.
+## XRPC and schemas
 
-Credentials, key hashes, OAuth state, and admin flags are private infrastructure
-state. XRPC operations managing them do not imply public PDS records containing them.
-Public record migration requires explicit account authorization and publication review.
+`lexicons/operations.json` inventories **61** product and administrative operations,
+their owning services, authorization and native protocol exceptions. Every operation
+has a typed query/procedure, generated TypeScript bindings and a service invoker.
+REST and XRPC invoke the same application operations. Admin contracts retain admin
+checks; project operations retain ownership checks even for administrators.
 
-## Implementation waypoints
+The **96** checked-in schemas include shared views, record families and capability
+permission sets. Permission sets inherit the selected deployment audience, stay
+within their namespace group and separate administrator operations. They do not
+grant account privileges merely by being published. Until public resolution is
+verified, OAuth uses explicit granular permissions rather than unresolved includes.
 
-- Repository sync dispatches native providers explicitly and fails before claiming
-  work when one is unavailable. GitHub account tokens, webhooks, installation
-  updates and metadata proposals stay within the GitHub adapter.
-- `services/go/atidentity` supplies the pinned official OAuth SDK client, hardened
-  discovery, encrypted durable state, callback replay protection and PDS executor.
-  Login, account linking, CLI handoffs and distributed refresh leases remain open.
-- `services/go/atproto` supplies CID-conditional PDS writes and a SQL intent journal
-  with owner-scoped bounded recovery. Domain record schemas, consent, projections,
-  deletion and account migration are not connected to product writes yet.
-- `services/go/xrpc` supplies reviewed draft transport contracts and a verifier /
-  application-invoker boundary. It never derives permissions from browser cookies
-  or unverified JWT claims. Production mounting requires a real scoped verifier.
+`/xrpc/{nsid}` dispatches through the existing Vercel services. External clients use
+short-lived, exact-method PDS-issued service-auth JWTs for the deployment's DID
+service reference. Browser cookies, Origin headers and raw PDS OAuth access tokens
+are not API authorization. Mutation tokens are replay-protected. The Next gateway
+uses generated destinations, omits cookies, bounds procedure bodies and supports
+credential-free CORS preflight. Tenant MCP operations still require the actual
+mapped tenant host and a valid tenant credential.
 
-Schema additions `006_atproto_private_oauth` and
-`007_atproto_publication_intents` are registered in explicit migration tooling.
-They are not applied at service startup. The pinned SDK requires Go 1.26 or newer;
-CI reads the required toolchain version from `services/go/go.mod`.
+OAuth protocol routes, MCP transport, provider webhooks, health checks and internal
+maintenance keep their native transports. The operation manifest explains these
+exceptions and maps underlying product operations to XRPC where applicable.
 
-No existing product data has been publicly migrated, no schema is claimed as
-published, and no production traffic should switch based on these foundations.
-Full acceptance still requires Tangled private access and proposal parity, all
-55 operation contracts and adapters, account publication consent, canonical
-domain projections, migration rehearsals, generated clients, public DNS/schema
-resolution, and Chrome/tenant-host acceptance.
+```sh
+python3 scripts/generate-xrpc.py --check
+python3 scripts/check-lexicons.py
+python3 scripts/check-lexicons_test.py
+cd services/go
+go run ./cmd/lexicon --dry-run --directory ../../lexicons \
+  --expected-authority did:plc:qy5pluw2bsuq2x6albsgkvx3
+```
 
-References: [Lexicon specification](https://atproto.com/specs/lexicon),
-[OAuth specification](https://atproto.com/specs/oauth), and
-[XRPC specification](https://atproto.com/specs/xrpc).
+The publisher validates the complete schema catalog with the pinned official SDK,
+checks compatibility before writing, journals CID-conditional schema publication,
+and independently verifies DNS, current DID/PDS and exact record CIDs. Official
+`com.atproto.repo.strongRef` is embedded only as a validation dependency. CI also compares record and RPC schemas against the checked-in initial contract
+baseline. Keep that baseline as history; breaking changes require a new NSID.
+Permission sets have separate consent-policy review because their grants may
+evolve within their authority namespace. Product
+schemas are published as `com.atproto.lexicon.schema` records keyed by their NSID.
+
+The chosen authority and hosted acceptance account is `samclemente.me`,
+`did:plc:qy5pluw2bsuq2x6albsgkvx3`. Its observed PDS was `https://northsky.social`
+on 2026-11-22; resolve it again before use. The dry run emits the complete DNS
+manifest: each group requires its own `_lexicon.<group>.mycontextprotocol.dev` TXT
+record with `did=did:plc:qy5pluw2bsuq2x6albsgkvx3`. There is no parent fallback.
+
+After an explicitly linked authority grant, run `cmd/lexicon --publish --account
+<uuid> --expected-authority <did>` and then `--verify` with the same reviewed
+schema directory. Only independently verified public receipts justify changing
+operation publication status. `scripts/check-lexicons.py --require-complete` is
+the rollout gate; it intentionally fails while public publication is pending.
+
+## Explicit migration and recovery
+
+Service startup never migrates the database. `cmd/migrate` registers migrations
+through `016_tangled_attestation_intents`, including the guarded nullable-GitHub
+account rebuild. Pause and drain writers, retain a verified private current-schema
+snapshot, apply explicitly, and verify the schema before enabling the feature.
+Production and preview credentials and data must remain isolated.
+
+`cmd/records` defaults to a dry-run inventory. Its private review file contains the
+exact digest, warnings and stable legacy IDs. Publication requires the linked
+account, project, reviewed digest and explicit public consent; telemetry needs its
+own consent. Bounded pending runs resume with the same review. Read-only
+verification compares validated owner records against the local public projection.
+See [operator commands](../../services/go/cmd/records/README.md).
+
+Current recovery uses `cmd/import export-remote --current-schema` after writers
+are paused. Legacy Swift-shaped export refuses the nullable account schema or
+ATProto state rather than silently losing identities and publication intents.
+Restore rehearsal must compare typed values, projects, provenance, active releases
+and telemetry attribution before switching reads. Preserve OAuth encryption and
+signing material privately. Rollback after cutover must reconcile records written
+since the snapshot; restoring SQL alone cannot undo PDS writes.
+
+## Rollout evidence and remaining gates
+
+Implementation is feature-gated; no hosted schema migration, account-data
+publication, namespace DNS changes or production read cutover has been performed
+by this implementation session. Local deterministic tests cover interrupted
+publication, concurrency, lost acknowledgements, retention, external edits,
+projection reconstruction, source hydration, owner isolation and transport parity.
+The repository's required **Test and build** check remains unchanged.
+
+Hosted acceptance remains required: Chrome dashboard and CLI OAuth/linking,
+expiry/revocation/handle/PDS changes, actual Tangled public/private repositories and
+metadata proposals, public DNS-backed schema resolution, generated-client calls,
+and mapped tenant-host MCP. In this environment Chrome DevTools reported an
+existing-profile conflict and native Chrome control timed out; these attempts do
+not establish browser acceptance. Vercel withholds the preview Turso token marked
+Sensitive, so the explicit hosted migration has not run. Linear and the custom
+MyContextProtocol endpoint were not available in the connected tool inventory.
+
+References: [Lexicon](https://atproto.com/specs/lexicon),
+[OAuth](https://atproto.com/specs/oauth), [XRPC](https://atproto.com/specs/xrpc),
+[permissions](https://atproto.com/specs/permission).

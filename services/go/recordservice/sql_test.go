@@ -112,7 +112,7 @@ func (f *sqlFixture) ctx(t *testing.T) context.Context {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return context.WithValue(context.Background(), scopeKey{}, scope{service: f.service, account: "account", project: "project", owner: testOwner, cid: cell(r.Rows[0][0]), digest: cell(r.Rows[0][1]), telemetry: true})
+	return context.WithValue(context.Background(), scopeKey{}, scope{progress: &scopeProgress{cid: cell(r.Rows[0][0]), digest: cell(r.Rows[0][1])}, service: f.service, account: "account", project: "project", owner: testOwner, cid: cell(r.Rows[0][0]), digest: cell(r.Rows[0][1]), telemetry: true})
 }
 func (f *sqlFixture) value(t *testing.T, query string) string {
 	t.Helper()
@@ -362,5 +362,64 @@ func TestPrivateEffectGuardsPreserveNativeChangesFunction(t *testing.T) {
 				t.Fatal("guard changed native changes() semantics", row, err)
 			}
 		})
+	}
+}
+
+func TestRequestScopeAdvancesOnlyItsOwnConfirmedPublications(t *testing.T) {
+	f := fixtureSQL(t, false)
+	ctx := f.ctx(t)
+	for _, name := range []string{"First", "Second"} {
+		if _, err := f.bridge.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name=? WHERE id='project'", Args: []turso.Value{turso.Text(name)}}); err != nil {
+			t.Fatal("sequential request mutation failed", err)
+		}
+	}
+	if f.value(t, "SELECT name FROM projects WHERE id='project'") != "Second" {
+		t.Fatal("missing own second mutation")
+	}
+	if _, err := f.engine.Update(context.Background(), "account", testOwner, "project", []domainrecords.Change{{Table: "projects", ID: "project", Values: map[string]turso.Value{"name": turso.Text("External")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.bridge.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name='Overwrite' WHERE id='project'"}); !errors.Is(err, domainrecords.ErrChanged) {
+		t.Fatal("silently rebased external mutation", err)
+	}
+}
+func TestConcurrentWritesShareRequestScopeSafely(t *testing.T) {
+	f := fixtureSQL(t, false)
+	ctx := f.ctx(t)
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for _, name := range []string{"One", "Two"} {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_, err := f.bridge.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name=? WHERE id='project'", Args: []turso.Value{turso.Text(name)}})
+			errs <- err
+		}(name)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestOwnCommittedMutationSucceedsWhenLaterWriterWinsBeforeReturn(t *testing.T) {
+	f := fixtureSQL(t, false)
+	ctx := f.ctx(t)
+	run := f.bridge.runIntent
+	f.bridge.runIntent = func(ctx context.Context, intent nativeIntent) error {
+		if err := run(ctx, intent); err != nil {
+			return err
+		}
+		_, err := f.engine.Update(context.Background(), "account", testOwner, "project", []domainrecords.Change{{Table: "projects", ID: "project", Values: map[string]turso.Value{"name": turso.Text("Later writer")}}})
+		return err
+	}
+	if _, err := f.bridge.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name='Own committed command' WHERE id='project'"}); err != nil {
+		t.Fatal("already committed operation falsely failed", err)
+	}
+	if _, err := f.bridge.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name='Silent rebase' WHERE id='project'"}); !errors.Is(err, domainrecords.ErrChanged) {
+		t.Fatal("adopted later generation", err)
 	}
 }

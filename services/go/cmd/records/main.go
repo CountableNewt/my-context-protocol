@@ -202,6 +202,11 @@ func (s platformOperations) Publish(ctx context.Context, account string, review 
 	return
 }
 func (s platformOperations) Reconcile(ctx context.Context, account, project string) error {
+	if err := s.p.Records.WithEngine(ctx, account, func(ctx context.Context, owner string, e *domainrecords.Engine) error {
+		return e.Audit(ctx, account, owner, project)
+	}); err != nil {
+		return err
+	}
 	return s.p.Records.Reconcile(ctx, account, project)
 }
 func (s platformOperations) Verify(ctx context.Context, account, project string) (review domainrecords.Review, err error) {

@@ -34,8 +34,9 @@ type Input struct {
 }
 
 type Result struct {
-	Value  any
-	Status int
+	TelemetryPublication string
+	Value                any
+	Status               int
 }
 
 // Invoker must perform current account, tenant and resource ownership checks,
@@ -101,7 +102,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// XRPC accepts explicit API credentials and never ambient browser cookies.
 	// Public CORS permits third-party clients without credentialed cookie access.
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Retry-After, WWW-Authenticate")
+	w.Header().Set("Access-Control-Expose-Headers", "Retry-After, WWW-Authenticate, X-Myctx-Telemetry-Publication")
 	op, ok := lookup(r.URL.Path)
 	if !ok || r.URL.EscapedPath() != r.URL.Path {
 		failure(w, 404, "NotFound", "Unknown XRPC method")
@@ -150,6 +151,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.config.Invoker.Invoke(r.Context(), principal, op, input)
+	if result.TelemetryPublication == "pending" || result.TelemetryPublication == "failed" {
+		w.Header().Set("X-Myctx-Telemetry-Publication", result.TelemetryPublication)
+	}
 	if err != nil {
 		var public *Error
 		if errors.As(err, &public) && allowedError(public) {

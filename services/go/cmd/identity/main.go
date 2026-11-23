@@ -17,6 +17,8 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/oauth"
 	"github.com/CountableNewt/my-context-protocol/services/go/security"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpc"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpcauth"
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
@@ -135,6 +137,28 @@ func main() {
 		}
 	}
 	handler := newIdentityRouter(login, github, authorization)
+	verifier, err := xrpcauth.FromEnvironment(db, os.Getenv)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if verifier != nil {
+		accountRPC, e := login.XRPCHandler(verifier)
+		if e != nil {
+			log.Fatal(e)
+		}
+		repositoryRPC, e := github.XRPCHandler(verifier)
+		if e != nil {
+			log.Fatal(e)
+		}
+		handler = xrpcauth.Route(handler, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			operation, ok := xrpc.Lookup(strings.TrimPrefix(r.URL.Path, "/xrpc/"))
+			if ok && operation.Service == "githubapp" {
+				repositoryRPC.ServeHTTP(w, r)
+				return
+			}
+			accountRPC.ServeHTTP(w, r)
+		}))
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"

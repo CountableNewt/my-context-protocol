@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/atproto"
@@ -26,7 +27,12 @@ CREATE TABLE domain_maintenance_visits(project_id TEXT PRIMARY KEY,last_attempt 
 const maxNativeStatements = 110
 
 type scopeKey struct{}
+type scopeProgress struct {
+	mu          sync.Mutex
+	cid, digest string
+}
 type scope struct {
+	progress                             *scopeProgress
 	service                              *Service
 	account, project, cid, owner, digest string
 	telemetry                            bool
@@ -38,6 +44,11 @@ func (s *Service) Scope(ctx context.Context, account, project string) (context.C
 	canonical, err := s.IsCanonical(ctx, account, project)
 	if err != nil || !canonical {
 		return ctx, err
+	}
+	if blocked, auditErr := (domainrecords.Engine{DB: s.DB}).AuditBlocked(ctx, account, project); auditErr != nil {
+		return ctx, auditErr
+	} else if blocked {
+		return ctx, domainrecords.ErrAuditInvalid
 	}
 	if err = s.resumeNative(ctx, account, project); err != nil {
 		return ctx, err
@@ -55,7 +66,7 @@ func (s *Service) Scope(ctx context.Context, account, project string) (context.C
 	if cell(r.Rows[0][4]) != "1" {
 		return ctx, domainrecords.ErrHydrationRequired
 	}
-	return context.WithValue(ctx, scopeKey{}, scope{service: s, account: account, project: project, cid: cell(r.Rows[0][0]), owner: cell(r.Rows[0][1]), digest: cell(r.Rows[0][2]), telemetry: cell(r.Rows[0][3]) == "1"}), nil
+	return context.WithValue(ctx, scopeKey{}, scope{progress: &scopeProgress{cid: cell(r.Rows[0][0]), digest: cell(r.Rows[0][2])}, service: s, account: account, project: project, cid: cell(r.Rows[0][0]), owner: cell(r.Rows[0][1]), digest: cell(r.Rows[0][2]), telemetry: cell(r.Rows[0][3]) == "1"}), nil
 }
 
 // SQLProjection uses SQLite's rollback evaluation, never an expression
@@ -112,6 +123,12 @@ func (d *SQLProjection) Batch(ctx context.Context, statements []turso.Statement)
 	}
 	if !public {
 		return d.Raw.Batch(ctx, statements)
+	}
+	if sc.progress != nil {
+		sc.progress.mu.Lock()
+		defer sc.progress.mu.Unlock()
+		sc.cid = sc.progress.cid
+		sc.digest = sc.progress.digest
 	}
 	if len(statements) == 0 || len(statements) > maxNativeStatements {
 		return nil, errors.New("canonical native batch exceeds 110 commands")
@@ -248,6 +265,17 @@ func (d *SQLProjection) Batch(ctx context.Context, statements []turso.Statement)
 	}
 	if complete.State != "complete" {
 		return nil, errors.New("native canonical receipt is incomplete")
+	}
+	if sc.progress != nil {
+		// The completed intent is the atomic receipt for this command. Reading
+		// today's project receipt here could see a later writer and falsely
+		// report our already committed mutation as failed. Never adopt that
+		// later generation; the next command must detect it as a conflict.
+		if complete.TargetCID == "" || complete.TargetDigest != intent.TargetDigest {
+			return nil, errors.New("invalid completed native receipt")
+		}
+		sc.progress.cid = complete.TargetCID
+		sc.progress.digest = complete.TargetDigest
 	}
 	return outputs, nil
 }
@@ -716,4 +744,13 @@ func publicStateGuards(intent nativeIntent, token string) ([]turso.Statement, er
 		out = append(out, turso.Statement{SQL: "INSERT INTO domain_projection_guards(token,valid) SELECT ?,CASE WHEN NOT EXISTS(SELECT 1 FROM json_each(?) expected WHERE NOT(" + condition + ")) THEN 1 ELSE 0 END", Args: []turso.Value{turso.Text(token + ":" + definition.Table), turso.Text(string(encoded))}})
 	}
 	return out, nil
+}
+
+// TelemetryPublicationAllowed separates public-record consent from runtime opt-in.
+// Unscoped legacy operations retain their existing private telemetry behavior.
+func (d *SQLProjection) TelemetryPublicationAllowed(ctx context.Context) bool {
+	if !d.CanonicalScope(ctx) {
+		return true
+	}
+	return ctx.Value(scopeKey{}).(scope).telemetry
 }

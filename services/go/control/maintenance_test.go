@@ -230,9 +230,15 @@ func TestMaintenanceCleanupTransactionRollsBackOnSchemaFailure(t *testing.T) {
 	}
 }
 
-func TestCanonicalMaintenancePreservesPublicTelemetryAndPendingSync(t *testing.T) {
+func canonicalMaintenanceFixture(t *testing.T) *Service {
 	s := maintenanceFixture(t)
 	for _, sql := range []string{
+		"CREATE TABLE atproto_oauth_requests(state_hash TEXT PRIMARY KEY,expires_at INTEGER)",
+		"CREATE TABLE atproto_login_flows(state_hash TEXT PRIMARY KEY,expires_at INTEGER)",
+		"CREATE TABLE atproto_xrpc_replays(token_hash TEXT PRIMARY KEY,expires_at INTEGER)",
+		"CREATE TABLE atproto_session_leases(did TEXT,session_hash TEXT,lease_until INTEGER)",
+		"CREATE TABLE provider_operation_locks(project_id TEXT PRIMARY KEY,lease_until INTEGER)",
+		"CREATE TABLE atproto_metadata_proposals(project_id TEXT,status TEXT)",
 		"CREATE TABLE domain_canonical_projects(project_id TEXT PRIMARY KEY)",
 		"CREATE TABLE domain_native_intents(project_id TEXT,status TEXT)",
 		"CREATE TABLE sync_publication_plans(project_id TEXT,job_id TEXT,state TEXT)",
@@ -241,6 +247,11 @@ func TestCanonicalMaintenancePreservesPublicTelemetryAndPendingSync(t *testing.T
 		mustExec(t, s, sql)
 	}
 	s.cfg.CanonicalMaintenance = true
+	return s
+}
+
+func TestCanonicalMaintenancePreservesPublicTelemetryAndPendingSync(t *testing.T) {
+	s := canonicalMaintenanceFixture(t)
 	// Use existing fixture project ID rather than assuming a production identity.
 	p, e := s.one(context.Background(), "SELECT id FROM projects ORDER BY id LIMIT 1")
 	if e != nil {
@@ -275,5 +286,44 @@ func TestCanonicalMaintenancePreservesPublicTelemetryAndPendingSync(t *testing.T
 	r, e := s.one(context.Background(), "SELECT COUNT(*) AS count FROM skill_runtime_events WHERE id='canonical-retained'")
 	if e != nil || num(r["count"]) != 1 {
 		t.Fatal("canonical telemetry deleted outside PDS", e)
+	}
+}
+
+func TestCanonicalOperationalCleanupExpiresOnlySafeBoundedState(t *testing.T) {
+	s := canonicalMaintenanceFixture(t)
+	s.cfg.MaintenanceRows = 1
+	now := s.now().Unix()
+	for _, table := range []string{"atproto_oauth_requests", "atproto_login_flows", "atproto_xrpc_replays"} {
+		key := "state_hash"
+		if table == "atproto_xrpc_replays" {
+			key = "token_hash"
+		}
+		mustExec(t, s, "INSERT INTO "+table+"("+key+",expires_at) VALUES('old',?),('boundary',?),('live',?)", now-1, now, now+1)
+	}
+	mustExec(t, s, "INSERT INTO atproto_session_leases(did,session_hash,lease_until) VALUES('old','old',?),('grace','grace',?),('live','live',?)", now-301, now-1, now+60)
+	mustExec(t, s, "INSERT INTO provider_operation_locks(project_id,lease_until) VALUES('uncertain',1),('pending',1),('retired',1),('live',?)", now+60)
+	mustExec(t, s, "INSERT INTO atproto_metadata_proposals(project_id,status) VALUES('uncertain','proposal_started'),('retired','complete')")
+	mustExec(t, s, "INSERT INTO domain_native_intents(project_id,status) VALUES('pending','pending')")
+	if _, err := s.runMaintenance(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"atproto_oauth_requests", "atproto_login_flows", "atproto_xrpc_replays", "atproto_session_leases"} {
+		if tableCount(t, s, table) != 2 {
+			t.Fatal("unbounded or unsafe expired cleanup", table)
+		}
+	}
+	if tableCount(t, s, "provider_operation_locks") != 3 || tableCount(t, s, "atproto_metadata_proposals") != 2 || tableCount(t, s, "domain_native_intents") != 1 {
+		t.Fatal("discarded live lease or durable uncertain/pending state")
+	}
+	if _, err := s.runMaintenance(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"atproto_oauth_requests", "atproto_login_flows", "atproto_xrpc_replays"} {
+		if tableCount(t, s, table) != 1 {
+			t.Fatal("expired boundary not cleaned", table)
+		}
+	}
+	if tableCount(t, s, "atproto_session_leases") != 2 || tableCount(t, s, "provider_operation_locks") != 3 {
+		t.Fatal("cleanup invalidated grace/live or pending lease")
 	}
 }

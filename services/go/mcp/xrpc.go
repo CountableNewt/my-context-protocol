@@ -69,7 +69,9 @@ func mcpXRPCFailure(w http.ResponseWriter, status int, code, message string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "message": message})
 }
 
-func (s *Service) invokeXRPC(ctx context.Context, verified xrpc.Principal, op xrpc.Operation, input xrpc.Input) (xrpc.Result, error) {
+func (s *Service) invokeXRPC(ctx context.Context, verified xrpc.Principal, op xrpc.Operation, input xrpc.Input) (out xrpc.Result, outErr error) {
+	telemetryStatus := ""
+	defer func() { out.TelemetryPublication = telemetryStatus }()
 	if op.Service != "mcp" {
 		return xrpc.Result{}, &xrpc.Error{Status: 404, Code: "NotFound", Message: "Unknown agent operation"}
 	}
@@ -129,12 +131,19 @@ func (s *Service) invokeXRPC(ctx context.Context, verified xrpc.Principal, op xr
 	if code != 0 {
 		status = rpcStatus(code)
 	}
+	var telemetryErr error
+	var observationErr error
 	if snapshot.Settings.TelemetryEnabled && len(observations) > 0 {
-		if err := s.store.Record(ctx, snapshot.ProjectID, principal.ClientIdentity, observations); err != nil {
-			return xrpc.Result{}, err
-		}
+		telemetryErr = s.store.Record(ctx, snapshot.ProjectID, principal.ClientIdentity, observations)
+		observationErr = telemetryErr
 	}
-	_ = s.store.Log(ctx, RequestLog{ProjectID: snapshot.ProjectID, ReleaseID: snapshot.ReleaseID, ClientIdentity: principal.ClientIdentity, Method: method, LatencyMS: time.Since(start).Milliseconds(), Status: status, ErrorCode: code, ErrorMessage: message})
+	if telemetryErr == nil {
+		telemetryErr = s.store.Log(ctx, RequestLog{ProjectID: snapshot.ProjectID, ReleaseID: snapshot.ReleaseID, ClientIdentity: principal.ClientIdentity, Method: method, LatencyMS: time.Since(start).Milliseconds(), Status: status, ErrorCode: code, ErrorMessage: message})
+	}
+	telemetryStatus = s.telemetryPublication(ctx, telemetryErr)
+	if observationErr != nil && telemetryStatus == "" {
+		return xrpc.Result{}, observationErr
+	}
 	if code != 0 {
 		if code == -32602 {
 			return xrpc.Result{}, &xrpc.Error{Status: 400, Code: "InvalidRequest", Message: message}

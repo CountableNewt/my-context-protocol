@@ -6,7 +6,7 @@ const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
   "access-control-allow-headers": "authorization, dpop, content-type",
-  "access-control-expose-headers": "www-authenticate, retry-after, dpop-nonce",
+  "access-control-expose-headers": "www-authenticate, retry-after, dpop-nonce, x-myctx-telemetry-publication",
 };
 
 export function OPTIONS() {
@@ -64,7 +64,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ method: 
       return NextResponse.json({ error: "ServiceUnavailable", message: "Unexpected XRPC redirect" }, { status: 502, headers: corsHeaders });
     }
     const responseHeaders = new Headers({ ...corsHeaders, "cache-control": "private, no-store" });
-    for (const name of ["content-type", "www-authenticate", "retry-after", "dpop-nonce"]) {
+    for (const name of ["content-type", "www-authenticate", "retry-after", "dpop-nonce", "x-myctx-telemetry-publication"]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }

@@ -193,7 +193,14 @@ func TestEveryProjectXRPCOperationRetainsOwnerIsolation(t *testing.T) {
 			if op.Method == "GET" {
 				input = ""
 			}
-			expectStatus(t, apiCall(t, s, op.Method, method, input), 404)
+			xrpcDenied := apiCall(t, s, op.Method, method, input)
+			expectStatus(t, xrpcDenied, 404)
+			restPath, restBody := nativeOperationRequest(op, query, body)
+			restDenied := call(t, s, op.RESTMethod, restPath, otherCookie, restBody, "https://app.example.com")
+			expectStatus(t, restDenied, xrpcDenied.Code)
+			if object(t, restDenied)["error"] != object(t, xrpcDenied)["message"] {
+				t.Fatal("transport owner denials differ", restDenied.Body.String(), xrpcDenied.Body.String())
+			}
 		})
 	}
 }
@@ -214,4 +221,118 @@ func TestXRPCKeyManagementAndTypedQueryParameters(t *testing.T) {
 	expectStatus(t, apiCall(t, s, "POST", "security.revokeKey", `{"project_id":"`+projectID+`","key_id":"`+id+`"}`), 204)
 	expectStatus(t, apiCall(t, s, "GET", "security.listKeys?project_id="+projectID+"&include_revoked=not-a-boolean", ""), 400)
 	expectStatus(t, apiCall(t, s, "GET", "analytics.getAccountTimeseries?range=24h", ""), 200)
+}
+
+// nativeOperationRequest maps only routing and transport encoding. It does not
+// reproduce application validation, authorization, or product behavior.
+func nativeOperationRequest(op xrpc.Operation, query url.Values, body map[string]any) (string, string) {
+	path := op.RESTPath
+	nativeBody := map[string]any{}
+	for k, v := range body {
+		nativeBody[k] = v
+	}
+	nativeQuery := url.Values{}
+	for k, values := range query {
+		nativeQuery[k] = append([]string(nil), values...)
+	}
+	for _, field := range []string{"project_id", "release_id", "skill_id", "key_id", "account_id"} {
+		placeholder := "{" + field + "}"
+		if !strings.Contains(path, placeholder) {
+			continue
+		}
+		value := nativeQuery.Get(field)
+		if v, ok := nativeBody[field].(string); ok {
+			value = v
+		}
+		if value == "" {
+			value = projectID
+		}
+		path = strings.ReplaceAll(path, placeholder, url.PathEscape(value))
+		delete(nativeBody, field)
+		nativeQuery.Del(field)
+	}
+	if len(nativeQuery) > 0 {
+		path += "?" + nativeQuery.Encode()
+	}
+	raw, _ := json.Marshal(nativeBody)
+	return path, string(raw)
+}
+
+func TestEveryAdminControlOperationRejectsCurrentNonAdminAcrossTransports(t *testing.T) {
+	// A stale credential still claiming admin must be denied by the shared
+	// application's current-account check, rather than only the XRPC scope gate.
+	p := principalFor(ownerID, true)
+	for _, op := range xrpc.Operations() {
+		p.Scopes[op.Scope()] = true
+	}
+	s := xrpcFixture(t, &p)
+	tested := 0
+	for _, op := range xrpc.Operations() {
+		if op.Service != "control" || !op.Admin {
+			continue
+		}
+		tested++
+		t.Run(op.NSID, func(t *testing.T) {
+			body := map[string]any{}
+			query := url.Values{}
+			for _, field := range op.Fields {
+				if !field.Required {
+					continue
+				}
+				value := any("value")
+				if strings.HasSuffix(field.Name, "_id") {
+					value = otherID
+				}
+				if field.Boolean {
+					value = true
+				}
+				if op.Method == "GET" {
+					query.Set(field.Name, value.(string))
+				} else {
+					body[field.Name] = value
+				}
+			}
+			method := strings.TrimPrefix(op.NSID, xrpc.Namespace)
+			if len(query) > 0 {
+				method += "?" + query.Encode()
+			}
+			raw, _ := json.Marshal(body)
+			input := string(raw)
+			if op.Method == "GET" {
+				input = ""
+			}
+			got := apiCall(t, s, op.Method, method, input)
+			expectStatus(t, got, 403)
+			path, nativeBody := nativeOperationRequest(op, query, body)
+			expectStatus(t, call(t, s, op.RESTMethod, path, ownerCookie, nativeBody, "https://app.example.com"), got.Code)
+		})
+	}
+	if tested == 0 {
+		t.Fatal("admin operation coverage is empty")
+	}
+}
+
+func TestEveryControlOperationRequiresAuthenticationAcrossTransports(t *testing.T) {
+	p := xrpc.Principal{}
+	s := xrpcFixture(t, &p)
+	tested := 0
+	for _, op := range xrpc.Operations() {
+		if op.Service != "control" {
+			continue
+		}
+		tested++
+		t.Run(op.NSID, func(t *testing.T) {
+			input := "{}"
+			if op.Method == "GET" {
+				input = ""
+			}
+			got := apiCall(t, s, op.Method, strings.TrimPrefix(op.NSID, xrpc.Namespace), input)
+			expectStatus(t, got, 401)
+			path, body := nativeOperationRequest(op, url.Values{}, map[string]any{})
+			expectStatus(t, call(t, s, op.RESTMethod, path, "", body, "https://app.example.com"), got.Code)
+		})
+	}
+	if tested == 0 {
+		t.Fatal("control operation coverage is empty")
+	}
 }
