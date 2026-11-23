@@ -283,3 +283,17 @@ func TestCompletedProposalRetriesUnpersistedMetadataLink(t *testing.T) {
 		t.Fatal("retry duplicated external work")
 	}
 }
+
+func TestRepositoryIdentityUsesBoundDIDAndRechecksLinkedActor(t *testing.T) {
+	h, _, _ := fixture(t)
+	id := connect(t, h)
+	connection := syncservice.Connection{ID: id, Provider: "tangled", Owner: "mutable-owner.example", Repository: "renamed-repo"}
+	got, err := h.RepositoryIdentity(context.Background(), connection)
+	if err != nil || got != nativeRepo {
+		t.Fatal("unstable native identity", got, err)
+	}
+	h.cfg.Identity = func(context.Context, string) (string, error) { return "did:plc:cccccccccccccccccccccccc", nil }
+	if _, err = h.RepositoryIdentity(context.Background(), connection); err == nil {
+		t.Fatal("provenance accepted stale linked actor")
+	}
+}

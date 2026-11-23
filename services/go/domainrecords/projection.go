@@ -97,6 +97,19 @@ func (e Engine) project(ctx context.Context, account string, review Review, cons
 					updates[len(updates)-1] = "canonical_json=CASE WHEN json_valid(compiled_skills.canonical_json) AND json_valid(excluded.canonical_json) AND COALESCE(compiled_skills.source_checksum,'')=COALESCE(excluded.source_checksum,'') AND json_extract(compiled_skills.canonical_json,'$.source')=json_extract(excluded.canonical_json,'$.source') AND compiled_skills.skill_body IS NOT NULL THEN json_set(excluded.canonical_json,'$.instructions',compiled_skills.skill_body) ELSE excluded.canonical_json END"
 				}
 			}
+			// Private authorization proofs are bound to the identity they verified.
+			// An owner edit to public metadata cannot transfer that proof.
+			if d.Table == "projects" {
+				for _, name := range []string{"custom_domain_verified_at", "custom_domain_verification_token"} {
+					updates = append(updates, name+"=CASE WHEN projects.custom_domain IS NOT excluded.custom_domain THEN NULL ELSE projects."+name+" END")
+				}
+			}
+			if d.Table == "repo_connections" {
+				changed := "repo_connections.provider IS NOT excluded.provider OR repo_connections.repo_owner IS NOT excluded.repo_owner OR repo_connections.repo_name IS NOT excluded.repo_name OR repo_connections.auth_type IS NOT excluded.auth_type"
+				for _, name := range []string{"token_ref", "token_encrypted", "github_installation_id", "webhook_id", "webhook_secret"} {
+					updates = append(updates, name+"=CASE WHEN "+changed+" THEN NULL ELSE repo_connections."+name+" END")
+				}
+			}
 			args := []turso.Value{}
 			if d.Table == "projects" {
 				args = append(args, turso.Text(account))

@@ -606,6 +606,19 @@ func (e Engine) Update(ctx context.Context, account, owner, project string, chan
 		return atproto.Reference{}, ErrChanged
 	}
 	if review.Digest == remote.Digest {
+		// A native command may update private authorization state or return rows
+		// without changing any public record. Its durable SQL receipt must still
+		// complete, bound to the unchanged canonical manifest.
+		if e.NativeProjection != nil {
+			if e.BeforePublish != nil {
+				if err := e.BeforePublish(ctx, review); err != nil {
+					return atproto.Reference{}, err
+				}
+			}
+			if err := e.project(ctx, account, review, consent, prior); err != nil {
+				return atproto.Reference{}, err
+			}
+		}
 		return prior, nil
 	}
 	return e.publish(ctx, account, review, consent, prior, nil)

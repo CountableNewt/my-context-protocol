@@ -63,6 +63,12 @@ type Fetcher interface {
 type RepositoryProvider interface {
 	FetchRepository(context.Context, Connection) (reposync.Outcome, error)
 }
+
+// RepositoryIdentityResolver supplies stable provider-native provenance separately
+// from mutable display names and service locations.
+type RepositoryIdentityResolver interface {
+	RepositoryIdentity(context.Context, Connection) (string, error)
+}
 type RepositoryCommitResolver interface {
 	ResolveRepositoryCommit(context.Context, Connection) (string, error)
 }
@@ -171,6 +177,16 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 		connection.AccountEncryptedToken = ""
 		connection.InstallationID = ""
 		connection.WebhookSecret = ""
+	}
+	repositoryIdentity := connection.Owner + "/" + connection.Repository
+	if resolver, ok := adapter.(RepositoryIdentityResolver); ok {
+		repositoryIdentity, err = resolver.RepositoryIdentity(ctx, connection)
+		if err != nil {
+			return job, err
+		}
+		if strings.TrimSpace(repositoryIdentity) == "" {
+			return job, ErrInvalid
+		}
 	}
 	if resumeReservation {
 		job = reserved
@@ -326,7 +342,7 @@ func (s *Service) Run(ctx context.Context, projectID, key string) (job Job, err 
 				return job, err
 			}
 		}
-		c, e := compiler.CompileWithOverride(skill, connection.Owner+"/"+connection.Repository, revision, policy, override)
+		c, e := compiler.CompileWithOverride(skill, repositoryIdentity, revision, policy, override)
 		if e != nil {
 			return job, e
 		}

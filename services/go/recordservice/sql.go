@@ -616,7 +616,7 @@ func executeNative(ctx context.Context, db Database, e *domainrecords.Engine, ow
 		return nil
 	}
 	e.NativeProjection = nativeProjection(db, intent)
-	ref, err := e.Update(ctx, intent.Account, owner, intent.Project, intent.Changes)
+	_, err := e.Update(ctx, intent.Account, owner, intent.Project, intent.Changes)
 	if err != nil {
 		return err
 	}
@@ -626,20 +626,6 @@ func executeNative(ctx context.Context, db Database, e *domainrecords.Engine, ow
 	}
 	if current.State == "complete" {
 		return nil
-	}
-	// A private-column-only change still passes the canonical barrier, but needs
-	// no new manifest. Commit its original SQL against that unchanged receipt.
-	if intent.SourceDigest == intent.TargetDigest && ref.CID == intent.SourceCID {
-		review, err := e.Inventory(ctx, intent.Account, owner, intent.Project)
-		if err != nil {
-			return err
-		}
-		statements, _, err := e.NativeProjection(ctx, intent.Account, review, ref)
-		if err != nil {
-			return err
-		}
-		_, err = db.Batch(ctx, statements)
-		return err
 	}
 	return errors.New("canonical native projection was not confirmed")
 }

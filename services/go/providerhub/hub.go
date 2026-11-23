@@ -291,3 +291,19 @@ func (h *Hub) ListRepositories(ctx context.Context, account string) (map[string]
 	}
 	return map[string]any{"provider": "tangled", "repositories": page.Repositories, "cursor": page.Cursor, "private_repository_selection": "owner_and_name"}, nil
 }
+
+// RepositoryIdentity binds compiled provenance to the native repository DID,
+// independently of its current owner display name, repository name or knot.
+func (h *Hub) RepositoryIdentity(ctx context.Context, c syncservice.Connection) (string, error) {
+	if c.Provider != "tangled" {
+		return "", syncservice.ErrProviderUnsupported
+	}
+	b, err := h.ResolveTangledConnection(ctx, c.ID)
+	if err != nil {
+		return "", err
+	}
+	if _, err := syntax.ParseDID(b.RepositoryDID); err != nil {
+		return "", problem(409, "Invalid Tangled repository identity")
+	}
+	return b.RepositoryDID, nil
+}

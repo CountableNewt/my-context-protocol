@@ -22,6 +22,7 @@ type Provider struct {
 
 var _ syncservice.RepositoryProvider = Provider{}
 var _ syncservice.RepositoryCommitResolver = Provider{}
+var _ syncservice.RepositoryIdentityResolver = Provider{}
 
 func (p Provider) binding(ctx context.Context, c syncservice.Connection) (Binding, error) {
 	if c.Provider != "tangled" || c.ID == "" || p.Connections == nil {
@@ -70,4 +71,12 @@ func (p Provider) Changed(ctx context.Context, c syncservice.Connection, priorRe
 	}
 	head, err := p.ResolveRepositoryCommit(ctx, c)
 	return err == nil && head != priorRevision, head, err
+}
+
+func (p Provider) RepositoryIdentity(ctx context.Context, c syncservice.Connection) (string, error) {
+	b, err := p.binding(ctx, c)
+	if err != nil {
+		return "", err
+	}
+	return b.RepositoryDID, nil
 }

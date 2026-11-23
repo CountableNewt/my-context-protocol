@@ -423,3 +423,38 @@ func TestOwnCommittedMutationSucceedsWhenLaterWriterWinsBeforeReturn(t *testing.
 		t.Fatal("adopted later generation", err)
 	}
 }
+
+func TestNativeUnchangedPublicStateCompletesPrivateAndNoopCommands(t *testing.T) {
+	for _, command := range []string{
+		"UPDATE projects SET custom_domain_verified_at=123,custom_domain_verification_token='proof' WHERE id='project' RETURNING id",
+		"UPDATE repo_connections SET github_installation_id=42,token_encrypted='private-new' WHERE id='repo' RETURNING id",
+		"UPDATE projects SET name=name WHERE id='project' RETURNING id",
+	} {
+		t.Run(command, func(t *testing.T) {
+			f := fixtureSQL(t, false)
+			before := f.pds.puts
+			results, err := f.bridge.Execute(f.ctx(t), turso.Statement{SQL: command, WantRows: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if results == nil || len(results.Rows) != 1 {
+				t.Fatal("native RETURNING result lost")
+			}
+			if f.pds.puts != before {
+				t.Fatal("unchanged public records written to PDS")
+			}
+			if f.value(t, "SELECT COUNT(*) FROM domain_native_intents WHERE status='complete'") != "1" {
+				t.Fatal("native command did not produce complete receipt")
+			}
+			if f.value(t, "SELECT COUNT(*) FROM domain_native_intents WHERE status='pending'") != "0" {
+				t.Fatal("no-op native intent left pending")
+			}
+			if strings.Contains(command, "custom_domain_verified_at") && f.value(t, "SELECT custom_domain_verification_token FROM projects WHERE id='project'") != "proof" {
+				t.Fatal("private domain proof update lost")
+			}
+			if strings.Contains(command, "github_installation_id") && f.value(t, "SELECT token_encrypted FROM repo_connections WHERE id='repo'") != "private-new" {
+				t.Fatal("private credential update lost")
+			}
+		})
+	}
+}

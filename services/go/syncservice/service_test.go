@@ -419,3 +419,59 @@ func TestNativeCommitResolutionUsesProviderAdapter(t *testing.T) {
 		t.Fatalf("native revision dispatch failed: err=%v resolved=%v published=%d", err, provider.resolved, store.published)
 	}
 }
+
+type stableNativeProvider struct {
+	nativeProvider
+	identity    string
+	identityErr error
+}
+
+func (p *stableNativeProvider) RepositoryIdentity(context.Context, Connection) (string, error) {
+	return p.identity, p.identityErr
+}
+func TestNativeRepositoryProvenanceSurvivesMutableRepositoryRename(t *testing.T) {
+	const identity = "did:plc:rrrrrrrrrrrrrrrrrrrrrrrr"
+	for _, names := range []struct{ owner, repo string }{{"did:plc:oldowner", "old-name"}, {"renamed.example", "renamed-repository"}} {
+		t.Run(names.repo, func(t *testing.T) {
+			service, store, github := setup(t)
+			store.connection.Provider = "tangled"
+			store.connection.Owner = names.owner
+			store.connection.Repository = names.repo
+			provider := &stableNativeProvider{nativeProvider: nativeProvider{fetcher: &fakeFetcher{root: github.root}}, identity: identity}
+			service.config.Providers = map[string]RepositoryProvider{"tangled": provider}
+			if _, err := service.Run(context.Background(), "project", ""); err != nil {
+				t.Fatal(err)
+			}
+			if len(store.compiled) == 0 {
+				t.Fatal("no compiled skills")
+			}
+			source := store.compiled[0].Canonical["source"].(map[string]any)
+			if source["repository"] != identity || source["revision"] != strings.Repeat("a", 40) {
+				t.Fatal("mutable source provenance", source)
+			}
+		})
+	}
+}
+func TestProviderIdentityResolverFailsClosedWithoutStableIdentity(t *testing.T) {
+	for _, failure := range []error{nil, errors.New("binding identity revoked")} {
+		service, store, github := setup(t)
+		store.connection.Provider = "tangled"
+		provider := &stableNativeProvider{nativeProvider: nativeProvider{fetcher: &fakeFetcher{root: github.root}}, identityErr: failure}
+		service.config.Providers = map[string]RepositoryProvider{"tangled": provider}
+		if _, err := service.Run(context.Background(), "project", ""); err == nil {
+			t.Fatal("empty or unauthorized identity accepted")
+		}
+		if store.claimCalls != 0 || provider.fetcher.calls != 0 || store.published != 0 {
+			t.Fatal("identity failure started sync work")
+		}
+	}
+}
+func TestGitHubRepositoryProvenanceRemainsOwnerAndName(t *testing.T) {
+	service, store, _ := setup(t)
+	if _, err := service.Run(context.Background(), "project", ""); err != nil {
+		t.Fatal(err)
+	}
+	if store.compiled[0].Canonical["source"].(map[string]any)["repository"] != "owner/repo" {
+		t.Fatal("GitHub source identity changed")
+	}
+}
