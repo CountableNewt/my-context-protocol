@@ -123,9 +123,10 @@ since the snapshot; restoring SQL alone cannot undo PDS writes.
 
 ## Rollout evidence and remaining gates
 
-Implementation is feature-gated; no hosted schema migration, account-data
-publication, namespace DNS changes or production read cutover has been performed
-by this implementation session. Local deterministic tests cover interrupted
+Implementation is feature-gated. The 15 namespace DNS delegations are published
+and independently verified at the authoritative Marque nameservers. No hosted
+schema migration, product/schema-record publication or production read cutover has
+run. See [the production checkpoint](production-rollout-2026-11-22.md). Local deterministic tests cover interrupted
 publication, concurrency, lost acknowledgements, retention, external edits,
 projection reconstruction, source hydration, owner isolation and transport parity.
 The repository's required **Test and build** check remains unchanged.
@@ -133,10 +134,12 @@ The repository's required **Test and build** check remains unchanged.
 Hosted acceptance remains required: Chrome dashboard and CLI OAuth/linking,
 expiry/revocation/handle/PDS changes, actual Tangled public/private repositories and
 metadata proposals, public DNS-backed schema resolution, generated-client calls,
-and mapped tenant-host MCP. In this environment Chrome DevTools reported an
-existing-profile conflict and native Chrome control timed out; these attempts do
-not establish browser acceptance. Vercel withholds the preview Turso token marked
-Sensitive, so the explicit hosted migration has not run. Linear and the custom
+and mapped tenant-host MCP. Chrome native control subsequently verified the existing production GitHub login
+and completed DNS publication. ATProto browser acceptance remains pending.
+Vercel keeps Sensitive credentials inside the hosted environment; the explicit
+signed operator service is prepared to use them there. Deployment is currently
+blocked by the Hobby 100-deployments/day limit, and the owner chose to wait for
+reset rather than upgrade billing. Linear and the custom
 MyContextProtocol endpoint were not available in the connected tool inventory.
 
 References: [Lexicon](https://atproto.com/specs/lexicon),

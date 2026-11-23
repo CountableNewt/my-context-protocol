@@ -998,6 +998,15 @@
       "path": "/auth/github/link",
       "reason": "Proof-of-both account linking OAuth initiation protocol.",
       "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "operator",
+      "methods": [
+        "POST"
+      ],
+      "path": "/operator",
+      "reason": "Temporary, unaliased release-only deployment for signed internal schema and recovery maintenance. It is never routed through the product application and exposes no product operation uniquely.",
+      "source": "services/go/operatorservice/service.go"
     }
   ],
   "frontend": {
