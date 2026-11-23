@@ -1,4 +1,4 @@
-"""Exercise the compiled Swift executable against isolated HTTP servers."""
+"""Exercise the compiled Go executable against isolated HTTP servers."""
 import contextlib
 import http.server
 import json
@@ -69,6 +69,105 @@ class CLITests(unittest.TestCase):
             self.assertEqual(self.run_cli(*args).returncode, 0)
         self.assertIn("projects get", self.run_cli("help", "projects").stdout)
         self.assertNotIn("billing checkout", self.run_cli("help", "projects").stdout)
+
+    def test_named_operations_match_xrpc_contracts(self):
+        root = Path(__file__).resolve().parents[3]
+        inventory = json.loads((root / "lexicons/operations.json").read_text())
+        operations = json.loads(self.run_cli("commands").stdout)
+        expected = {entry["nsid"] for entry in inventory["operations"]
+                    if entry["authorization"] in ("account", "admin")}
+        self.assertEqual({entry["nsid"] for entry in operations if entry.get("nsid")}, expected)
+        received = []
+        identifiers = {"project_id": ("--id", "project"),
+                       "release_id": ("--release-id", "release"),
+                       "skill_id": ("--compiled-skill-id", "skill"),
+                       "key_id": ("--key-id", "key"),
+                       "job_id": ("--job-id", "job")}
+        with server(lambda *args: (received.append(args) or (200, {}, b"{}"))) as origin:
+            for operation in operations:
+                nsid = operation.get("nsid")
+                if not nsid:
+                    continue
+                with self.subTest(command=operation["name"]):
+                    schema = json.loads((root / "lexicons" / (nsid + ".json")).read_text())["defs"]["main"]
+                    method = "GET" if schema["type"] == "query" else "POST"
+                    self.assertEqual(operation["method"], method)
+                    self.assertEqual(operation["path"], "/xrpc/" + nsid)
+                    self.assertIn("rest_method", operation)
+                    self.assertIn("rest_path", operation)
+                    params = schema.get("parameters", schema.get("input", {}).get("schema", {}))
+                    args = operation["name"].split()
+                    required_ids = {}
+                    for field, (flag, value) in identifiers.items():
+                        if field in params.get("required", []):
+                            args += [flag, value]
+                            required_ids[field] = value
+                    if method == "POST":
+                        args += ["--data", "{}"]
+                    result = self.run_cli(*args, "--url", origin, env=dict(self.env, MYCTX_TOKEN="method-token"))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    actual_method, path, headers, body = received[-1]
+                    self.assertEqual(headers["Authorization"], "Bearer method-token")
+                    self.assertNotIn("Cookie", headers)
+                    parsed = urllib.parse.urlsplit(path)
+                    self.assertEqual((actual_method, parsed.path), (method, "/xrpc/" + nsid))
+                    if method == "GET":
+                        self.assertEqual(body, b"")
+                        expected_query = {key: [value] for key, value in required_ids.items()}
+                        if operation["name"] == "github repos":
+                            expected_query["provider"] = ["github"]
+                        self.assertEqual(urllib.parse.parse_qs(parsed.query), expected_query)
+                    else:
+                        payload = json.loads(body)
+                        for field, value in required_ids.items():
+                            self.assertEqual(payload[field], value)
+
+    def test_raw_xrpc_request_uses_explicit_method_and_preserves_query(self):
+        received = []
+        with server(lambda *args: (received.append(args) or (200, {}, b"{}"))) as origin:
+            result = self.run_cli("api", "GET", "/xrpc/dev.mycontextprotocol.project.getProject",
+                                  "--query", "project_id=project", "--url", origin + "/api",
+                                  env=dict(self.env, MYCTX_TOKEN="method-token"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(received[0][:2],
+                         ("GET", "/xrpc/dev.mycontextprotocol.project.getProject?project_id=project"))
+
+    def test_transport_choice_never_falls_back_or_mixes_credentials(self):
+        for use_token in [False, True]:
+            with self.subTest(use_token=use_token):
+                received = []
+                with server(lambda *args: (received.append(args) or (404, {}, b'{"error":"NotFound"}'))) as origin:
+                    self.config.write_text(json.dumps({"profiles": {"default": {
+                        "url": origin, "session": "session-secret", "web_url": "https://web.example"}}}))
+                    env = dict(self.env)
+                    if use_token:
+                        env["MYCTX_TOKEN"] = "method-token"
+                    result = self.run_cli("projects", "list", env=env)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(len(received), 1)
+                method, path, headers, body = received[0]
+                self.assertEqual(method, "GET")
+                if use_token:
+                    self.assertEqual(path, "/xrpc/dev.mycontextprotocol.project.listProjects")
+                    self.assertEqual(headers["Authorization"], "Bearer method-token")
+                    self.assertNotIn("Cookie", headers)
+                else:
+                    self.assertEqual(path, "/projects")
+                    self.assertEqual(headers["Cookie"], "vapor-session=session-secret")
+                    self.assertNotIn("Authorization", headers)
+
+    def test_xrpc_request_injects_ids_into_body_and_retains_exact_numbers(self):
+        received = []
+        with server(lambda *args: (received.append(args) or (200, {}, args[3]))) as origin:
+            result = self.run_cli("skills", "update", "--id", "project", "--release-id", "release",
+                                  "--compiled-skill-id", "skill", "--data",
+                                  '{"n":123456789012345678901234567890}', "--url", origin,
+                                  env=dict(self.env, MYCTX_TOKEN="method-token"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(received[0][:2], ("POST", "/xrpc/dev.mycontextprotocol.release.updateCompiledSkill"))
+        self.assertEqual(json.loads(received[0][3]), {"project_id": "project", "release_id": "release",
+                                                      "skill_id": "skill", "n": 123456789012345678901234567890})
+        self.assertIn("123456789012345678901234567890", result.stdout)
 
     def test_request_path_query_body_and_headers(self):
         received = []
@@ -271,63 +370,6 @@ class CLITests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertNotIn("Open this URL", result.stderr)
                 self.assertFalse(self.config.exists())
-
-    def test_atproto_login_opens_account_initiation_in_browser(self):
-        calls = []
-        callback_done = threading.Event()
-        def gateway(method, path, headers, body):
-            calls.append((method, path, headers))
-            parsed = urllib.parse.urlsplit(path)
-            if parsed.path == "/api/auth/atproto/status":
-                return 200, {}, b'{"enabled":true}'
-            if parsed.path == "/api/auth/cli/atproto":
-                query = urllib.parse.parse_qs(parsed.query)
-                self.assertEqual(query["handle"], ["alice.example.com"])
-                callback = query["return_to"][0]
-                def handoff():
-                    urllib.request.urlopen(callback + "&auth_token=atproto-handoff").read()
-                    callback_done.set()
-                threading.Thread(target=handoff, daemon=True).start()
-                return 200, {"Set-Cookie": "atproto-login=browser-only; Path=/; HttpOnly"}, b"authorized"
-            if parsed.path == "/api/auth/confirm":
-                self.assertEqual(urllib.parse.parse_qs(parsed.query), {"token": ["atproto-handoff"]})
-                return 200, {"Set-Cookie": "vapor-session=atproto-session; Path=/; HttpOnly"}, b"{}"
-            return 200, {}, b'{"id":"native-account"}'
-        with server(gateway) as origin:
-            process = subprocess.Popen([BINARY, "auth", "login", "--provider", "atproto", "--handle",
-                                        "alice.example.com", "--no-browser", "--url", origin + "/api"],
-                                       env=dict(self.env, MYCTX_SESSION="old-secret"),
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            self.addCleanup(lambda: process.kill() if process.poll() is None else None)
-            self.assertIn("authenticate with ATProto", process.stderr.readline())
-            initiation = process.stderr.readline().strip()
-            self.assertEqual(urllib.parse.urlsplit(initiation).netloc, urllib.parse.urlsplit(origin).netloc)
-            self.assertEqual(urllib.parse.urlsplit(initiation).path, "/api/auth/cli/atproto")
-            self.assertEqual(len(calls), 1, "CLI must not fetch browser-bound initiation itself")
-            self.assertNotIn("Cookie", calls[0][2])
-            urllib.request.urlopen(initiation).read()
-            stdout, stderr = process.communicate(timeout=10)
-            self.assertEqual(process.returncode, 0, stderr)
-            self.assertTrue(callback_done.wait(1))
-        self.assertEqual(json.loads(self.config.read_text())["profiles"]["default"]["session"], "atproto-session")
-
-    def test_atproto_login_rejects_disabled_and_redirected_preflight(self):
-        for status, headers, body in [(200, {}, b'{"enabled":false}'),
-                                      (302, {"Location":"https://evil.example/steal"}, b""),
-                                      (200, {}, b'{"enabled":"true"}')]:
-            with self.subTest(status=status, body=body), server(lambda *args:(status, headers, body)) as origin:
-                result = self.run_cli("auth", "login", "--provider", "atproto", "--handle",
-                                      "alice.example.com", "--no-browser", "--url", origin)
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertNotIn("Open this URL", result.stderr)
-                self.assertFalse(self.config.exists())
-
-    def test_provider_arguments_are_validated_before_authentication(self):
-        for flags in [("--provider", "unknown"), ("--provider", "atproto"),
-                      ("--handle", "alice.example.com"), ("--provider", "github", "--session-stdin")]:
-            result = self.run_cli("auth", "login", *flags)
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertNotIn("Open this URL", result.stderr)
 
     def test_browser_login_cancellation(self):
         with server(lambda *args: (302, {"Location": "https://github.com/login/oauth/authorize?client_id=c&state=s"}, b"")) as origin:

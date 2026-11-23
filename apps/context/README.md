@@ -43,7 +43,16 @@ Use the exact service DID reference configured by your deployment. ATProto login
 uses a local OAuth callback with PKCE and DPoP. Subsequent commands obtain a fresh,
 short-lived service token bound to the requested NSID. OAuth refresh credentials
 are stored privately in the selected profile; `MYCTX_SERVICE_DID` can provide the
-audience. Existing cookie sessions are preserved for REST compatibility.
+audience. Existing cookie profiles remain compatible with REST. Signing in switches the selected
+profile to the chosen authentication method. `auth logout` revokes the PDS OAuth
+credentials for ATProto login or the account session for REST login before clearing
+the saved credential.
+
+For a single command, `MYCTX_TOKEN` supplies an externally obtained method-bound
+service token and selects XRPC. The token must target that command’s NSID and the
+deployment’s service audience; mutations consume their token once. This is separate
+from `MYCTX_SESSION`, which selects REST. An explicit token takes precedence over
+a session; an explicit environment session overrides a saved OAuth profile.
 
 
 MyContextCLI uses the hosted account API at `https://mycontextprotocol.dev/api`
@@ -143,7 +152,7 @@ a credential is present without exposing its value.
 ```sh
 myctx help
 myctx projects --help
-myctx commands                  # JSON operation name/method/path/description registry
+myctx commands                  # JSON XRPC and REST operation registry
 myctx api operations            # same registry
 myctx projects list --compact
 myctx projects create --data '{"name":"My Skills","slug":"my-skills"}'
@@ -219,7 +228,20 @@ myctx api GET /projects
 myctx api PATCH /projects/PROJECT_UUID --data @project.json
 ```
 
-Raw requests stay on the configured API base URL; operation paths such as `/projects` are relative to its optional `/api` prefix. This is an application control
+With ATProto authentication, named commands use `/xrpc/<NSID>` on the configured
+origin (the legacy `/api` suffix is removed). Queries use GET; procedures use POST,
+with identifiers such as `project_id` in their declared query or JSON fields. Raw
+XRPC calls are also available:
+
+```sh
+myctx xrpc dev.mycontextprotocol.project.listProjects
+myctx api GET /xrpc/dev.mycontextprotocol.project.getProject --query project_id=PROJECT_UUID
+```
+
+`commands` includes `nsid`, XRPC `method`/`path`, and `rest_method`/`rest_path`
+for discovery. Provider installation and health checks retain their native routes.
+
+REST raw requests stay on the configured API base URL; operation paths such as `/projects` are relative to its optional `/api` prefix. This is an application control
 CLI; tenant MCP protocol calls, inbound webhooks, internal infrastructure routes,
 and browser callback endpoints are not named management commands. Agent shells
 can run this CLI directly; it does not require a model-provider account.
@@ -243,8 +265,8 @@ make test
 make build
 ```
 
-The account API coverage test reads `packages/mycontext-api-contract/BACKEND_API_CONTRACT.md`
-and fails when a documented management endpoint is missing from the registry. Tests therefore
+The registry coverage tests read `lexicons/operations.json` and verify that every
+account/admin XRPC operation has a CLI alias and the correct request shape. Tests therefore
 run from the monorepo checkout. The CLI checks run Go formatting, vet, race tests,
 and executable integration tests against isolated loopback HTTP servers. The latter cover
 browser authentication, session storage, credential isolation, redirects, JSON precision,
