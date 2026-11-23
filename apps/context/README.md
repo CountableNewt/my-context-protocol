@@ -1,13 +1,13 @@
 # MyContextCLI
 
-MyContextCLI (`myctx`) is the Swift CLI for MyContextProtocol. It exposes every current account,
+MyContextCLI (`myctx`) is the Go CLI for MyContextProtocol. It exposes every current account,
 project, and administrator management route to people and agents. Success output
 is JSON on stdout; errors are readable text on stderr by default. Add `--json`
-for structured errors in agent scripts. It uses Swift Foundation and platform socket APIs, with no third-party packages.
+for structured errors in agent scripts. It uses Go and the pinned Indigo SDK for ATProto OAuth and service authorization.
 
 ## Install
 
-Requires Swift 6 or newer on macOS or Linux. Tests also require Python 3. From this repository:
+Requires Go 1.26 or newer to build on macOS or Linux. Tests also require Python 3. From this repository:
 
 ```sh
 cd apps/context
@@ -24,9 +24,27 @@ automatically. A custom destination is supported with `make install BINDIR=/path
 or `PREFIX=/prefix` (installs into `/prefix/bin`); use an absolute destination
 whose exact spelling appears as a `PATH` entry.
 
-Build a versioned binary with `make build VERSION=0.1.0`. Build on each target platform with its Swift toolchain. The installed executable needs no Node or Go runtime; Linux hosts require the Swift runtime libraries supplied by their Swift installation.
+Build a versioned binary with `make build VERSION=0.1.0`. The installed executable needs no additional runtime. Cross-compile with Go’s `GOOS` and `GOARCH` environment variables; release builds disable CGO.
 
 ## Authenticate
+
+Authentication selects the API transport. GitHub browser login and imported cookie
+sessions use REST. ATProto OAuth and explicitly supplied service tokens use XRPC;
+the CLI never retries a failed command using another transport.
+
+For ATProto, first link the identity to your MyContextProtocol account, then run:
+
+```sh
+myctx auth login --provider atproto --handle YOUR_HANDLE --service-did did:web:mycontextprotocol.dev#mycontextprotocol
+myctx projects list
+```
+
+Use the exact service DID reference configured by your deployment. ATProto login
+uses a local OAuth callback with PKCE and DPoP. Subsequent commands obtain a fresh,
+short-lived service token bound to the requested NSID. OAuth refresh credentials
+are stored privately in the selected profile; `MYCTX_SERVICE_DID` can provide the
+audience. Existing cookie sessions are preserved for REST compatibility.
+
 
 MyContextCLI uses the hosted account API at `https://mycontextprotocol.dev/api`
 by default. Start with:
@@ -98,7 +116,7 @@ Environment variables use the `MYCTX_*` prefix: `MYCTX_URL`, `MYCTX_WEB_URL`,
 `MYCTX_SESSION`, `MYCTX_PROFILE`, `MYCTX_PROJECT`, and `MYCTX_CONFIG`. The previous
 `CONTEXT_*` names remain supported as fallbacks when their corresponding
 `MYCTX_*` variable is unset or empty. In particular, `MYCTX_CONFIG` takes priority
-over `CONTEXT_CONFIG`. The repository folder and Swift package remain `apps/context`;
+over `CONTEXT_CONFIG`. The repository folder and Go module remain `apps/context`;
 the executable is `myctx`.
 
 ## Profiles and defaults
@@ -227,11 +245,11 @@ make build
 
 The account API coverage test reads `packages/mycontext-api-contract/BACKEND_API_CONTRACT.md`
 and fails when a documented management endpoint is missing from the registry. Tests therefore
-run from the monorepo checkout. The CLI checks run Swift formatting and warnings-as-errors builds, native Swift tests,
+run from the monorepo checkout. The CLI checks run Go formatting, vet, race tests,
 and executable integration tests against isolated loopback HTTP servers. The latter cover
 browser authentication, session storage, credential isolation, redirects, JSON precision,
 request handling and error output. `make build VERSION=...` embeds the version into the
-standalone executable. Concurrent versioned builds in the same checkout are unsupported.
+standalone executable. Build metadata is injected with Go linker flags without modifying source files.
 
 ### Tangled and owner records
 

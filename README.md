@@ -7,7 +7,7 @@ MyContextProtocol ingests `SKILL.md` files from Git repositories, compiles polic
 Production runs on **one Vercel Hobby project** with a Next.js 16 dashboard, Turbopack development/builds, and four Go HTTP services. Persistence uses stateless Turso HTTP queries on the owner's chosen **Turso Developer** plan.
 
 ```text
-apps/context/                   Swift MyContextCLI (myctx)
+apps/context/                   Go MyContextCLI (myctx)
 apps/web/                       Next.js dashboard and same-origin API forwarding
 packages/mycontext-api-contract/ API contract documentation
 packages/mycontext-web-client/   Shared TypeScript contracts
@@ -43,7 +43,7 @@ Database initialization and legacy adoption are separate, explicit operations. F
 
 ## MyContextCLI
 
-The Swift CLI remains active and supports account, project, release, skill, runtime and administrator operations with JSON output. It requires Swift 6+ on macOS or Linux.
+The Go CLI supports account, project, release, skill, runtime and administrator operations with JSON output. It builds with Go 1.26+ and runs as a standalone executable on macOS or Linux.
 
 ```sh
 cd apps/context
@@ -65,7 +65,7 @@ See [the CLI guide](apps/context/README.md) for profiles, automation, payloads a
 bash scripts/ci.sh
 ```
 
-Active CI covers Go formatting, vet, race tests and builds; frontend type checks, lint, tests and Turbopack build; Swift CLI formatting, tests and build; and the active Go snapshot/migration tests. A separate Linux job validates the Swift CLI. The required GitHub check remains **Test and build**. Go SQL integration tests use Python 3; the deployed Go runtime does not require Python or a local SQLite database.
+Active CI covers Go formatting, vet, race tests and builds; frontend type checks, lint, tests and Turbopack build; Go CLI formatting, vet, race tests and build; and the active Go snapshot/migration tests. A separate Linux job validates the Go CLI. The required GitHub check remains **Test and build**. Go SQL integration tests use Python 3; the deployed Go runtime does not require Python or a local SQLite database.
 
 The single Vercel project uses `main` for Production and feature branches for Previews, with isolated branch-scoped preview credentials and data. There are no separate Dev and Prod Vercel projects. Do not place production credentials or private production snapshots in ordinary previews. The [migration record](docs/migrations/go-vercel-turso.md) documents the verified production import, Chrome/CLI/MCP acceptance, signed GitHub delivery and rollback rehearsal.
 
