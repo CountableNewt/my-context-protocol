@@ -168,3 +168,14 @@ func TestServiceAuthScopesAreExactAndProtocolValid(t *testing.T) {
 		}
 	}
 }
+
+func TestDynamicTangledBranchListingGrantIsExact(t *testing.T) {
+	if !dynamicRepositoryMethod("org.tangled.temp.git.listBranches") {
+		t.Fatal("missing verified branch-listing permission")
+	}
+	for _, method := range []string{"org.tangled.temp.git.*", "org.tangled.temp.git.listBranchesOther", "com.atproto.repo.deleteRecord"} {
+		if dynamicRepositoryMethod(method) {
+			t.Fatal("widened Tangled method grant", method)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package tangled
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -197,5 +198,65 @@ func TestBobbinServiceReferenceAudiencePreserved(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("invalid reference minted tokens: %d", calls)
+	}
+}
+
+func TestAuthenticatedBranchFallbackUsesExactScopedBoundedList(t *testing.T) {
+	calls := 0
+	oid := strings.Repeat("b", 40)
+	c := authenticatedClient(t, func(r *http.Request) (*http.Response, error) {
+		calls++
+		if strings.HasSuffix(r.URL.Path, "getBranch") {
+			return response(404, nil), nil
+		}
+		if !strings.HasSuffix(r.URL.Path, "listBranches") || r.URL.Query().Get("repo") != repoDID || r.URL.Query().Get("limit") != "100" {
+			t.Fatal("unsafe fallback query", r.URL)
+		}
+		if r.URL.Query().Get("cursor") == "" {
+			return response(200, []byte(`{"branches":[],"total":1,"cursor":"page2"}`)), nil
+		}
+		return response(200, []byte(`{"branches":[{"name":"main","oid":"`+oid+`"}],"total":1}`)), nil
+	})
+	got, err := c.ResolveAuthenticatedBranch(context.Background(), actorDID, repoDID, "main")
+	if err != nil || got != oid || calls != 3 {
+		t.Fatal(got, calls, err)
+	}
+}
+func TestAuthenticatedBranchDoesNotFallbackAfterAuthDenial(t *testing.T) {
+	for _, status := range []int{401, 403, 500} {
+		calls := 0
+		c := authenticatedClient(t, func(*http.Request) (*http.Response, error) { calls++; return response(status, nil), nil })
+		if _, err := c.ResolveAuthenticatedBranch(context.Background(), actorDID, repoDID, "main"); err == nil || calls != 1 {
+			t.Fatal("denial retried", status, calls, err)
+		}
+	}
+}
+func TestAuthenticatedBranchFallbackRejectsMalformedAndLoopingPages(t *testing.T) {
+	for _, body := range []string{`{"branches":[{"name":"main","oid":"bad"}],"total":1}`, `{"branches":[],"total":100,"cursor":"repeat"}`} {
+		calls := 0
+		c := authenticatedClient(t, func(r *http.Request) (*http.Response, error) {
+			calls++
+			if strings.HasSuffix(r.URL.Path, "getBranch") {
+				return response(404, nil), nil
+			}
+			return response(200, []byte(body)), nil
+		})
+		if _, err := c.ResolveAuthenticatedBranch(context.Background(), actorDID, repoDID, "main"); err == nil || calls > 3 {
+			t.Fatal("unbounded/malformed fallback", calls, err)
+		}
+	}
+}
+
+func TestAuthenticatedBranchFallbackHasHardPageLimit(t *testing.T) {
+	calls := 0
+	c := authenticatedClient(t, func(r *http.Request) (*http.Response, error) {
+		calls++
+		if strings.HasSuffix(r.URL.Path, "getBranch") {
+			return response(404, nil), nil
+		}
+		return response(200, []byte(fmt.Sprintf(`{"branches":[],"total":1001,"cursor":"page-%d"}`, calls))), nil
+	})
+	if _, err := c.ResolveAuthenticatedBranch(context.Background(), actorDID, repoDID, "main"); err == nil || calls != 11 {
+		t.Fatal("branch pagination limit not enforced", calls, err)
 	}
 }

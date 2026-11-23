@@ -133,3 +133,15 @@ Tests use deterministic pinned-shape responses, service-token audience checks,
 denial and redirect credential isolation, declaration owner checks, native
 binding resolution, ticket/patch wire validation and safe archive fixtures.
 Live public/private knot and proposal acceptance remain outstanding.
+
+### Deployed branch-route compatibility
+
+A read-only production probe on 2026-11-22 found that Bobbin forwards `getBranch`
+as an empty HTTP 404 for public legacy-knot repositories while
+`org.tangled.temp.git.listBranches` returns their branch names and immutable OIDs.
+The authenticated adapter uses the pinned `tempListBranches.json` contract only
+after `getBranch` returns 404. It retains the same actor/service/repository and
+never retries authentication denials anonymously. Pagination is capped at ten
+100-branch pages with bounded cursors and response sizes. Configure the exact
+`org.tangled.temp.git.listBranches` service-auth grant in addition to `getBranch`;
+no wildcard method permission is required.

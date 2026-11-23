@@ -19,7 +19,7 @@ stored sessions and provider credentials.
 | `TANGLED_ENABLED` | Explicitly enable authenticated Tangled capabilities. |
 | `TANGLED_API_URL` | Verified Bobbin origin; current pinned service uses `https://api.tangled.org`. |
 | `TANGLED_SERVICE_DID` | Verified Bobbin DID/service reference; currently `did:web:api.tangled.org#tangled_bobbin`. |
-| `TANGLED_ARCHIVE_MIRROR_URL` | Explicit bounded archive mirror; pinned adapter uses `https://mirror-fsn.tangled.network`. |
+| `TANGLED_ARCHIVE_MIRROR_URL` | Explicit bounded archive mirror; pinned adapter uses `https://mirror.tangled.network`. |
 
 The service DID document is served at `/.well-known/did.json`; its configured DID
 must match the request host. OAuth client metadata is public and includes public

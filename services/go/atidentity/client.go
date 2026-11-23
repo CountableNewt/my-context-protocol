@@ -115,7 +115,7 @@ func NewClient(c ClientConfig, store oauth.ClientAuthStore) (*oauth.ClientApp, o
 
 func dynamicRepositoryMethod(method string) bool {
 	switch method {
-	case "org.tangled.repo.listRepos", "org.tangled.temp.repo.getRepoByName", "org.tangled.temp.git.getArchive", "org.tangled.temp.git.getBranch", "org.tangled.temp.git.listCommits", "org.tangled.temp.git.getTree", "org.tangled.temp.git.getEntry", "org.tangled.temp.git.getBlob", "org.tangled.git.receivePack", "org.tangled.review.submitPatch", "com.atproto.repo.createRecord":
+	case "org.tangled.repo.listRepos", "org.tangled.temp.repo.getRepoByName", "org.tangled.temp.git.getArchive", "org.tangled.temp.git.getBranch", "org.tangled.temp.git.listBranches", "org.tangled.temp.git.listCommits", "org.tangled.temp.git.getTree", "org.tangled.temp.git.getEntry", "org.tangled.temp.git.getBlob", "org.tangled.git.receivePack", "org.tangled.review.submitPatch", "com.atproto.repo.createRecord":
 		return true
 	default:
 		return false

@@ -244,12 +244,72 @@ func (c Client) authenticatedBranch(ctx context.Context, actor, repo, branch str
 		Hash string `json:"hash"`
 	}
 	if err = decodeResponse(resp, method, &value); err != nil {
+		var status *StatusError
+		if errors.As(err, &status) && status.Status == http.StatusNotFound {
+			return c.authenticatedListedBranch(ctx, actor, repo, branch)
+		}
 		return "", err
 	}
 	if value.Name != branch || !oidPattern.MatchString(value.Hash) {
 		return "", ErrInvalidRevision
 	}
 	return strings.ToLower(value.Hash), nil
+}
+
+// Deployed legacy knots can omit getBranch while serving the pinned listBranches
+// contract. Keep the same actor, exact service audience and repository DID; only
+// route-not-found permits this bounded alternate query, never auth denial.
+func (c Client) authenticatedListedBranch(ctx context.Context, actor, repo, branch string) (string, error) {
+	const method = "org.tangled.temp.git.listBranches"
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < 10; page++ {
+		params := url.Values{"repo": {repo}, "limit": {"100"}}
+		if cursor != "" {
+			params.Set("cursor", cursor)
+		}
+		resp, err := c.serviceRequest(ctx, actor, method, params)
+		if err != nil {
+			return "", err
+		}
+		var out struct {
+			Branches []struct {
+				Name string `json:"name"`
+				OID  string `json:"oid"`
+			} `json:"branches"`
+			Cursor string `json:"cursor"`
+			Total  int    `json:"total"`
+		}
+		if err := decodeResponse(resp, method, &out); err != nil {
+			return "", err
+		}
+		if len(out.Branches) > 100 || out.Total < len(out.Branches) || len(out.Cursor) > 4096 {
+			return "", ErrInvalidRevision
+		}
+		found := ""
+		names := map[string]bool{}
+		for _, item := range out.Branches {
+			if item.Name == "" || len(item.Name) > 244 || strings.ContainsAny(item.Name, "\x00\r\n") || names[item.Name] || !oidPattern.MatchString(item.OID) {
+				return "", ErrInvalidRevision
+			}
+			names[item.Name] = true
+			if item.Name == branch {
+				found = strings.ToLower(item.OID)
+			}
+		}
+		if found != "" {
+			return found, nil
+		}
+		if out.Cursor == "" {
+			return "", ErrInvalidRevision
+		}
+		if seen[out.Cursor] {
+			return "", ErrInvalidRevision
+		}
+		seen[out.Cursor] = true
+		cursor = out.Cursor
+	}
+	return "", errors.New("Tangled branch lookup exceeds bounded pagination")
 }
 
 func (c Client) ResolveAuthenticatedBranch(ctx context.Context, actor, repo, branch string) (string, error) {
