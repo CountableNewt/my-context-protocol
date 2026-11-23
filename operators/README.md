@@ -1,145 +1,119 @@
-# Explicit production schema job
+# Temporary signed production operator service
 
-These configurations are **not** the application's configuration. They run an
-operator command once during a remote Production build, where Vercel injects
-its existing Production Secret environment variables. No database credential is
-pulled locally, printed, placed in an argument, or returned as an artifact.
+Vercel project pause blocks **new builds**. Deploy this temporary, unaliased
+Production service to READY **before** pausing; then invoke its existing endpoint
+explicitly. Never promote it or add its route to the normal application. The
+normal application has no migration/startup hook.
 
-The root `vercel.json` is unchanged. Never add this command to normal application
-builds/startup, never promote an operator deployment, and never use a Preview
-build or copy production credentials into Preview. The database host is pinned
-independently in both configurations. The command also checks `VERCEL_ENV` and
-the exact project's system ID before accessing the database.
+The original static-build approach is superseded: selecting `--local-config`
+alone retained the root Services build remotely, the Other/static build image had
+no Go toolchain, and project pause blocked a newly submitted build. The service
+below uses the verified Go service framework and runs its fixed migration registry
+in process, with no shell, arbitrary SQL or child executable.
 
-Create an isolated deployment source from the reviewed checkpoint commit:
+Create a minimal source from the reviewed checkpoint, replacing its root config:
 
 ```sh
 umask 077
 mkdir -m 700 /private/tmp/myctx-production-operator-source-20261122
 git archive HEAD services/go operators .vercelignore | tar -x -C /private/tmp/myctx-production-operator-source-20261122
-cp operators/production-preflight.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
-(cd services/go && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
-  -o /private/tmp/myctx-production-operator-source-20261122/operators/production-operator-linux-amd64 ./cmd/production-operator)
-(cd services/go && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
-  -o /private/tmp/myctx-production-operator-source-20261122/operators/migrate-linux-amd64 ./cmd/migrate)
-chmod 700 /private/tmp/myctx-production-operator-source-20261122/operators/*-linux-amd64
+cp operators/production-service.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
 ```
 
-The chosen operator configuration **must replace `vercel.json` in the uploaded
-source**. In this Services project, `--local-config` alone was observed to retain
-the normal root Services build remotely. Do not assume CLI local selection changes
-the cloud's root file. The Other/static build image does not provide `go` (confirmed by hosted preflight).
-Cross-compile both static Linux/amd64 executables locally from the reviewed commit;
-the remote job invokes those fixed binaries and installs no toolchain. Keep their
-hashes with the deployment-input evidence. The minimal archive contains the reviewed Go tree, operator files and
-`.vercelignore`. It avoids changing the application's configuration, building the
-frontend, or uploading unrelated private local files.
-
-Before pausing production, validate the remote build environment read-only:
+Keep all private material outside the source/upload directory:
 
 ```sh
-vercel deploy /private/tmp/myctx-production-operator-source-20261122 \
-  --project prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7 --scope sam-clemente-s-team \
-  --prod --skip-domain --force
-```
-
-Confirm remote logs run `production-operator preflight`, not the application
-Services build. This checks the exact project/environment/database host, executes
-only `SELECT 1` and the migration-registry row count, and publishes aggregate
-`status.json`. It requires no pause declaration, recipient or review receipt.
-It verifies binary execution and Production Secret injection before starting an outage.
-Never promote it.
-
-Before starting, the release operator must stop and drain **all** production
-writers: production/old deployment URLs, custom/tenant hosts, provider callbacks,
-webhooks, MCP telemetry, cron and any direct database jobs. Vercel project pause
-blocks production traffic but is not proof that an in-flight function has ended
-or that a separately reachable old deployment cannot write. Confirm the actual
-Function maximum duration, wait for drain, verify all ingress, and prevent
-concurrent deployments/jobs throughout both stages. `--writers-paused` is an
-explicit operator declaration; this tool does not install a database lock.
-
-Run from the repository root. Keep the private directory **outside the source
-checkout** so the private key and plaintext backup can never enter a deployment:
-
-```sh
-umask 077
-mkdir -m 700 /private/tmp/myctx-production-operator-20261122
 cd services/go
 go run ./cmd/production-operator keygen \
   --directory /private/tmp/myctx-production-operator-20261122/keys
 cd ../..
-cp /private/tmp/myctx-production-operator-20261122/keys/recipient.pem /private/tmp/myctx-production-operator-source-20261122/operators/recipient.pem
 ```
 
-Inspect deployment inputs first (`vercel deploy --dry --json`) and verify no
-private key, plaintext snapshot, local environment, or existing backup is in the
-upload. `operators/recipient.pem` is a public key; the private key stays local.
-Use the existing linked project and target **Production without assigning domains**:
+Deploy the isolated source to the existing project with `--prod --skip-domain`.
+Supply only the base64-encoded **public** `recipient.pem` as deployment-scoped
+`OPERATOR_RECIPIENT_PUBLIC_KEY_BASE64`; the private key never leaves the local
+private directory. Inspect the upload with `vercel deploy --dry --json` first.
+The existing Production database Secret remains inside Vercel; it is never pulled,
+logged, passed in an argument, or returned in any response. Runtime checks enforce
+the exact project, Production environment, independent database hostname and the
+unique deployment hostname (`VERCEL_URL`). Retain Vercel Authentication.
+
+Use a new private request directory for each invocation. From `services/go`:
 
 ```sh
-cp operators/production-snapshot.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
-vercel deploy /private/tmp/myctx-production-operator-source-20261122 \
-  --project prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7 --scope sam-clemente-s-team \
-  --prod --skip-domain --force
+go run ./cmd/production-operator invoke --mode preflight \
+  --audience TEMPORARY-OPERATOR-DEPLOYMENT.vercel.app \
+  --expected-host my-context-protocol-production-countablenewt.aws-us-east-2.turso.io \
+  --key /private/tmp/myctx-production-operator-20261122/keys/recipient-private.pem \
+  --directory /private/tmp/myctx-production-operator-20261122/preflight
 ```
 
-Do not use `--prebuilt`: the remote build needs the existing Production Secrets.
-The only deployment files are `snapshot.enc` (RSA-OAEP/SHA256 wrapped random
-AES256-GCM ciphertext) and `status.json` (snapshot fingerprint, ciphertext hash
-and independently pinned host). The plaintext is kept only in a private remote
-temporary directory and removed before the build completes. Retain deployment
-protection. Download the encrypted file over authenticated HTTPS into the private
-local directory; do not print the binary response or backup rows into tool logs.
-Match the downloaded ciphertext SHA256 against `status.json`.
+The CLI creates an RSA-PSS signed request and invokes the local `vercel curl`
+client, which handles its own Vercel deployment authentication. It saves the
+response and headers privately. `sign` writes only the request for an operator who
+wants to invoke it separately. Signatures bind POST `/operator`, exact command,
+deployment audience, database host, nonce, issued/expiry times, pause declaration
+and reviewed backup receipt. Requests are strict JSON <=32KiB and valid <=15min.
+Preflight performs only a database reachability/migration-count SELECT; it does
+not consume a nonce or acquire a lease. Confirm this succeeds before the outage.
 
-Then decrypt and rehearse recovery locally:
+The release operator owns stopping all production ingress, old deployment URLs,
+webhooks, callbacks, MCP writers and scheduled maintenance. Pause alone is not
+proof that previous invocations drained: the current deployed functions have a
+verified 300-second platform timeout. Confirm blocked ingress and wait at least
+that bound plus propagation margin. This service never pauses or resumes traffic.
+After pause, prove the staged operator endpoint remains reachable **before** any
+migration; if it does not, unpause and resolve access first.
+
+Take a backup with the same command and new directory, adding
+`--mode snapshot --writers-paused`. Snapshot exports the frozen database, gzips
+it, and returns only RSA-OAEP/SHA256 wrapped AES256-GCM ciphertext. The authenticated
+V2 envelope limits decompression to256MiB; V1 raw envelopes remain readable. The
+HTTP ciphertext is capped at4MiB (below the platform4.5MiB response bound), with
+aggregate proof in `X-Myctx-Operator-Proof`. Oversized snapshots fail explicitly
+before any schema change. Responses are private/no-store; SQL/source values are
+never emitted in errors or logs.
+
+Review `snapshot/response.body` locally:
 
 ```sh
-cd services/go
 go run ./cmd/production-operator review \
   --expected-host my-context-protocol-production-countablenewt.aws-us-east-2.turso.io \
   --key /private/tmp/myctx-production-operator-20261122/keys/recipient-private.pem \
-  --envelope /private/tmp/myctx-production-operator-20261122/snapshot.enc \
+  --envelope /private/tmp/myctx-production-operator-20261122/snapshot/response.body \
   --directory /private/tmp/myctx-production-operator-20261122/reviewed
-cd ../..
-cp /private/tmp/myctx-production-operator-20261122/reviewed/review.json /private/tmp/myctx-production-operator-source-20261122/operators/review.json
 ```
 
-`review` refuses broad private-key permissions, authenticates/decrypts the backup,
-restores a private SQLite database, and independently compares exact typed rows,
-foreign keys and integrity using the existing snapshot tools. It signs the
-resulting snapshot ID and ciphertext hash using RSA-PSS/SHA256. No signed review
-is produced if reconstruction fails. All local outputs are exclusive mode0600;
-existing evidence is never replaced. Keep the original backup and private key.
+Review authenticates/decrypts, restores an offline SQLite database and independently
+checks integrity, foreign keys and every exact typed table digest. Only after
+success does it sign `review.json`, binding the host, snapshot ID and ciphertext
+hash. Existing private evidence is never overwritten.
 
-Only after reviewing that successful reconstruction, run the separate apply job:
+Apply using another new request directory, `--mode apply --writers-paused` and
+`--receipt /private/tmp/myctx-production-operator-20261122/reviewed/review.json`.
+The server verifies that independent signed review, exports the database again,
+and requires the exact reviewed source fingerprint before applying the shipped
+`appschema.Registry`. It then exports again and compares every previous
+application table's columns, count and typed digest, including unchanged account
+values across the nullable GitHub identity schema rebuild. Only aggregate success
+evidence is returned. Any ambiguous/failed apply requires inspection while
+writers remain paused; never infer success from a lost response or blindly retry.
 
-```sh
-cp operators/production-apply.vercel.json /private/tmp/myctx-production-operator-source-20261122/vercel.json
-vercel deploy /private/tmp/myctx-production-operator-source-20261122 \
-  --project prj_jC1eRUJ0CHZvHp7Eej3AUAS4yUq7 --scope sam-clemente-s-team \
-  --prod --skip-domain --force
-```
+Authenticated snapshot/apply requests use an atomic durable nonce and a300-second
+fenced lease in existing private `mcp_rate_limits`. No coordination DDL runs.
+Only buckets beginning with this exact fresh recipient's
+`operatorjob:<SHA256(DER public key)>:` prefix are excluded from backup/fingerprint
+reads; ordinary quota buckets, other operator recipients and prefix strings that
+occur elsewhere in a key remain intact. This prevents disposable operator
+coordination from invalidating the reviewed source fingerprint. The snapshot
+adapter is read-only. Successful operations release their lease; uncertain errors
+retain it until expiry. Root release cleanup removes **only this exact prefix**.
 
-Apply verifies the locally signed receipt using the same public recipient. It
-exports the paused database again and requires the **exact** reviewed snapshot ID
-before running the existing explicit `cmd/migrate` registry. Any intervening data
-or schema change aborts before migration. After migration it exports again and
-compares every preexisting application table's columns, row count and typed
-multiset digest. Migration-history schema changes are handled by the existing
-migration/snapshot validators. Only aggregate `status.json` is deployed. A failed
-job never claims completion: keep writers paused and inspect/recover explicitly.
-The existing migration registry supports idempotent retries, but a partially
-applied schema changes the reviewed snapshot ID, so obtain and verify a fresh
-backup before another apply job.
+After verified application promotion/acceptance, delete the temporary operator
+deployment, remove its public-key deployment input, and retire its exact-prefix
+coordination rows. Keep the private backup/key per the recovery retention policy.
+Never promote the operator service or publish a plaintext snapshot.
 
-Resume/promote only the separately built and reviewed **application** deployment
-following the release runbook. Never promote these static operator deployments.
-Remove local ephemeral `operators/recipient.pem` and `operators/review.json` after
-use; keep private recovery artifacts outside Git. Retire encrypted operator
-artifacts after the recovery retention period.
-
-Official references: [Production staging](https://vercel.com/docs/cli/deploy#skip-domain),
-[Secret variables](https://vercel.com/docs/environment-variables/sensitive-environment-variables),
-[project pause](https://vercel.com/docs/projects/managing-projects#pausing-a-project).
+References: [Production staging](https://vercel.com/docs/cli/deploy#skip-domain),
+[project pause](https://vercel.com/docs/rest-api/projects/pause-a-project),
+[Function payload limits](https://vercel.com/docs/functions/limitations).

@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/CountableNewt/my-context-protocol/services/go/operatorservice"
 	"io"
 	"net/url"
 	"os"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/operatorbackup"
+	"github.com/CountableNewt/my-context-protocol/services/go/operatorjob"
 	"github.com/CountableNewt/my-context-protocol/services/go/snapshotimport"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
@@ -42,6 +45,8 @@ func run(args []string) error {
 	envelopePath := flags.String("envelope", "", "downloaded encrypted backup (review only)")
 	receiptPath := flags.String("receipt", "../../operators/review.json", "locally signed restore verification receipt")
 	output := flags.String("output", "../../.operator-output", "only ciphertext and aggregate metadata are written here")
+	mode := flags.String("mode", "preflight", "signed HTTP command: preflight, snapshot, apply")
+	audience := flags.String("audience", "", "exact temporary operator deployment hostname")
 	paused := flags.Bool("writers-paused", false, "operator confirms all production writers stopped and drained")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -52,6 +57,86 @@ func run(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	switch args[0] {
+	case "sign", "invoke":
+		if *directory == "" || *privatePath == "" || !validHost(*audience) || !strings.HasSuffix(*audience, ".vercel.app") || !validHost(*host) {
+			return errors.New("signed command requires directory, key, audience and expected-host")
+		}
+		if err := privateDirectory(*directory); err != nil {
+			return err
+		}
+		info, err := os.Stat(*privatePath)
+		if err != nil || info.Mode().Perm()&0077 != 0 {
+			return errors.New("private key permissions must be owner-only")
+		}
+		raw, err := bounded(*privatePath, 16384)
+		if err != nil {
+			return err
+		}
+		key, err := operatorbackup.Private(raw)
+		if err != nil {
+			return err
+		}
+		nonce := make([]byte, 32)
+		if _, err = rand.Read(nonce); err != nil {
+			return err
+		}
+		now := time.Now()
+		command := operatorservice.Command{Version: 1, Method: "POST", Path: "/operator", Mode: *mode, Audience: *audience, Host: *host, Nonce: hex.EncodeToString(nonce), IssuedAt: now.Unix(), ExpiresAt: now.Add(15 * time.Minute).Unix(), WritersPaused: *paused}
+		if *mode == "apply" {
+			raw, err = bounded(*receiptPath, 16384)
+			if err != nil {
+				return err
+			}
+			command.Review = &operatorbackup.Receipt{}
+			if json.Unmarshal(raw, command.Review) != nil {
+				return errors.New("invalid review receipt")
+			}
+		}
+		if err = command.Sign(key); err != nil {
+			return err
+		}
+		if err = command.Verify(&key.PublicKey, *audience, *host, now); err != nil {
+			return err
+		}
+		raw, err = json.Marshal(command)
+		if err != nil {
+			return err
+		}
+		requestPath := filepath.Join(*directory, "request.json")
+		if err = exclusive(requestPath, raw); err != nil {
+			return err
+		}
+		if args[0] == "sign" {
+			fmt.Println("Signed bounded operator request written.")
+			return nil
+		}
+		bodyPath := filepath.Join(*directory, "response.body")
+		headerPath := filepath.Join(*directory, "response.headers")
+		if err = exclusive(bodyPath, nil); err != nil {
+			return err
+		}
+		if err = exclusive(headerPath, nil); err != nil {
+			return err
+		}
+		// Only the local Vercel CLI handles its own deployment authentication.
+		// Neither the database token nor recipient private key enters this argv.
+		client := exec.CommandContext(ctx, "vercel", "curl", "/operator", "--deployment", "https://"+*audience, "--scope", "sam-clemente-s-team", "--", "--fail-with-body", "--silent", "--show-error", "--max-time", "260", "--max-filesize", "4194304", "--request", "POST", "--header", "Content-Type: application/json", "--data-binary", "@"+requestPath, "--output", bodyPath, "--dump-header", headerPath)
+		client.Stdout = os.Stdout
+		client.Stderr = os.Stderr
+		if err = client.Run(); err != nil {
+			return errors.New("operator request failed; retain private response and do not assume apply completion")
+		}
+		if *mode == "snapshot" {
+			raw, err = bounded(bodyPath, operatorbackup.MaxPlaintext+2048)
+			if err != nil {
+				return err
+			}
+			if _, err = operatorbackup.Open(raw, key); err != nil {
+				return errors.New("snapshot response authentication failed")
+			}
+		}
+		fmt.Println("Operator response saved privately.")
+		return nil
 	case "keygen":
 		if *directory == "" {
 			return errors.New("keygen requires private directory")
@@ -126,20 +211,6 @@ func run(args []string) error {
 		if err := expectedHost(*host, os.Getenv("TURSO_DATABASE_URL")); err != nil {
 			return err
 		}
-		if args[0] == "preflight" {
-			db, err := turso.New(os.Getenv("TURSO_DATABASE_URL"), os.Getenv("TURSO_AUTH_TOKEN"))
-			if err != nil {
-				return errors.New("invalid production database configuration")
-			}
-			ready, err := db.Execute(ctx, turso.Statement{SQL: "SELECT 1,(SELECT COUNT(*) FROM go_schema_migrations)", WantRows: true})
-			if err != nil || len(ready.Rows) != 1 || len(ready.Rows[0]) != 2 {
-				return errors.New("production database readiness query failed")
-			}
-			if err = os.MkdirAll(*output, 0700); err != nil {
-				return err
-			}
-			return metadata(*output, map[string]any{"mode": "preflight", "production_project_verified": true, "database_reachable": true, "expected_host": *host, "migration_count": ready.Rows[0][1].Value})
-		}
 		pub, err := bounded(*publicPath, 16384)
 		if err != nil {
 			return err
@@ -148,75 +219,34 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		var reviewed operatorbackup.Receipt
+		var reviewed *operatorbackup.Receipt
 		if args[0] == "apply" {
 			raw, err := bounded(*receiptPath, 16384)
 			if err != nil {
 				return err
 			}
-			if json.Unmarshal(raw, &reviewed) != nil {
-				return errors.New("invalid backup review receipt")
-			}
-			if err = reviewed.Verify(recipient, *host); err != nil {
-				return err
-			}
-		}
-		if args[0] == "apply" {
-			if err := migrationBinary(); err != nil {
-				return err
+			reviewed = &operatorbackup.Receipt{}
+			if json.Unmarshal(raw, reviewed) != nil {
+				return errors.New("invalid review receipt")
 			}
 		}
 		db, err := turso.New(os.Getenv("TURSO_DATABASE_URL"), os.Getenv("TURSO_AUTH_TOKEN"))
 		if err != nil {
 			return errors.New("invalid production database configuration")
 		}
-		temp, err := os.MkdirTemp("", "myctx-production-operator-")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(temp)
-		sourcePath := filepath.Join(temp, "before.jsonl")
-		before, err := snapshotimport.ExportRemote(ctx, db, sourcePath, snapshotimport.RemoteExportOptions{WritersPaused: true, CurrentSchema: true})
+		result, err := operatorjob.Run(ctx, db, args[0], *host, recipient, reviewed)
 		if err != nil {
 			return err
 		}
 		if err = os.MkdirAll(*output, 0700); err != nil {
 			return err
 		}
-		if args[0] == "snapshot" {
-			plain, err := bounded(sourcePath, operatorbackup.MaxPlaintext)
-			if err != nil {
+		if len(result.Ciphertext) > 0 {
+			if err = exclusive(filepath.Join(*output, "snapshot.enc"), result.Ciphertext); err != nil {
 				return err
 			}
-			sealed, err := operatorbackup.Seal(plain, recipient)
-			if err != nil {
-				return err
-			}
-			if err = exclusive(filepath.Join(*output, "snapshot.enc"), sealed); err != nil {
-				return err
-			}
-			hash := sha256.Sum256(sealed)
-			return metadata(*output, map[string]any{"mode": "snapshot", "snapshot_id": before.ID, "envelope_sha256": hex.EncodeToString(hash[:]), "expected_host": *host})
 		}
-		if before.ID != reviewed.SnapshotID {
-			return errors.New("production changed since reviewed backup; take and verify a fresh snapshot")
-		}
-		// The fixed existing operator command owns the migration registry. Neither
-		// credentials nor arbitrary SQL are accepted in arguments or emitted here.
-		cmd := exec.CommandContext(ctx, "../../operators/migrate-linux-amd64")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err = cmd.Run(); err != nil {
-			return errors.New("explicit migration command failed; keep writers paused and inspect migration state")
-		}
-		after, err := snapshotimport.ExportRemote(ctx, db, filepath.Join(temp, "after.jsonl"), snapshotimport.RemoteExportOptions{WritersPaused: true, CurrentSchema: true})
-		if err != nil {
-			return errors.New("post-migration snapshot verification failed; keep writers paused")
-		}
-		if err = preserved(before, after); err != nil {
-			return err
-		}
-		return metadata(*output, map[string]any{"mode": "apply", "reviewed_snapshot_id": before.ID, "after_snapshot_id": after.ID, "source_rows_preserved": true, "expected_host": *host})
+		return metadata(*output, result.Proof)
 	default:
 		return errors.New("unknown operator mode")
 	}
@@ -313,16 +343,6 @@ func preserved(before, after *snapshotimport.Snapshot) error {
 		if current == nil || current.Count != prior.Count || current.Digest != prior.Digest || strings.Join(current.Columns, "\x00") != strings.Join(prior.Columns, "\x00") {
 			return errors.New("post-migration source table differs: " + prior.Name + "; keep writers paused")
 		}
-	}
-	return nil
-}
-
-// The operator source carries binaries cross-compiled from the reviewed commit.
-// There is no shell, toolchain installation, or caller-selected executable.
-func migrationBinary() error {
-	info, err := os.Lstat("../../operators/migrate-linux-amd64")
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		return errors.New("reviewed executable migration binary is missing")
 	}
 	return nil
 }

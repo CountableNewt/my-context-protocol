@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 )
@@ -50,4 +52,11 @@ func (r Receipt) Verify(key *rsa.PublicKey, host string) error {
 		return errors.New("backup review signature rejected")
 	}
 	return nil
+}
+
+// KeyID scopes disposable operator coordination to this exact fresh recipient.
+func KeyID(key *rsa.PublicKey) string {
+	raw, _ := x509.MarshalPKIXPublicKey(key)
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(hash[:])
 }

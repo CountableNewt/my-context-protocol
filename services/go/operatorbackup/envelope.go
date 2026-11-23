@@ -5,6 +5,7 @@ package operatorbackup
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -14,11 +15,13 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"errors"
+	"io"
 )
 
 const MaxPlaintext = 256 << 20
 
-var magic = []byte("MYCTX-SNAPSHOT-ENVELOPE-1\n")
+var legacyMagic = []byte("MYCTX-SNAPSHOT-ENVELOPE-1\n")
+var magic = []byte("MYCTX-SNAPSHOT-ENVELOPE-2\n")
 var label = []byte("mycontextprotocol-production-snapshot-v1")
 
 func Generate() ([]byte, []byte, error) {
@@ -70,6 +73,18 @@ func Seal(plain []byte, key *rsa.PublicKey) ([]byte, error) {
 	if len(plain) == 0 || len(plain) > MaxPlaintext {
 		return nil, errors.New("snapshot size outside bounds")
 	}
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(plain); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	plain = compressed.Bytes()
+	if len(plain) > MaxPlaintext {
+		return nil, errors.New("compressed snapshot exceeds bounds")
+	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return nil, err
@@ -97,7 +112,7 @@ func Seal(plain []byte, key *rsa.PublicKey) ([]byte, error) {
 	return gcm.Seal(header, nonce, plain, header), nil
 }
 func Open(envelope []byte, key *rsa.PrivateKey) ([]byte, error) {
-	if len(envelope) > MaxPlaintext+2048 || len(envelope) < len(magic)+2 || !bytes.Equal(envelope[:len(magic)], magic) {
+	if len(envelope) > MaxPlaintext+2048 || len(envelope) < len(magic)+2 || (!bytes.Equal(envelope[:len(magic)], magic) && !bytes.Equal(envelope[:len(magic)], legacyMagic)) {
 		return nil, errors.New("invalid snapshot envelope")
 	}
 	n := int(binary.BigEndian.Uint16(envelope[len(magic):]))
@@ -123,5 +138,20 @@ func Open(envelope []byte, key *rsa.PrivateKey) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("snapshot authentication failed")
 	}
-	return plain, nil
+	if len(plain) > MaxPlaintext {
+		return nil, errors.New("snapshot plaintext exceeds bounds")
+	}
+	if bytes.Equal(envelope[:len(magic)], legacyMagic) {
+		return plain, nil
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(plain))
+	if err != nil {
+		return nil, errors.New("invalid compressed snapshot")
+	}
+	defer reader.Close()
+	decompressed, err := io.ReadAll(io.LimitReader(reader, MaxPlaintext+1))
+	if err != nil || len(decompressed) > MaxPlaintext {
+		return nil, errors.New("decompressed snapshot exceeds bounds or is invalid")
+	}
+	return decompressed, nil
 }

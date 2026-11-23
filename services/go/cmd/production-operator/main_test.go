@@ -6,10 +6,12 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/internal/sqlitetest"
 	"github.com/CountableNewt/my-context-protocol/services/go/migrations"
 	"github.com/CountableNewt/my-context-protocol/services/go/operatorbackup"
+	"github.com/CountableNewt/my-context-protocol/services/go/operatorservice"
 	"github.com/CountableNewt/my-context-protocol/services/go/snapshotimport"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestTargetGuardsRejectWrongEnvironmentBeforeNetwork(t *testing.T) {
@@ -87,6 +89,21 @@ func TestLocalReviewRequiresSuccessfulPrivateRestore(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(reviewDir, "restored.sqlite")); err != nil {
 		t.Fatal("signed without persisted restore")
 	}
+	signedDir := filepath.Join(root, "signed")
+	if err = run([]string{"sign", "--mode", "apply", "--writers-paused", "--expected-host", "production.example.com", "--audience", "operator.vercel.app", "--key", filepath.Join(keys, "recipient-private.pem"), "--receipt", filepath.Join(reviewDir, "review.json"), "--directory", signedDir}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(filepath.Join(signedDir, "request.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var command operatorservice.Command
+	if json.Unmarshal(raw, &command) != nil || command.Review == nil || command.Review.SnapshotID != snapshot.ID {
+		t.Fatal("signed request lost reviewed source binding")
+	}
+	if err = command.Verify(public, "operator.vercel.app", "production.example.com", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if err = exclusive(encrypted, []byte("replacement")); err == nil {
 		t.Fatal("backup overwritable")
 	}
@@ -100,42 +117,5 @@ func TestPostMigrationComparisonRejectsSourceChanges(t *testing.T) {
 	after.Tables[0].Digest = "changed"
 	if preserved(before, after) == nil {
 		t.Fatal("changed rows accepted")
-	}
-}
-
-func TestMigrationExecutableRequiresFixedRegularBinary(t *testing.T) {
-	root := t.TempDir()
-	working := filepath.Join(root, "services", "go")
-	if err := os.MkdirAll(working, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(root, "operators"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(working)
-	if migrationBinary() == nil {
-		t.Fatal("missing migration binary accepted")
-	}
-	path := filepath.Join(root, "operators", "migrate-linux-amd64")
-	if err := os.WriteFile(path, []byte("reviewed executable"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if migrationBinary() == nil {
-		t.Fatal("nonexecutable migration binary accepted")
-	}
-	if err := os.Chmod(path, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := migrationBinary(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(path, path+".real"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(path+".real", path); err != nil {
-		t.Fatal(err)
-	}
-	if migrationBinary() == nil {
-		t.Fatal("symlink migration executable accepted")
 	}
 }
