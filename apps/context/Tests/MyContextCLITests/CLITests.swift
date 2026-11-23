@@ -152,3 +152,29 @@ import Testing
     #expect(throws: (any Error).self) { try client.requestURL(path) }
   }
 }
+
+@Test func firstClassTangledAndPublicationAliases() throws {
+  for name in [
+    "tangled repos", "tangled connect", "publication review", "publication publish",
+    "publication reconcile", "publication conflict", "publication discard",
+  ] { #expect(operations.contains { $0.name == name }) }
+  #expect(operations.first { $0.name == "repos connect" }?.description.contains("Tangled") == true)
+  #expect(
+    operations.first { $0.name == "skills writeback" }?.description.contains("GitHub") == false)
+  let body = try #require(
+    try providerBody(
+      name: "tangled connect",
+      body: Data(#"{"repo_owner":"did:plc:owner","repo_name":"skills","is_private":true}"#.utf8)))
+  guard case .object(let fields) = try JSON(data: body) else {
+    Issue.record("expected object")
+    return
+  }
+  #expect(fields["provider"] == .string("tangled"))
+  #expect(fields["is_private"] == .bool(true))
+  #expect(throws: (any Error).self) {
+    try providerBody(name: "tangled connect", body: Data(#"{"provider":"github"}"#.utf8))
+  }
+  #expect(throws: (any Error).self) {
+    try providerBody(name: "tangled connect", body: Data("[]".utf8))
+  }
+}

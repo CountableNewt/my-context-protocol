@@ -340,6 +340,40 @@ class CLITests(unittest.TestCase):
             self.assertEqual(process.returncode, 130, stderr)
             self.assertFalse(self.config.exists())
 
+    def test_tangled_and_review_bound_publication_aliases(self):
+        received = []
+        def response(*request):
+            received.append(request)
+            return 202, {"Content-Type": "application/json"}, b'{"status":"pending","digest":"reviewed"}'
+        with server(response) as origin:
+            env = dict(self.env, MYCTX_URL=origin + "/api", MYCTX_SESSION="secret")
+            result = self.run_cli("tangled", "connect", "--project", "project", "--data",
+                                  '{"repo_owner":"did:plc:owner","repo_name":"private","branch":"main","is_private":true}', env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(received[-1][:2], ("POST", "/api/projects/project/connect-repo"))
+            self.assertEqual(json.loads(received[-1][3])["provider"], "tangled")
+            self.assertTrue(json.loads(received[-1][3])["is_private"])
+            for command, method, path, data in [
+                ("review", "GET", "/api/projects/project/atproto/publication", None),
+                ("publish", "POST", "/api/projects/project/atproto/publication", '{"review_digest":"reviewed","public":true,"telemetry":false}'),
+                ("reconcile", "POST", "/api/projects/project/atproto/reconcile", None),
+                ("conflict", "GET", "/api/projects/project/atproto/conflict", None),
+                ("discard", "POST", "/api/projects/project/atproto/conflict", '{"intent_id":"reviewed-intent","expected_current_cid":"current","action":"discard"}'),
+            ]:
+                args = ["publication", command, "--project", "project"]
+                if data is not None:
+                    args += ["--data", data]
+                result = self.run_cli(*args, env=env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(received[-1][:2], (method, path))
+                self.assertEqual(json.loads(result.stdout)["status"], "pending")
+                if data is not None:
+                    self.assertEqual(json.loads(received[-1][3]), json.loads(data))
+            before = len(received)
+            result = self.run_cli("tangled", "connect", "--project", "project", "--data", '{"provider":"github"}', env=env)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(len(received), before)
+
 
 if __name__ == "__main__":
     unittest.main()

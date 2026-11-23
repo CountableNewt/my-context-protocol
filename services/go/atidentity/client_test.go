@@ -55,6 +55,29 @@ func TestClientMetadataAndNetworkPolicy(t *testing.T) {
 	}
 }
 
+func TestDynamicRepositoryAudiencesStayBoundToReviewedMethods(t *testing.T) {
+	c := testClientConfig(t)
+	c.ServiceAuth = []ServicePermission{{Audience: "*", Method: "org.tangled.git.receivePack"}, {Audience: "*", Method: "org.tangled.temp.git.getTree"}}
+	_, metadata, err := NewClient(c, oauth.NewMemStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, scope := range strings.Fields(metadata.Scope) {
+		p, err := auth.ParsePermissionString(scope)
+		if err == nil && p.Resource == "rpc" && p.Audience == "*" && len(p.Endpoint) == 1 && p.Endpoint[0] == "org.tangled.git.receivePack" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("missing method-limited repository grant")
+	}
+	c.ServiceAuth = []ServicePermission{{Audience: "*", Method: "dev.mycontextprotocol.admin.updateAccountFlags"}}
+	if _, _, err := NewClient(c, oauth.NewMemStore()); err == nil {
+		t.Fatal("platform audience wildcard accepted")
+	}
+}
+
 func TestClientRejectsUnsafeConfiguration(t *testing.T) {
 	for _, test := range []struct {
 		name   string

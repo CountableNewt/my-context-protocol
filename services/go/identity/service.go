@@ -337,28 +337,24 @@ func (s *Service) account(r *http.Request) (*Account, error) {
 	return account, nil
 }
 func (s *Service) respondUser(w http.ResponseWriter, r *http.Request, account *Account) {
-	suggest := false
-	if s.config.GitHubAppConfigured && account.GitHubID > 0 {
-		var err error
-		suggest, err = s.store.SuggestedGitHubApp(r.Context(), account.ID)
-		if err != nil {
-			s.fail(w, 503, "Auth service temporarily unavailable")
-			return
+	result, err := s.accountView(r.Context(), account)
+	if err != nil {
+		s.fail(w, 503, "Auth service temporarily unavailable")
+		return
+	}
+	if store, ok := s.store.(OwnedSessionStore); ok {
+		if cookie, err := r.Cookie("vapor-session"); err == nil {
+			id, err := store.SessionIdentifier(r.Context(), cookie.Value, account.ID)
+			if err != nil {
+				s.fail(w, 503, "Auth service temporarily unavailable")
+				return
+			}
+			if id != "" {
+				result["session_id"] = id
+			}
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	result := map[string]any{"id": account.ID, "email": account.Email, "login": account.Login, "avatar_url": account.AvatarURL, "plan": "free", "is_admin": account.IsAdmin, "internal_pro_bypass": false, "can_manage_subscription": false, "suggested_github_app_install": suggest, "app_env": s.config.AppEnvironment, "non_production_bypasses": false, "needs_project_selection": false, "github_connected": account.GitHubID > 0, "atproto_enabled": s.config.ATProto != nil}
-	if s.config.ATProto != nil {
-		ident, err := s.config.ATProto.Accounts.ATProtoIdentity(r.Context(), account.ID)
-		if err != nil {
-			s.fail(w, 503, "Auth service temporarily unavailable")
-			return
-		}
-		if ident != nil {
-			result["atproto_did"] = ident.DID
-			result["atproto_handle"] = ident.Handle
-		}
-	}
 	json.NewEncoder(w).Encode(result)
 }
 func (s *Service) me(w http.ResponseWriter, r *http.Request) {

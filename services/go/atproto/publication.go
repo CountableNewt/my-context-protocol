@@ -19,6 +19,12 @@ type Journal interface {
 	Complete(ctx context.Context, owner, key, digest string, ref Reference) error
 }
 
+// RetirableJournal invalidates completed references before physical deletion so
+// a future identical immutable publication verifies/recreates its PDS record.
+type RetirableJournal interface {
+	Retire(context.Context, string, Reference) error
+}
+
 type Publisher struct {
 	Records Records
 	Journal Journal

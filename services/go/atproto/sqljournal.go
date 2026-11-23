@@ -42,6 +42,14 @@ type Database interface {
 // through public record indexing or an unauthenticated reconciliation endpoint.
 type SQLJournal struct{ DB Database }
 
+func (j SQLJournal) Retire(ctx context.Context, owner string, ref Reference) error {
+	if j.DB == nil || !strings.HasPrefix(ref.URI, "at://"+owner+"/") || !validCID(ref.CID) {
+		return errors.New("invalid publication retirement")
+	}
+	_, err := j.DB.Execute(ctx, journalStatement("DELETE FROM atproto_publication_intents WHERE owner_did=? AND record_uri=? AND canonical_cid=? AND status='complete'", turso.Text(owner), turso.Text(ref.URI), turso.Text(ref.CID)))
+	return err
+}
+
 type PendingIntent struct {
 	Owner    string
 	Key      string

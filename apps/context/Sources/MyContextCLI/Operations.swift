@@ -3,7 +3,7 @@ public struct Operation: Sendable {
 }
 
 public let operations: [Operation] = [
-  Operation(name: "health", method: "GET", path: "/health", description: "Check Gateway health"),
+  Operation(name: "health", method: "GET", path: "/health", description: "Check service health"),
   Operation(
     name: "auth me", method: "GET", path: "/auth/me", description: "Show the authenticated account"),
   Operation(
@@ -45,7 +45,7 @@ public let operations: [Operation] = [
     description: "Show the project repository connection"),
   Operation(
     name: "repos connect", method: "POST", path: "/projects/:id/connect-repo",
-    description: "Connect a GitHub repository and branch"),
+    description: "Connect a GitHub or Tangled repository and branch"),
   Operation(
     name: "projects sync", method: "POST", path: "/projects/:id/sync",
     description: "Trigger repository synchronization"),
@@ -69,7 +69,7 @@ public let operations: [Operation] = [
   Operation(
     name: "skills writeback", method: "POST",
     path: "/projects/:id/releases/:releaseId/compiled-skills/:compiledSkillId/writeback",
-    description: "Create a branch and draft GitHub pull request for skill metadata"),
+    description: "Propose skill metadata changes through the connected repository provider"),
   Operation(
     name: "skills usage", method: "GET", path: "/projects/:id/skill-usage",
     description: "Show paginated retained per-skill usage analytics"),
@@ -104,6 +104,30 @@ public let operations: [Operation] = [
   Operation(
     name: "domains verify", method: "POST", path: "/projects/:id/custom-domain/verify",
     description: "Verify project ownership, routing DNS, and TLS status"),
+  Operation(
+    name: "tangled repos", method: "GET", path: "/repositories/tangled",
+    description: "List public Tangled repositories; use cursor pagination"),
+  Operation(
+    name: "tangled connect", method: "POST", path: "/projects/:id/connect-repo",
+    description: "Connect Tangled by exact repo_owner DID, repo_name and branch"),
+  Operation(
+    name: "publication review", method: "GET", path: "/projects/:id/atproto/publication",
+    description: "Review public record inventory and digest with cursor pagination"),
+  Operation(
+    name: "publication publish", method: "POST", path: "/projects/:id/atproto/publication",
+    description:
+      "Publish reviewed records with explicit public and separate telemetry consent; repeat pending requests"
+  ),
+  Operation(
+    name: "publication reconcile", method: "POST", path: "/projects/:id/atproto/reconcile",
+    description: "Rebuild private projections from canonical owner records"),
+  Operation(
+    name: "publication conflict", method: "GET", path: "/projects/:id/atproto/conflict",
+    description: "Inspect a pending publication conflict without applying it"),
+  Operation(
+    name: "publication discard", method: "POST", path: "/projects/:id/atproto/conflict",
+    description:
+      "Explicitly discard a superseded intent using reviewed intent_id and expected_current_cid"),
   Operation(
     name: "github repos", method: "GET", path: "/github/repos",
     description: "List accessible GitHub repositories"),

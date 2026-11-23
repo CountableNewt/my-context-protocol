@@ -87,3 +87,23 @@ func TestPersistenceFailureAndPDSMigrationFailClosed(t *testing.T) {
 		t.Fatalf("PDS move: %v", err)
 	}
 }
+
+func TestNestedSessionScopeReusesOwnedLeaseAndSession(t *testing.T) {
+	m := managerFixture(t)
+	if err := m.WithSession(context.Background(), "account", func(ctx context.Context, outer *oauth.ClientSession) error {
+		if err := m.WithSession(context.Background(), "account", func(context.Context, *oauth.ClientSession) error {
+			t.Error("unscoped request entered owned lease")
+			return nil
+		}); !errors.Is(err, ErrBusy) {
+			t.Fatal(err)
+		}
+		return m.WithSession(ctx, "account", func(_ context.Context, inner *oauth.ClientSession) error {
+			if inner != outer {
+				t.Error("nested scope resumed a different OAuth session")
+			}
+			return nil
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -29,8 +29,9 @@ type ClientConfig struct {
 	KeyID       string
 }
 
-// ServicePermission grants one exact method at one exact service DID/ref. It
-// authorizes PDS getServiceAuth for that target, never a wildcard audience.
+// ServicePermission grants one exact method at a service DID/ref. Tangled's
+// reviewed methods may use a dynamic audience because repositories have their
+// own DIDs, discovered only after login. Platform methods require an exact target.
 type ServicePermission struct {
 	Audience string `json:"audience"`
 	Method   string `json:"method"`
@@ -77,7 +78,7 @@ func NewClient(c ClientConfig, store oauth.ClientAuthStore) (*oauth.ClientApp, o
 		return nil, empty, errors.New("too many OAuth service permissions")
 	}
 	for _, permission := range c.ServiceAuth {
-		if permission.Audience == "" || permission.Audience == "*" || permission.Method == "*" {
+		if permission.Audience == "" || permission.Method == "*" || permission.Audience == "*" && !dynamicRepositoryMethod(permission.Method) {
 			return nil, empty, errors.New("exact service audience and method are required")
 		}
 		p := auth.Permission{Resource: "rpc", Audience: permission.Audience, Endpoint: []string{permission.Method}}
@@ -110,6 +111,15 @@ func NewClient(c ClientConfig, store oauth.ClientAuthStore) (*oauth.ClientApp, o
 	// SDK default directory clients silently bypassing this transport policy.
 	app.Dir = &identity.BaseDirectory{PLCURL: "https://plc.directory", HTTPClient: *client, PLCClient: client, UserAgent: config.UserAgent}
 	return app, metadata, nil
+}
+
+func dynamicRepositoryMethod(method string) bool {
+	switch method {
+	case "org.tangled.repo.listRepos", "org.tangled.temp.repo.getRepoByName", "org.tangled.temp.git.getArchive", "org.tangled.temp.git.getBranch", "org.tangled.temp.git.listCommits", "org.tangled.temp.git.getTree", "org.tangled.temp.git.getEntry", "org.tangled.temp.git.getBlob", "org.tangled.git.receivePack", "org.tangled.review.submitPatch", "com.atproto.repo.createRecord":
+		return true
+	default:
+		return false
+	}
 }
 
 // publicURL validates before transport selection, and the dialer independently

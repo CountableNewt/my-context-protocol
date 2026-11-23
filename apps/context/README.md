@@ -232,3 +232,44 @@ and executable integration tests against isolated loopback HTTP servers. The lat
 browser authentication, session storage, credential isolation, redirects, JSON precision,
 request handling and error output. `make build VERSION=...` embeds the version into the
 standalone executable. Concurrent versioned builds in the same checkout are unsupported.
+
+### Tangled and owner records
+
+The existing `repos connect` and `skills writeback` commands dispatch through the
+connected provider. Named Tangled commands preserve its native owner DID:
+
+```sh
+myctx tangled repos --query cursor=NEXT_CURSOR
+myctx tangled connect --project PROJECT_ID --data '{"repo_owner":"did:plc:OWNER","repo_name":"skills","branch":"main","is_private":true}'
+```
+
+`tangled connect` pins `provider=tangled`; a contradictory provider is rejected
+before sending a request. Link the ATProto identity before connecting a repository.
+Private repository access is verified by the service and does not authorize public
+metadata publication.
+
+Review every inventory page before explicitly authorizing public owner records:
+
+```sh
+myctx publication review --project PROJECT_ID --query limit=25
+myctx publication review --project PROJECT_ID --query cursor=25 --query limit=25
+myctx publication publish --project PROJECT_ID --data '{"review_digest":"EXACT_REVIEWED_DIGEST","public":true,"telemetry":false}'
+myctx publication reconcile --project PROJECT_ID
+myctx publication conflict --project PROJECT_ID
+```
+
+Publication is public and deletion cannot recall replicated copies. Existing
+telemetry requires renewed, separate `telemetry=true` consent; prior opt-in is
+insufficient. A changed digest requires a fresh review. A pending response is
+incomplete; repeat the exact request to continue its durable bounded work.
+Reconciliation also supports bounded retries.
+
+Discard a superseded mutation only after inspecting its current conflict:
+
+```sh
+myctx publication discard --project PROJECT_ID --data '{"intent_id":"REVIEWED_INTENT","expected_current_cid":"REVIEWED_CURRENT_CID","action":"discard"}'
+```
+
+No command discards conflicts automatically. Resumable mutations should continue
+through their original operation. The operator-only Go `cmd/records` tool provides
+independent reconstruction verification and environment-bound migration inventories.

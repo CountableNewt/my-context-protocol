@@ -240,9 +240,10 @@ public struct CLI {
       }
       return URLQueryItem(name: String(pieces[0]), value: String(pieces[1]))
     }
-    let body: Data?
+    var body: Data?
     do { body = try requestBody(options, input) } catch let error as CLIError { throw error } catch
     { throw CLIError.usage("Invalid request body: \(error.localizedDescription)") }
+    body = try providerBody(name: name, body: body)
     if ["GET", "DELETE"].contains(method) && body != nil {
       throw CLIError.usage("\(method) does not accept --data or --set")
     }
@@ -339,4 +340,17 @@ func duration(_ raw: String) throws -> Double {
     throw CLIError.usage("--timeout must be a positive duration")
   }
   return total
+}
+
+func providerBody(name: String, body: Data?) throws -> Data? {
+  guard name == "tangled connect" else { return body }
+  let value = try body.map { try JSON(data: $0) } ?? .object([:])
+  guard case .object(var fields) = value else {
+    throw CLIError.usage("Tangled connection requires a JSON object")
+  }
+  if let provider = fields["provider"], provider != .string("tangled") {
+    throw CLIError.usage("tangled connect requires provider tangled")
+  }
+  fields["provider"] = .string("tangled")
+  return Data(JSON.object(fields).rendered().utf8)
 }

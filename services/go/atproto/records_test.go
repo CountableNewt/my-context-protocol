@@ -40,6 +40,73 @@ func TestDefaultTransportDoesNotDelegatePrivateResolutionToProxy(t *testing.T) {
 	}
 }
 
+func TestDeleteRequiresCIDAndUsesOwnerBoundCAS(t *testing.T) {
+	mutation := mutation()
+	cid := "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	calls := 0
+	c, err := NewClient("https://pds.example", transportFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Path != "/xrpc/com.atproto.repo.deleteRecord" || r.Method != "POST" {
+			t.Fatal("invalid deletion method")
+		}
+		var body map[string]json.RawMessage
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			t.Fatal("invalid delete JSON")
+		}
+		if string(body["swapRecord"]) != "\""+cid+"\"" || body["record"] != nil {
+			t.Fatal("deletion was unconditional or included record contents")
+		}
+		return response(200, `{}`), nil
+	}), authorizerFunc(func(_ context.Context, _ *http.Request, owner string) error {
+		if owner != mutation.Repo {
+			t.Fatal("cross-owner delete")
+		}
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Delete(context.Background(), mutation); err == nil || calls != 0 {
+		t.Fatal("unconditional deletion reached network")
+	}
+	mutation.ExpectedCID = &cid
+	if err = c.Delete(context.Background(), mutation); err != nil || calls != 1 {
+		t.Fatalf("CAS deletion failed: %v", err)
+	}
+}
+
+func TestRepositoryHeadAndDeleteCommitCAS(t *testing.T) {
+	m := mutation()
+	cid := "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	m.ExpectedCID = &cid
+	c, err := NewClient("https://pds.example", transportFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method == "GET" {
+			if r.URL.Path != "/xrpc/com.atproto.sync.getLatestCommit" || r.URL.Query().Get("did") != m.Repo {
+				t.Fatal("wrong repository head request")
+			}
+			return response(200, `{"cid":"`+cid+`"}`), nil
+		}
+		var body map[string]string
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body["swapCommit"] != cid || body["swapRecord"] != cid {
+			t.Fatal("repository or record CAS missing")
+		}
+		return response(200, `{}`), nil
+	}), authorizerFunc(func(context.Context, *http.Request, string) error { return nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := c.Head(context.Background(), m.Repo)
+	if err != nil || head != cid {
+		t.Fatalf("head %s %v", head, err)
+	}
+	if err = c.DeleteAtCommit(context.Background(), m, head); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.DeleteAtCommit(context.Background(), m, "not-a-cid"); err == nil {
+		t.Fatal("invalid repo head accepted")
+	}
+}
+
 func TestClientCASAndAuth(t *testing.T) {
 	m := mutation()
 	calls := 0

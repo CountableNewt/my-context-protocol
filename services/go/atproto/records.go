@@ -22,6 +22,7 @@ import (
 
 var ErrConflict = errors.New("canonical record conflict")
 var ErrNotFound = errors.New("canonical record not found")
+var ErrInvalidResponse = errors.New("invalid PDS record response")
 
 // StableKey scopes a legacy identifier to a collection without exposing it.
 func StableKey(collection, legacyID string) string {
@@ -74,6 +75,21 @@ type Record struct {
 type Records interface {
 	Get(context.Context, Mutation) (Record, error)
 	Put(context.Context, Mutation) (Reference, error)
+}
+
+// Deleter is optional so read/write adapters remain compatible. Deletion always
+// requires an expected CID; callers cannot accidentally erase a newer record.
+type Deleter interface {
+	Delete(context.Context, Mutation) error
+}
+
+// RepositoryDeleter additionally prevents a cross-record race: a manifest can
+// reintroduce an old immutable record while collection is in flight. swapCommit
+// makes that concurrent repository change conflict instead of deleting live data.
+type RepositoryDeleter interface {
+	Deleter
+	Head(context.Context, string) (string, error)
+	DeleteAtCommit(context.Context, Mutation, string) error
 }
 
 // Authorizer attaches OAuth authorization and DPoP for this exact request.
@@ -207,7 +223,7 @@ func (c *Client) request(ctx context.Context, method, nsid, repo string, query u
 		return &XRPCError{response.StatusCode, failure.Error}
 	}
 	if err = json.Unmarshal(payload, out); err != nil {
-		return errors.New("invalid PDS JSON response")
+		return fmt.Errorf("%w: invalid JSON", ErrInvalidResponse)
 	}
 	return nil
 }
@@ -219,7 +235,7 @@ func (c *Client) Get(ctx context.Context, m Mutation) (Record, error) {
 	var record Record
 	err := c.request(ctx, "GET", "com.atproto.repo.getRecord", m.Repo, url.Values{"repo": {m.Repo}, "collection": {m.Collection}, "rkey": {m.RKey}}, nil, &record)
 	if err == nil && (record.URI != m.URI() || !validCID(record.CID) || !json.Valid(record.Value)) {
-		err = errors.New("invalid PDS record reference")
+		err = fmt.Errorf("%w: invalid record reference", ErrInvalidResponse)
 	}
 	return record, err
 }
@@ -231,7 +247,49 @@ func (c *Client) Put(ctx context.Context, m Mutation) (Reference, error) {
 	var ref Reference
 	err := c.request(ctx, "POST", "com.atproto.repo.putRecord", m.Repo, nil, m, &ref)
 	if err == nil && (ref.URI != m.URI() || !validCID(ref.CID)) {
-		err = errors.New("invalid PDS write reference")
+		err = fmt.Errorf("%w: invalid write reference", ErrInvalidResponse)
 	}
 	return ref, err
+}
+
+func (c *Client) Delete(ctx context.Context, m Mutation) error {
+	return c.delete(ctx, m, "")
+}
+func (c *Client) DeleteAtCommit(ctx context.Context, m Mutation, head string) error {
+	if !validCID(head) {
+		return errors.New("record deletion requires a valid repository head")
+	}
+	return c.delete(ctx, m, head)
+}
+func (c *Client) Head(ctx context.Context, owner string) (string, error) {
+	if _, err := syntax.ParseDID(owner); err != nil {
+		return "", err
+	}
+	var value struct {
+		CID string `json:"cid"`
+	}
+	if err := c.request(ctx, http.MethodGet, "com.atproto.sync.getLatestCommit", owner, url.Values{"did": {owner}}, nil, &value); err != nil {
+		return "", err
+	}
+	if !validCID(value.CID) {
+		return "", errors.New("invalid repository head")
+	}
+	return value.CID, nil
+}
+func (c *Client) delete(ctx context.Context, m Mutation, head string) error {
+	if err := m.Validate(); err != nil {
+		return err
+	}
+	if m.ExpectedCID == nil {
+		return errors.New("record deletion requires an expected CID")
+	}
+	body := struct {
+		Repo       string `json:"repo"`
+		Collection string `json:"collection"`
+		RKey       string `json:"rkey"`
+		SwapRecord string `json:"swapRecord"`
+		SwapCommit string `json:"swapCommit,omitempty"`
+	}{m.Repo, m.Collection, m.RKey, *m.ExpectedCID, head}
+	var response map[string]json.RawMessage
+	return c.request(ctx, http.MethodPost, "com.atproto.repo.deleteRecord", m.Repo, nil, body, &response)
 }

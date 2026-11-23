@@ -41,11 +41,21 @@ type Manager struct {
 	Directory  atidentitysdk.Directory
 }
 
+type sessionScopeKey struct{}
+type sessionScope struct {
+	manager *Manager
+	account string
+	session *oauth.ClientSession
+}
+
 // WithSession holds a durable lease for the entire operation, including all
 // nonce/refresh persistence. Never retain the session after the callback returns.
 func (m *Manager) WithSession(ctx context.Context, account string, apply func(context.Context, *oauth.ClientSession) error) error {
 	if m == nil || m.DB == nil || m.Identities == nil || m.Sessions == nil || m.Store == nil || m.Directory == nil || apply == nil {
 		return errors.New("linked ATProto session manager is not configured")
+	}
+	if held, ok := ctx.Value(sessionScopeKey{}).(sessionScope); ok && held.manager == m && held.account == account {
+		return apply(ctx, held.session)
 	}
 	linked, err := m.Identities.ATProtoIdentity(ctx, account)
 	if err != nil {
@@ -100,6 +110,7 @@ func (m *Manager) WithSession(ctx context.Context, account string, apply func(co
 			mu.Unlock()
 		}
 	}
+	ctx = context.WithValue(ctx, sessionScopeKey{}, sessionScope{m, account, session})
 	err = apply(ctx, session)
 	mu.Lock()
 	defer mu.Unlock()
@@ -166,5 +177,24 @@ func (m *Manager) Token(ctx context.Context, actor, audience, method string) (st
 	if !ok {
 		return "", ErrReconnect
 	}
-	return m.ServiceToken(ctx, account, audience, method)
+	// Parallel tree reads share one rotating refresh token. Wait briefly for the
+	// durable session lease rather than issuing concurrent refresh chains.
+	deadline := time.NewTimer(8 * time.Second)
+	defer deadline.Stop()
+	for {
+		token, err := m.ServiceToken(ctx, account, audience, method)
+		if !errors.Is(err, ErrBusy) {
+			return token, err
+		}
+		timer := time.NewTimer(75 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return "", ctx.Err()
+		case <-deadline.C:
+			timer.Stop()
+			return "", ErrBusy
+		case <-timer.C:
+		}
+	}
 }
