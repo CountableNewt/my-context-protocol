@@ -570,6 +570,9 @@
         },
         "github_installation_configured": {
           "type": "boolean"
+        },
+        "is_private": {
+          "type": "boolean"
         }
       },
       "required": [

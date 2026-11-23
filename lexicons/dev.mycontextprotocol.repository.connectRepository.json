@@ -71,6 +71,9 @@
             },
             "owner_did": {
               "type": "string"
+            },
+            "is_private": {
+              "type": "boolean"
             }
           },
           "required": [

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { GET, POST } from "./route";
+import { GET, POST, OPTIONS } from "./route";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -35,4 +35,14 @@ describe("XRPC gateway", () => {
     fetcher.mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://attacker.example" } }));
     expect((await GET(new NextRequest("https://preview.example/xrpc/dev.mycontextprotocol.project.listProjects"), { params: Promise.resolve({ method: "dev.mycontextprotocol.project.listProjects" }) })).status).toBe(502);
   });
+});
+
+it("allows scoped browser clients to preflight without cookies and bounds procedure bodies", async () => {
+  expect(OPTIONS().headers.get("access-control-allow-origin")).toBe("*");
+  expect(OPTIONS().headers.get("access-control-allow-credentials")).toBeNull();
+  vi.stubEnv("CONTROL_SERVICE_URL", "https://control.internal");
+  const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  const response = await POST(new NextRequest("https://app.example/xrpc/dev.mycontextprotocol.project.createProject", { method: "POST", body: "x".repeat(2 * 1024 * 1024 + 1) }), { params: Promise.resolve({ method: "dev.mycontextprotocol.project.createProject" }) });
+  expect(response.status).toBe(413);
+  expect(fetcher).not.toHaveBeenCalled();
 });

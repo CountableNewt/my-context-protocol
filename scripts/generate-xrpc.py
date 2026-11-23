@@ -43,7 +43,7 @@ D['clarification'] = obj(fields('field question reason'))
 D['compiledSkill'] = obj({**fields('id release_id skill_package_id path name summary skill_body exposure_type risk_level status skill_id kind scope activation_mode enforcement version source_checksum canonical_json body_diff_unified body_diff_prior_release_id schema_json'), **fields('canonical_schema_version priority',integer), **fields('yaml_frontmatter_present repo_specific clarification_required invoke_first',boolean),'clarification_questions':array(ref('clarification')),'use_when':strings(),'avoid_when':strings(),'failure_modes':strings()}, ['id','release_id','path','name','status'])
 D['proposal'] = obj({**fields('status pr_url pull_request_url branch repo_owner repo_name commit_sha message source_path'), **fields('changed',boolean)})
 D['requestLog'] = obj({**fields('id project_id release_id timestamp client_id method error_code error_message'), **fields('latency_ms status',integer)}, ['id','project_id','timestamp','method','status'])
-D['repositoryConnection'] = obj({**fields('project_id provider repo_owner repo_name default_branch auth_type webhook_id repository_did owner_did knot_url'), 'github_installation_configured':boolean()}, ['project_id','provider','repo_owner','repo_name','default_branch','auth_type'])
+D['repositoryConnection'] = obj({**fields('project_id provider repo_owner repo_name default_branch auth_type webhook_id repository_did owner_did knot_url'), 'github_installation_configured':boolean(), 'is_private':boolean()}, ['project_id','provider','repo_owner','repo_name','default_branch','auth_type'])
 D['repository'] = obj({**fields('id owner owner_login name full_name default_branch html_url provider repository_did owner_did knot_url description'), **fields('private is_private can_write',boolean)})
 D['syncJob'] = obj(fields('job_id project_id release_id status error_code'), ['job_id','project_id','status'])
 D['assignment'] = obj({**fields('id skill_id scope activation_mode target_type target_id'),'required':boolean(),'priority':integer()}, ['skill_id','scope','activation_mode','target_type','target_id','required','priority'])
@@ -110,7 +110,7 @@ op('release.listCompiledSkills',R,obj({'skills':array(ref('compiledSkill'))},['s
 op('release.updateCompiledSkill',{**S,**fields('exposure_type risk_level status summary skill_body schema_json'),'replace_schema':boolean(),'routing':ref('routing'),'runtime':ref('runtimePatch')},ref('compiledSkill'),S)
 op('release.proposeMetadataChange',S,ref('proposal'),S)
 op('analytics.listRequestLogs',{**P,'limit':integer(minimum=1),'offset':integer(minimum=0)},obj({'logs':array(ref('requestLog'))},['logs']),P,'logs')
-op('repository.connectRepository',{**P,**fields('provider owner repo branch repo_owner repo_name default_branch auth_type token installation_id repository_did owner_did')},ref('repositoryConnection'),P)
+op('repository.connectRepository',{**P,**fields('provider owner repo branch repo_owner repo_name default_branch auth_type token installation_id repository_did owner_did'), 'is_private':boolean()},ref('repositoryConnection'),P)
 op('repository.getConnection',P,ref('repositoryConnection'),P)
 op('telemetry.getUsage',{**P,**fields('window sort direction skill_id'),'page':integer(minimum=1,maximum=1000000),'page_size':integer(minimum=1,maximum=100)},ref('usage'),P)
 op('runtime.getSettings',P,ref('settings'),P)
@@ -150,6 +150,9 @@ op('publication.reconcileProject',P,obj({'status':string()},['status']),P)
 
 op('repository.listTangledRepositories',output=obj({'provider':string(),'repositories':array(obj(fields('repository_did owner_did name default_branch uri cid'),['repository_did','owner_did','name','default_branch','uri','cid'])),'cursor':string(),'private_repository_selection':string()},['provider','repositories','private_repository_selection']))
 
+op('publication.getConflict',P,obj(fields('status intent_id source_cid target_digest current_manifest_cid current_digest'),['status']),P)
+op('publication.resolveConflict',{**P,**fields('intent_id expected_current_cid action')},obj(fields('status'),['status']),['project_id','intent_id','expected_current_cid','action'])
+
 ERRORS=[{'name':name} for name in ['InvalidRequest','AuthenticationRequired','Forbidden','NotFound','Conflict','RateLimitExceeded','ServiceUnavailable']]
 
 def generate():
@@ -170,6 +173,17 @@ def generate():
         item['contract']='draft'
         if item['service'] in ('control','identity','githubapp','sync','mcp'):item['runtime']='implemented'
         metadata.append({'nsid':name,'service':item['service'],'method':'GET' if query else 'POST','restMethod':item['method'],'restPath':item['path'],'admin':item['authorization']=='admin','noOutput':output is None,'envelope':envelope or '', 'input':schema,'output':output})
+    # Permission sets stay within their namespace group and inherit the caller's
+    # deployment audience. Administrator grants remain a separate opt-in bundle.
+    for group in sorted({item['nsid'].rsplit('.', 1)[0] for item in metadata}):
+        for admin in (False, True):
+            methods = [item['nsid'] for item in metadata if item['nsid'].rsplit('.', 1)[0] == group and item['admin'] == admin]
+            if not methods: continue
+            name = group + ('.authAdmin' if admin else '.authClient')
+            schemas[name] = {'lexicon':1,'id':name,'defs':{'main':{'type':'permission-set','title':('Admin ' if admin else '') + group.split('.')[-1].capitalize() + ' access','detail':'Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.','permissions':[{'type':'permission','resource':'rpc','inheritAud':True,'lxm':methods}]}}}
+    record_types = sorted(path.stem for path in (ROOT/'lexicons').glob('dev.mycontextprotocol.data.*.json') if json.loads(path.read_text()).get('defs',{}).get('main',{}).get('type') == 'record')
+    name = 'dev.mycontextprotocol.data.authRecords'
+    schemas[name] = {'lexicon':1,'id':name,'defs':{'main':{'type':'permission-set','title':'Public project records','detail':'Create, update and delete public project metadata, releases, feedback and opted-in telemetry. Public copies may be replicated. Skill files remain in Git.','permissions':[{'type':'permission','resource':'repo','collection':record_types,'action':['create','update','delete']}]}}}
     return manifest,schemas,metadata
 
 def ts_type(schema):

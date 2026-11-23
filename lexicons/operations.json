@@ -651,6 +651,28 @@
       "contract": "draft",
       "runtime": "implemented",
       "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/atproto/conflict",
+      "nsid": "dev.mycontextprotocol.publication.getConflict",
+      "source": "services/go/control/atproto.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/conflict",
+      "nsid": "dev.mycontextprotocol.publication.resolveConflict",
+      "source": "services/go/control/atproto.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
     }
   ],
   "exceptions": [

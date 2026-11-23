@@ -1,0 +1,25 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.analytics.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Analytics access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.analytics.listRequestLogs",
+            "dev.mycontextprotocol.analytics.getAccountSummary",
+            "dev.mycontextprotocol.analytics.getAccountTimeseries",
+            "dev.mycontextprotocol.analytics.getProjectSummary",
+            "dev.mycontextprotocol.analytics.getProjectTimeseries"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { TangledRepositoryForm } from "./tangled-repository-form";
 import { RefreshCwIcon } from "lucide-react";
 
 const schema = z.object({
@@ -58,6 +59,8 @@ function reposErrorMessage(err: unknown): string {
 }
 
 export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps) {
+  const [provider, setProvider] = useState<"github" | "tangled">("github");
+  const [syncPending, setSyncPending] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const resumedRepository = useRef<string | null>(null);
   const [installUrl, setInstallUrl] = useState("");
@@ -75,7 +78,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
   const reposQuery = useQuery({
     queryKey: ["github-repos"],
     queryFn: fetchUserGithubRepos,
-    enabled: showForm,
+    enabled: showForm && provider === "github",
     staleTime: 60_000,
   });
 
@@ -225,7 +228,8 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
   const syncMutation = useMutation({
     mutationFn: () => triggerSync(projectId),
     onMutate: () => setSyncError(null),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setSyncPending(result?.status === "publishing");
       queryClient.invalidateQueries({ queryKey: ["releases", projectId] });
       queryClient.invalidateQueries({ queryKey: ["repo-connection", projectId] });
       queryClient.invalidateQueries({ queryKey: ["project-catalog", projectId] });
@@ -234,6 +238,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
       queryClient.invalidateQueries({ queryKey: ["account-dashboard-summary"] });
     },
     onError: (err) => {
+      setSyncPending(false);
       if (err instanceof ApiError && err.status === 429) {
         setSyncError("Too many sync requests. Try again after a short wait.");
       } else {
@@ -242,18 +247,26 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
     },
   });
 
+  const syncRunning = syncMutation.isPending;
+  const continueSync = syncMutation.mutate;
+  useEffect(() => {
+    if (!syncPending || syncRunning) return;
+    const timer = window.setTimeout(() => continueSync(), 1500);
+    return () => window.clearTimeout(timer);
+  }, [syncPending, syncRunning, continueSync]);
+
   if (isLoading) {
     return <Skeleton className="h-48" />;
   }
 
   if (connection) {
-    const automaticSync = Boolean(connection.webhook_id || connection.github_installation_configured);
+    const automaticSync = connection.provider === "tangled" || Boolean(connection.webhook_id || connection.github_installation_configured);
     return (
       <Card>
         <CardHeader>
           <CardTitle>Repository Connection</CardTitle>
           <CardDescription>
-            {automaticSync
+            {connection.provider === "tangled" ? "Scheduled reconciliation checks this Tangled repository for changes. You can also sync manually." : automaticSync
               ? "Pushes to the default branch trigger a sync automatically."
               : "Automatic sync is not configured for this connection. Use Sync Now after you push."}
           </CardDescription>
@@ -271,14 +284,15 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
               <dd className="font-medium">{connection.default_branch}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Webhook</dt>
+              <dt className="text-muted-foreground">Change detection</dt>
               <dd className="font-medium">
-                {connection.github_installation_configured
+                {connection.provider === "tangled" ? "Scheduled reconciliation" : connection.github_installation_configured
                   ? "Configured through GitHub App"
                   : connection.webhook_id ? "Configured" : "Not configured (manual sync)"}
               </dd>
             </div>
           </dl>
+          {syncPending && <div className="space-y-2"><p role="status" className="text-sm">Publishing the next batch automatically. The previous release remains active until completion.</p><Button variant="outline" onClick={() => setSyncPending(false)}>Pause automatic continuation</Button></div>}
           {syncError && (
             <p className="text-destructive text-sm">{syncError}</p>
           )}
@@ -289,7 +303,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
             <RefreshCwIcon
               className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
             />
-            {syncMutation.isPending ? "Syncing…" : "Sync Now"}
+            {syncMutation.isPending ? "Syncing…" : syncPending ? "Continue Sync" : "Sync Now"}
           </Button>
         </CardContent>
       </Card>
@@ -302,10 +316,15 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
         <CardHeader>
           <CardTitle>Connect Repository</CardTitle>
           <CardDescription>
-            Choose one of your GitHub repositories that contains SKILL.md files.
+            Choose GitHub or Tangled to sync SKILL.md files.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex gap-2" role="group" aria-label="Repository provider">
+            <Button variant={provider === "github" ? "default" : "outline"} onClick={() => setProvider("github")}>GitHub</Button>
+            <Button variant={provider === "tangled" ? "default" : "outline"} onClick={() => setProvider("tangled")}>Tangled</Button>
+          </div>
+          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} onConnected={() => setShowForm(false)} /> : <>
           {reposQuery.isPending && (
             <div className="space-y-3">
               <Skeleton className="h-8 w-full" />
@@ -461,6 +480,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
               </Button>
             </div>
           )}
+          </>}
         </CardContent>
       </Card>
     );
@@ -471,7 +491,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
       <CardHeader>
         <CardTitle>Repository Connection</CardTitle>
         <CardDescription>
-          Connect a GitHub repository to sync SKILL.md files.
+          Connect a GitHub or Tangled repository to sync SKILL.md files.
         </CardDescription>
       </CardHeader>
       <CardContent>

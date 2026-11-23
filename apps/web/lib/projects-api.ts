@@ -145,13 +145,14 @@ export async function fetchUserGithubRepos(): Promise<GithubRepoListItem[]> {
 
 export async function connectRepo(
   projectId: string,
-  data: { owner: string; repo: string; branch: string }
+  data: { owner: string; repo: string; branch: string } | { provider: "tangled"; repo_owner: string; repo_name: string; branch: string; is_private?: boolean }
 ): Promise<RepoConnection> {
   return api.post<RepoConnection>(`/projects/${projectId}/connect-repo`, data);
 }
 
-export async function triggerSync(projectId: string): Promise<void> {
-  await api.post(`/projects/${projectId}/sync`);
+export interface SyncProgress { status: string; id?: string; release_id?: string }
+export async function triggerSync(projectId: string): Promise<SyncProgress | void> {
+  return api.post<SyncProgress | void>(`/projects/${projectId}/sync`);
 }
 
 export async function fetchReleases(projectId: string): Promise<Release[]> {

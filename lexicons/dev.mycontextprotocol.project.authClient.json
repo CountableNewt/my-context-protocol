@@ -1,0 +1,25 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.project.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Project access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.project.listProjects",
+            "dev.mycontextprotocol.project.createProject",
+            "dev.mycontextprotocol.project.getProject",
+            "dev.mycontextprotocol.project.updateProject",
+            "dev.mycontextprotocol.project.setActive"
+          ]
+        }
+      ]
+    }
+  }
+}

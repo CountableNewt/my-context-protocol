@@ -1,0 +1,43 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.data.authRecords",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Public project records",
+      "detail": "Create, update and delete public project metadata, releases, feedback and opted-in telemetry. Public copies may be replicated. Skill files remain in Git.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "repo",
+          "collection": [
+            "dev.mycontextprotocol.data.assignment",
+            "dev.mycontextprotocol.data.capability",
+            "dev.mycontextprotocol.data.feedback",
+            "dev.mycontextprotocol.data.frontmatter",
+            "dev.mycontextprotocol.data.manifest",
+            "dev.mycontextprotocol.data.manifestShard",
+            "dev.mycontextprotocol.data.package",
+            "dev.mycontextprotocol.data.project",
+            "dev.mycontextprotocol.data.release",
+            "dev.mycontextprotocol.data.repository",
+            "dev.mycontextprotocol.data.repositoryIdentity",
+            "dev.mycontextprotocol.data.requestLog",
+            "dev.mycontextprotocol.data.routingRule",
+            "dev.mycontextprotocol.data.runtimeOverride",
+            "dev.mycontextprotocol.data.runtimeSettings",
+            "dev.mycontextprotocol.data.telemetry",
+            "dev.mycontextprotocol.data.tool",
+            "dev.mycontextprotocol.data.usageReport",
+            "dev.mycontextprotocol.data.validation"
+          ],
+          "action": [
+            "create",
+            "update",
+            "delete"
+          ]
+        }
+      ]
+    }
+  }
+}

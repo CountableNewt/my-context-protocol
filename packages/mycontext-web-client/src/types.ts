@@ -20,6 +20,9 @@ export interface Project {
 }
 
 export interface RepoConnection {
+  repository_did?: string;
+  owner_did?: string;
+  is_private?: boolean;
   project_id: string;
   provider: string;
   repo_owner: string;

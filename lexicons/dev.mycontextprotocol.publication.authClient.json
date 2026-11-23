@@ -1,0 +1,25 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.publication.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Publication access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.publication.getReview",
+            "dev.mycontextprotocol.publication.publishReview",
+            "dev.mycontextprotocol.publication.reconcileProject",
+            "dev.mycontextprotocol.publication.getConflict",
+            "dev.mycontextprotocol.publication.resolveConflict"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -7,6 +7,7 @@ import { fetchProject } from "@/lib/projects-api";
 import { ProjectNameHeader } from "@/components/dashboard/project-name-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PublicationReviewSection } from "@/components/dashboard/publication-review-section";
 import { RepoConnectionSection } from "@/components/dashboard/repo-connection-section";
 import { ReleaseTable } from "@/components/dashboard/release-table";
 import { ApiKeyManager } from "@/components/dashboard/api-key-manager";
@@ -164,8 +165,9 @@ export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
           <McpCatalogSection projectId={projectId} />
           <CustomDomainSection projectId={projectId} />
         </TabsContent>
-        <TabsContent value="repo">
+        <TabsContent value="repo" className="space-y-5">
           <RepoConnectionSection projectId={projectId} />
+          <PublicationReviewSection key={projectId} projectId={projectId} />
         </TabsContent>
         <TabsContent value="releases">
           <ReleaseTable projectId={projectId} />

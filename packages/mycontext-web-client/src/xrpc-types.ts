@@ -14,7 +14,7 @@ export type XRPCClarification = { "field"?: string; "question"?: string; "reason
 export type XRPCCompiledSkill = { "id": string; "release_id": string; "skill_package_id"?: string; "path": string; "name": string; "summary"?: string; "skill_body"?: string; "exposure_type"?: string; "risk_level"?: string; "status": string; "skill_id"?: string; "kind"?: string; "scope"?: string; "activation_mode"?: string; "enforcement"?: string; "version"?: string; "source_checksum"?: string; "canonical_json"?: string; "body_diff_unified"?: string; "body_diff_prior_release_id"?: string; "schema_json"?: string; "canonical_schema_version"?: number; "priority"?: number; "yaml_frontmatter_present"?: boolean; "repo_specific"?: boolean; "clarification_required"?: boolean; "invoke_first"?: boolean; "clarification_questions"?: Array<XRPCClarification>; "use_when"?: Array<string>; "avoid_when"?: Array<string>; "failure_modes"?: Array<string> };
 export type XRPCProposal = { "status"?: string; "pr_url"?: string; "pull_request_url"?: string; "branch"?: string; "repo_owner"?: string; "repo_name"?: string; "commit_sha"?: string; "message"?: string; "source_path"?: string; "changed"?: boolean };
 export type XRPCRequestLog = { "id": string; "project_id": string; "release_id"?: string; "timestamp": string; "client_id"?: string; "method": string; "error_code"?: string; "error_message"?: string; "latency_ms"?: number; "status": number };
-export type XRPCRepositoryConnection = { "project_id": string; "provider": string; "repo_owner": string; "repo_name": string; "default_branch": string; "auth_type": string; "webhook_id"?: string; "repository_did"?: string; "owner_did"?: string; "knot_url"?: string; "github_installation_configured"?: boolean };
+export type XRPCRepositoryConnection = { "project_id": string; "provider": string; "repo_owner": string; "repo_name": string; "default_branch": string; "auth_type": string; "webhook_id"?: string; "repository_did"?: string; "owner_did"?: string; "knot_url"?: string; "github_installation_configured"?: boolean; "is_private"?: boolean };
 export type XRPCRepository = { "id"?: string; "owner"?: string; "owner_login"?: string; "name"?: string; "full_name"?: string; "default_branch"?: string; "html_url"?: string; "provider"?: string; "repository_did"?: string; "owner_did"?: string; "knot_url"?: string; "description"?: string; "private"?: boolean; "is_private"?: boolean; "can_write"?: boolean };
 export type XRPCSyncJob = { "job_id": string; "project_id": string; "release_id"?: string; "status": string; "error_code"?: string };
 export type XRPCAssignment = { "id"?: string; "skill_id": string; "scope": string; "activation_mode": string; "target_type": string; "target_id": string; "required": boolean; "priority": number };
@@ -75,7 +75,7 @@ export interface XRPCMethods {
   "dev.mycontextprotocol.release.updateCompiledSkill": { input: { "project_id": string; "release_id": string; "skill_id": string; "exposure_type"?: string; "risk_level"?: string; "status"?: string; "summary"?: string; "skill_body"?: string; "schema_json"?: string; "replace_schema"?: boolean; "routing"?: XRPCRouting; "runtime"?: XRPCRuntimePatch }; output: XRPCCompiledSkill; method: "POST" };
   "dev.mycontextprotocol.release.proposeMetadataChange": { input: { "project_id": string; "release_id": string; "skill_id": string }; output: XRPCProposal; method: "POST" };
   "dev.mycontextprotocol.analytics.listRequestLogs": { input: { "project_id": string; "limit"?: number; "offset"?: number }; output: { "logs": Array<XRPCRequestLog> }; method: "GET" };
-  "dev.mycontextprotocol.repository.connectRepository": { input: { "project_id": string; "provider"?: string; "owner"?: string; "repo"?: string; "branch"?: string; "repo_owner"?: string; "repo_name"?: string; "default_branch"?: string; "auth_type"?: string; "token"?: string; "installation_id"?: string; "repository_did"?: string; "owner_did"?: string }; output: XRPCRepositoryConnection; method: "POST" };
+  "dev.mycontextprotocol.repository.connectRepository": { input: { "project_id": string; "provider"?: string; "owner"?: string; "repo"?: string; "branch"?: string; "repo_owner"?: string; "repo_name"?: string; "default_branch"?: string; "auth_type"?: string; "token"?: string; "installation_id"?: string; "repository_did"?: string; "owner_did"?: string; "is_private"?: boolean }; output: XRPCRepositoryConnection; method: "POST" };
   "dev.mycontextprotocol.repository.getConnection": { input: { "project_id": string }; output: XRPCRepositoryConnection; method: "GET" };
   "dev.mycontextprotocol.telemetry.getUsage": { input: { "project_id": string; "window"?: string; "sort"?: string; "direction"?: string; "skill_id"?: string; "page"?: number; "page_size"?: number }; output: XRPCUsage; method: "GET" };
   "dev.mycontextprotocol.runtime.getSettings": { input: { "project_id": string }; output: XRPCSettings; method: "GET" };
@@ -118,6 +118,8 @@ export interface XRPCMethods {
   "dev.mycontextprotocol.publication.publishReview": { input: { "project_id": string; "review_digest": string; "public": boolean; "telemetry": boolean }; output: { "status": string; "digest": string; "completed"?: number; "total"?: number; "uri"?: string; "cid"?: string }; method: "POST" };
   "dev.mycontextprotocol.publication.reconcileProject": { input: { "project_id": string }; output: { "status": string }; method: "POST" };
   "dev.mycontextprotocol.repository.listTangledRepositories": { input: {  }; output: { "provider": string; "repositories": Array<{ "repository_did": string; "owner_did": string; "name": string; "default_branch": string; "uri": string; "cid": string }>; "cursor"?: string; "private_repository_selection": string }; method: "GET" };
+  "dev.mycontextprotocol.publication.getConflict": { input: { "project_id": string }; output: { "status": string; "intent_id"?: string; "source_cid"?: string; "target_digest"?: string; "current_manifest_cid"?: string; "current_digest"?: string }; method: "GET" };
+  "dev.mycontextprotocol.publication.resolveConflict": { input: { "project_id": string; "intent_id": string; "expected_current_cid": string; "action": string }; output: { "status": string }; method: "POST" };
 }
 
 export const XRPC_HTTP_METHODS = {
@@ -180,6 +182,8 @@ export const XRPC_HTTP_METHODS = {
   "dev.mycontextprotocol.publication.publishReview": "POST",
   "dev.mycontextprotocol.publication.reconcileProject": "POST",
   "dev.mycontextprotocol.repository.listTangledRepositories": "GET",
+  "dev.mycontextprotocol.publication.getConflict": "GET",
+  "dev.mycontextprotocol.publication.resolveConflict": "POST",
 } as const;
 
 export const XRPC_NO_OUTPUT = {
@@ -242,6 +246,8 @@ export const XRPC_NO_OUTPUT = {
   "dev.mycontextprotocol.publication.publishReview": false,
   "dev.mycontextprotocol.publication.reconcileProject": false,
   "dev.mycontextprotocol.repository.listTangledRepositories": false,
+  "dev.mycontextprotocol.publication.getConflict": false,
+  "dev.mycontextprotocol.publication.resolveConflict": false,
 } as const;
 
 export const XRPC_SERVICES = {
@@ -304,4 +310,6 @@ export const XRPC_SERVICES = {
   "dev.mycontextprotocol.publication.publishReview": "control",
   "dev.mycontextprotocol.publication.reconcileProject": "control",
   "dev.mycontextprotocol.repository.listTangledRepositories": "control",
+  "dev.mycontextprotocol.publication.getConflict": "control",
+  "dev.mycontextprotocol.publication.resolveConflict": "control",
 } as const;
