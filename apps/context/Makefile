@@ -2,17 +2,16 @@
 VERSION ?= dev
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
-SWIFT ?= swift
-SWIFT_FLAGS ?=
-export SWIFT SWIFT_FLAGS
+GO ?= go
+export GO
 build:
 	sh scripts/build.sh "$(VERSION)"
 test:
-	$(SWIFT) test $(SWIFT_FLAGS)
-	$(SWIFT) build $(SWIFT_FLAGS)
-	MYCTX_BINARY="$$($(SWIFT) build $(SWIFT_FLAGS) --show-bin-path)/myctx" python3 -m unittest discover -s Tests -v
+	$(GO) test -race ./...
+	$(GO) build -o bin/myctx .
+	MYCTX_BINARY="$(CURDIR)/bin/myctx" python3 -m unittest discover -s Tests -v
 check:
-	$(SWIFT) format lint --strict --recursive Sources Tests Package.swift
-	$(SWIFT) build $(SWIFT_FLAGS) -Xswiftc -warnings-as-errors
+	@test -z "$$($(GO) fmt ./...)" || (echo 'Run go fmt ./...'; exit 1)
+	$(GO) vet ./...
 install:
 	sh scripts/install.sh "$(BINDIR)" "$(VERSION)"

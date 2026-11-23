@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs Swift CLI checks, then frontend and Go checks in parallel.
+# Runs Go CLI checks, then frontend and Go checks in parallel.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,7 +44,7 @@ run_logged() {
 # Install (serial — both sides need this done first)
 # ---------------------------------------------------------------------------
 
-header "Swift CLI format, test, and build"
+header "Go CLI format, test, and build"
 make -C "$ROOT/apps/context" check test build
 
 header "Bun workspace install"
