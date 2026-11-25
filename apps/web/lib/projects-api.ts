@@ -148,7 +148,7 @@ export type RepositoryMigrationSource = Pick<RepoConnection, "provider" | "repo_
 
 export async function connectRepo(
   projectId: string,
-  data: ({ provider?: "github"; owner: string; repo: string; branch: string } | { provider: "tangled"; owner: string; repo: string; branch: string; private?: boolean }) & { migrate_from?: RepositoryMigrationSource }
+  data: ({ provider?: "github"; owner: string; repo: string; branch: string } | { provider: "tangled"; owner: string; repo: string; branch: string; is_private?: boolean }) & { migrate_from?: RepositoryMigrationSource }
 ): Promise<RepoConnection> {
   return api.post<RepoConnection>(`/projects/${projectId}/connect-repo`, data);
 }

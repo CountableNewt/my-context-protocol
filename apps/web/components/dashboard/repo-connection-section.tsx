@@ -66,6 +66,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
   const [syncPending, setSyncPending] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [migrationSource, setMigrationSource] = useState<RepositoryMigrationSource>();
+  const [tangledPending, setTangledPending] = useState(false);
   const [migrationConfirmed, setMigrationConfirmed] = useState(false);
   const resumedRepository = useRef<string | null>(null);
   const [installUrl, setInstallUrl] = useState("");
@@ -101,6 +102,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
     handleSubmit,
     reset,
     setValue,
+    getValues,
     watch,
     formState: { errors },
   } = useForm<FormData>({
@@ -351,13 +353,13 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
         <CardContent>
           {migrationSource && <>
             <RepositoryMigrationPreparation source={migrationSource} confirmed={migrationConfirmed} onConfirmedChange={setMigrationConfirmed} />
-            <Button className="mb-4" variant="outline" disabled={connectMutation.isPending} onClick={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); setConnectError(null); }}>Cancel migration</Button>
+            <Button className="mb-4" variant="outline" disabled={connectMutation.isPending || tangledPending} onClick={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); setConnectError(null); }}>Cancel migration</Button>
           </>}
           {!migrationSource && <div className="mb-4 flex gap-2" role="group" aria-label="Repository provider">
             <Button variant={provider === "github" ? "default" : "outline"} onClick={() => setProvider("github")}>GitHub</Button>
             <Button variant={provider === "tangled" ? "default" : "outline"} onClick={() => setProvider("tangled")}>Tangled</Button>
           </div>}
-          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} migrateFrom={migrationSource} disabled={!!migrationSource && !migrationConfirmed} onConnected={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); }} /> : <>
+          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} migrateFrom={migrationSource} onPendingChange={setTangledPending} onDestinationChange={() => setMigrationConfirmed(false)} disabled={!!migrationSource && !migrationConfirmed} onConnected={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); }} /> : <>
           {reposQuery.isPending && (
             <div className="space-y-3">
               <Skeleton className="h-8 w-full" />
@@ -400,7 +402,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
                   render={({ field }) => (
                     <Select
                       value={field.value ? field.value : null}
-                      onValueChange={(v) => field.onChange(v ?? "")}
+                      onValueChange={(v) => { field.onChange(v ?? ""); setMigrationConfirmed(false); }}
                     >
                       <SelectTrigger
                         id="full_name"
@@ -437,7 +439,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
                 <Label htmlFor="branch">Default Branch</Label>
                 <Input
                   id="branch"
-                  {...register("branch")}
+                  {...register("branch", { onChange: () => setMigrationConfirmed(false) })}
                   placeholder="main"
                 />
                 {errors.branch && (
@@ -454,6 +456,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
                 <Button
                   type="button"
                   variant="outline"
+                  disabled={connectMutation.isPending}
                   onClick={() => {
                     resumedRepository.current = null;
                     setShowForm(false);
@@ -474,7 +477,12 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
             <Button
               variant="outline"
               nativeButton={false}
-              render={<a href={installUrl} />}
+              render={<a href={installUrl} onClick={() => {
+                if (migrationSource) {
+                  const values = getValues();
+                  sessionStorage.setItem(pendingConnectKey, JSON.stringify({ ...values, migrate_from: migrationSource }));
+                }
+              }} />}
             >
               Configure GitHub Access
             </Button>
