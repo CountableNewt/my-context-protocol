@@ -15,33 +15,21 @@ permissions:
   contents: read
 
 jobs:
-  go:
-    name: Go services
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: services/go/go.mod
-          cache: true
-          cache-dependency-path: services/go/go.sum
-      - name: Go format, vet, race tests, and build
-        run: bash scripts/check-go.sh
-
   ci:
     name: Test and build
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_APP_ENV: test
     steps:
       - uses: actions/checkout@v4
 
-      # Full local CI also verifies Go on macOS; the separate Linux job checks
-      # the deployment target, including race detection and SQLite integration.
+      # Both Go modules and the frontend are checked on the deployment platform.
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/go/go.mod
-          cache-dependency-path: services/go/go.sum
+          cache-dependency-path: |
+            services/go/go.sum
+            apps/context/go.sum
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -51,15 +39,3 @@ jobs:
       # the current SQLite/Turso snapshot and migration tooling.
       - name: Run active CI checks
         run: bash scripts/ci.sh
-
-  cli-linux:
-    name: Go CLI Linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: apps/context/go.mod
-          cache-dependency-path: apps/context/go.sum
-      - name: Test and build Go CLI
-        run: make -C apps/context check test build
