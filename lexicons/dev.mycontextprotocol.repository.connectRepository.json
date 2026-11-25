@@ -74,6 +74,29 @@
             },
             "is_private": {
               "type": "boolean"
+            },
+            "migrate_from": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "repo_owner": {
+                  "type": "string"
+                },
+                "repo_name": {
+                  "type": "string"
+                },
+                "default_branch": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "repo_owner",
+                "repo_name",
+                "default_branch"
+              ]
             }
           },
           "required": [

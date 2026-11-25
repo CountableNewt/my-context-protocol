@@ -163,7 +163,7 @@ func (s SQLStore) Claim(ctx context.Context, c Connection, key string, now time.
 	if len(results[1].Rows) == 0 {
 		return job, false, nil
 	}
-	locked, err := s.DB.Execute(ctx, stmt("INSERT INTO sync_project_locks(project_id,job_id,lease_until) VALUES (?,?,?) ON CONFLICT(project_id) DO UPDATE SET job_id=excluded.job_id,lease_until=excluded.lease_until WHERE sync_project_locks.lease_until<=? RETURNING job_id", turso.Text(c.ProjectID), turso.Text(job.ID), turso.Integer(now.Add(120*time.Second).Unix()), turso.Integer(now.Unix())))
+	locked, err := s.DB.Execute(ctx, stmt("INSERT INTO sync_project_locks(project_id,job_id,lease_until) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM repo_connections WHERE id=? AND project_id=? AND COALESCE(NULLIF(provider,''),'github')=? AND repo_owner=? AND repo_name=? AND default_branch=?) ON CONFLICT(project_id) DO UPDATE SET job_id=excluded.job_id,lease_until=excluded.lease_until WHERE sync_project_locks.lease_until<=? RETURNING job_id", turso.Text(c.ProjectID), turso.Text(job.ID), turso.Integer(now.Add(120*time.Second).Unix()), turso.Text(c.ID), turso.Text(c.ProjectID), turso.Text(c.provider()), turso.Text(c.Owner), turso.Text(c.Repository), turso.Text(c.Branch), turso.Integer(now.Unix())))
 	if err != nil {
 		return job, false, err
 	}

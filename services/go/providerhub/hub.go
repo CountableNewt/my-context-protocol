@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
+	"github.com/CountableNewt/my-context-protocol/services/go/repomigration"
 	"github.com/CountableNewt/my-context-protocol/services/go/reposync"
 	"github.com/CountableNewt/my-context-protocol/services/go/syncservice"
 	"github.com/CountableNewt/my-context-protocol/services/go/tangled"
@@ -156,6 +157,15 @@ func (h *Hub) ConnectRepository(ctx context.Context, account, project string, in
 	if h.cfg.Tangled == nil {
 		return nil, problem(501, "Tangled repository integration is not configured")
 	}
+	source, err := repomigration.Parse(input, provider)
+	if err != nil {
+		return nil, err
+	}
+	migrationUnlock, err := repomigration.Acquire(ctx, h.cfg.DB, project, source)
+	if err != nil {
+		return nil, err
+	}
+	defer migrationUnlock()
 	ctx, cancel := context.WithTimeout(ctx, 80*time.Second)
 	defer cancel()
 	actor, err := h.actor(ctx, account)
@@ -169,7 +179,17 @@ func (h *Hub) ConnectRepository(ctx context.Context, account, project string, in
 			return nil, problem(400, "Invalid Tangled repository fields")
 		}
 	}
+	for key, target := range map[string]*string{"repo_owner": &owner, "repo_name": &name, "default_branch": &branch} {
+		if *target == "" {
+			if raw, ok := input[key]; ok && json.Unmarshal(raw, target) != nil {
+				return nil, problem(400, "Invalid Tangled repository fields")
+			}
+		}
+	}
 	if raw, ok := input["private"]; ok && json.Unmarshal(raw, &private) != nil {
+		return nil, problem(400, "Invalid Tangled repository visibility")
+	}
+	if raw, ok := input["is_private"]; ok && json.Unmarshal(raw, &private) != nil {
 		return nil, problem(400, "Invalid Tangled repository visibility")
 	}
 	if owner == "" {
@@ -184,7 +204,7 @@ func (h *Hub) ConnectRepository(ctx context.Context, account, project string, in
 	if err != nil {
 		return nil, err
 	}
-	if len(current) > 1 || len(current) == 1 && scalar(current[0], 1) != "tangled" {
+	if len(current) > 1 || len(current) == 1 && scalar(current[0], 1) != "tangled" && source == nil {
 		return nil, problem(409, "Project is connected to another repository provider")
 	}
 	view, err := h.cfg.Tangled.LookupRepository(ctx, actor, owner, name)
@@ -226,14 +246,19 @@ func (h *Hub) ConnectRepository(ctx context.Context, account, project string, in
 	if private {
 		flag = 1
 	}
-	_, err = h.cfg.DB.Batch(ctx, []turso.Statement{
-		statement("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type,created_at) VALUES(?,?,'tangled',?,?,?,'atproto',?) ON CONFLICT(id) DO UPDATE SET repo_owner=excluded.repo_owner,repo_name=excluded.repo_name,default_branch=excluded.default_branch WHERE repo_connections.provider='tangled' AND repo_connections.project_id=excluded.project_id", turso.Text(id), turso.Text(project), turso.Text(owner), turso.Text(view.Name), turso.Text(branch), turso.Integer(h.now().Unix())),
+	changes := []turso.Statement{
+		statement("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type,created_at) VALUES(?,?,'tangled',?,?,?,'atproto',?) ON CONFLICT(id) DO UPDATE SET repo_owner=excluded.repo_owner,repo_name=excluded.repo_name,default_branch=excluded.default_branch,provider='tangled',auth_type='atproto',token_encrypted=NULL,github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE repo_connections.project_id=excluded.project_id", turso.Text(id), turso.Text(project), turso.Text(owner), turso.Text(view.Name), turso.Text(branch), turso.Integer(h.now().Unix())),
 		statement("INSERT INTO atproto_repo_bindings(connection_id,repository_did,owner_did,actor_did,is_private,branch,last_revision,last_checked_at,next_check_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(connection_id) DO UPDATE SET repository_did=excluded.repository_did,owner_did=excluded.owner_did,actor_did=excluded.actor_did,is_private=excluded.is_private,branch=excluded.branch,last_revision=excluded.last_revision,last_checked_at=excluded.last_checked_at,next_check_at=excluded.next_check_at", turso.Text(id), turso.Text(view.RepositoryDID), turso.Text(owner), turso.Text(actor), turso.Integer(flag), turso.Text(branch), turso.Text(head), turso.Integer(h.now().Unix()), turso.Integer(h.now().Add(5*time.Minute).Unix())),
-	})
+	}
+	if source != nil {
+		changes = append([]turso.Statement{repomigration.Guard(project, source)}, changes...)
+		changes = append(changes, repomigration.ReleaseStatement(project, source))
+	}
+	_, err = h.cfg.DB.Batch(ctx, changes)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"provider": "tangled", "project_id": project, "repo_owner": owner, "repo_name": view.Name, "repository_did": view.RepositoryDID, "default_branch": branch, "auth_type": "atproto", "private": private}, nil
+	return map[string]any{"provider": "tangled", "project_id": project, "repo_owner": owner, "repo_name": view.Name, "repository_did": view.RepositoryDID, "default_branch": branch, "auth_type": "atproto", "private": private, "is_private": private}, nil
 }
 
 func (h *Hub) ResolveTangledConnection(ctx context.Context, id string) (tangled.Binding, error) {

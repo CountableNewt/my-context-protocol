@@ -129,7 +129,7 @@ func TestSourceMismatchAndCrossTenantNeverPopulateBodies(t *testing.T) {
 			case "checksum":
 				_, _ = db.Execute(ctx, statement("UPDATE compiled_skills SET source_checksum=?", turso.Text(strings.Repeat("b", 64))))
 			case "repository":
-				_, _ = db.Execute(ctx, statement("UPDATE repo_connections SET repo_name='other'"))
+				_, _ = db.Execute(ctx, statement("UPDATE compiled_skills SET canonical_json=json_set(canonical_json,'$.source.repository','')"))
 			case "path":
 				_, _ = db.Execute(ctx, statement("UPDATE compiled_skills SET path='../outside/SKILL.md'"))
 			}
@@ -163,5 +163,77 @@ func TestSafeSkillPathRejectsParentSymlink(t *testing.T) {
 		if _, err := safeSkillPath(root, path); err == nil {
 			t.Fatalf("unsafe source path accepted: %s", path)
 		}
+	}
+}
+
+func TestMigratedRepositoryPreservesHistoricalSource(t *testing.T) {
+	for _, tc := range []struct{ from, provider string }{{"owner/repo", "tangled"}, {"did:plc:historical-repository", "github"}} {
+		t.Run(tc.from, func(t *testing.T) {
+			from := tc.from
+			h, db, calls := fixture(t, 1)
+			ctx := context.Background()
+			_, err := db.Batch(ctx, []turso.Statement{
+				statement("UPDATE compiled_skills SET canonical_json=json_set(canonical_json,'$.source.repository',?)", turso.Text(from)),
+				statement("UPDATE repo_connections SET provider=?,repo_owner='destination',repo_name='copied-history'", turso.Text(tc.provider)),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = h.HydrateRelease(ctx, "owner", "project", "release"); err != nil {
+				t.Fatal(err)
+			}
+			row, err := db.Execute(ctx, statement("SELECT skill_body,json_extract(canonical_json,'$.source.repository') FROM compiled_skills"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if *calls != 1 || !strings.Contains(scalar(row.Rows[0], 0), "Body 0") || scalar(row.Rows[0], 1) != from {
+				t.Fatalf("historical source was not preserved: %+v", row)
+			}
+		})
+	}
+}
+
+func TestMigratedRepositoryRecoveryFailsClosed(t *testing.T) {
+	for _, mode := range []string{"missing-revision", "different-revision", "different-content", "multiple-connections"} {
+		t.Run(mode, func(t *testing.T) {
+			h, db, calls := fixture(t, 1)
+			ctx := context.Background()
+			if _, err := db.Execute(ctx, statement("UPDATE repo_connections SET repo_name='new-location'")); err != nil {
+				t.Fatal(err)
+			}
+			fetch := h.Fetch
+			switch mode {
+			case "missing-revision":
+				h.Fetch = func(context.Context, string, string) (reposync.Outcome, error) {
+					return reposync.Outcome{}, errors.New("historical commit missing")
+				}
+			case "different-revision", "different-content":
+				h.Fetch = func(ctx context.Context, id, sha string) (reposync.Outcome, error) {
+					out, err := fetch(ctx, id, sha)
+					if mode == "different-revision" {
+						out.ResolvedCommitSHA = strings.Repeat("b", 40)
+					} else {
+						if e := os.WriteFile(filepath.Join(out.RepositoryRoot, "skill0", "SKILL.md"), []byte("---\nname: skill0\ndescription: test\n---\nChanged body\n"), 0600); e != nil {
+							t.Fatal(e)
+						}
+					}
+					return out, err
+				}
+			case "multiple-connections":
+				if _, err := db.Execute(ctx, statement("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type) VALUES('second','project','github','other','repo','main','oauth')")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := h.HydrateRelease(ctx, "owner", "project", "release"); err == nil {
+				t.Fatal("unverified historical source accepted")
+			}
+			row, err := db.Execute(ctx, statement("SELECT skill_body FROM compiled_skills"))
+			if err != nil || row.Rows[0][0].Type != "null" {
+				t.Fatalf("unverified source cached: %+v %v", row, err)
+			}
+			if mode == "multiple-connections" && *calls != 0 {
+				t.Fatal("ambiguous source fetched")
+			}
+		})
 	}
 }

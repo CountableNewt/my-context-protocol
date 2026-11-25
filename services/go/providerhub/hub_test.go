@@ -87,7 +87,7 @@ func (f attestFunc) Attest(ctx context.Context, actor, uri, cid, change string) 
 
 func fixture(t *testing.T) (*Hub, *sqlitetest.DB, *fakeTangled) {
 	t.Helper()
-	db := sqlitetest.New(t, migrations.BaselineSQL+MigrationSQL)
+	db := sqlitetest.New(t, migrations.BaselineSQL+MigrationSQL+syncservice.MigrationSQL)
 	for _, stmt := range []turso.Statement{
 		statement("INSERT INTO accounts(id,github_id,login) VALUES('account',1,'owner'),('other',2,'other')"),
 		statement("INSERT INTO projects(id,account_id,name,slug,subdomain) VALUES('project','account','Project','project','project')"),
@@ -295,5 +295,66 @@ func TestRepositoryIdentityUsesBoundDIDAndRechecksLinkedActor(t *testing.T) {
 	h.cfg.Identity = func(context.Context, string) (string, error) { return "did:plc:cccccccccccccccccccccccc", nil }
 	if _, err = h.RepositoryIdentity(context.Background(), connection); err == nil {
 		t.Fatal("provenance accepted stale linked actor")
+	}
+}
+
+func TestMigrateGitHubToTangledPreservesIdentityAndClearsSecrets(t *testing.T) {
+	h, db, fake := fixture(t)
+	ctx := context.Background()
+	_, err := db.Execute(ctx, statement("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type,token_encrypted,webhook_secret,webhook_id,github_installation_id) VALUES('original','project','github','owner','old','main','oauth','token','secret','hook',7)"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Execute(ctx, statement("INSERT INTO releases(id,project_id,commit_sha,status) VALUES('retained-release','project','abc','ready')"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Execute(ctx, statement("UPDATE projects SET active_release_id='retained-release' WHERE id='project'"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := map[string]json.RawMessage{"provider": json.RawMessage(`"tangled"`), "repo": json.RawMessage(`"repo"`), "migrate_from": json.RawMessage(`{"provider":"github","repo_owner":"owner","repo_name":"old","default_branch":"main"}`)}
+	fake.lookupError = errors.New("destination unavailable")
+	if _, err := h.ConnectRepository(ctx, "account", "project", input); err == nil {
+		t.Fatal("unverified destination accepted")
+	}
+	old, _ := h.query(ctx, "SELECT provider,webhook_secret FROM repo_connections WHERE id='original'")
+	if scalar(old[0], 0) != "github" || scalar(old[0], 1) != "secret" {
+		t.Fatal("failed migration changed source")
+	}
+	fake.lookupError = nil
+	result, err := h.ConnectRepository(ctx, "account", "project", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["provider"] != "tangled" {
+		t.Fatal(result)
+	}
+	rows, err := h.query(ctx, "SELECT id,provider,token_encrypted,webhook_secret,webhook_id,github_installation_id FROM repo_connections WHERE project_id='project'")
+	if err != nil || len(rows) != 1 || scalar(rows[0], 0) != "original" || scalar(rows[0], 1) != "tangled" {
+		t.Fatalf("%v %v", rows, err)
+	}
+	for i := 2; i < 6; i++ {
+		if scalar(rows[0], i) != "" {
+			t.Fatal("GitHub secret retained")
+		}
+	}
+	retained, e := h.query(ctx, "SELECT p.active_release_id,r.commit_sha FROM projects p JOIN releases r ON r.id=p.active_release_id WHERE p.id='project'")
+	if e != nil || len(retained) != 1 || scalar(retained[0], 0) != "retained-release" || scalar(retained[0], 1) != "abc" {
+		t.Fatal("active release changed during migration")
+	}
+	if _, err := h.ConnectRepository(ctx, "account", "project", input); err == nil {
+		t.Fatal("stale source accepted")
+	}
+}
+
+func TestTangledDocumentedAliasesRetainPrivateSelection(t *testing.T) {
+	h, _, _ := fixture(t)
+	result, err := h.ConnectRepository(context.Background(), "account", "project", map[string]json.RawMessage{"provider": json.RawMessage(`"tangled"`), "repo_owner": json.RawMessage(`"` + did + `"`), "repo_name": json.RawMessage(`"exact-repository"`), "default_branch": json.RawMessage(`"main"`), "is_private": json.RawMessage(`true`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["repo_owner"] != did || result["repo_name"] != "exact-repository" || result["is_private"] != true {
+		t.Fatal(result)
 	}
 }

@@ -767,3 +767,123 @@ func TestConnectRepositoryCannotReplaceOtherProvider(t *testing.T) {
 		t.Fatalf("provider changed: %+v %v", result, err)
 	}
 }
+
+func TestMigrateTangledToGitHubPreservesConnectionAndRemovesBinding(t *testing.T) {
+	s, db := setup(t)
+	ctx := context.Background()
+	_, err := db.Execute(ctx, sql("CREATE TABLE atproto_repo_bindings(connection_id TEXT PRIMARY KEY,repository_did TEXT)"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Execute(ctx, sql("INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type) VALUES('original','project','tangled','did:plc:owner','old','trunk','atproto')"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Execute(ctx, sql("INSERT INTO atproto_repo_bindings VALUES('original','did:plc:repo')"))
+	s.config.Slug = ""
+	s.config.Client.Key = nil
+	s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo":
+			return reply(200, `{"name":"repo","default_branch":"main"}`), nil
+		case "GET /repos/owner/repo/commits/main":
+			return reply(200, `{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`), nil
+		case "POST /repos/owner/repo/hooks":
+			return reply(201, `{"id":88}`), nil
+		default:
+			t.Fatalf("unexpected API %s %s", r.Method, r.URL)
+			return nil, nil
+		}
+	})}
+	input := map[string]json.RawMessage{"owner": json.RawMessage(`"owner"`), "repo": json.RawMessage(`"repo"`), "migrate_from": json.RawMessage(`{"provider":"tangled","repo_owner":"did:plc:owner","repo_name":"old","default_branch":"trunk"}`)}
+	_, err = s.ConnectRepository(ctx, "account", "project", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Execute(ctx, sql("SELECT id,provider FROM repo_connections WHERE project_id='project'"))
+	if err != nil || len(rows.Rows) != 1 || col(rows.Rows[0], 0) != "original" || col(rows.Rows[0], 1) != "github" {
+		t.Fatalf("%v %v", rows, err)
+	}
+	rows, err = db.Execute(ctx, sql("SELECT connection_id FROM atproto_repo_bindings"))
+	if err != nil || len(rows.Rows) != 0 {
+		t.Fatalf("binding retained %v %v", rows, err)
+	}
+	if _, err = s.ConnectRepository(ctx, "account", "project", input); err == nil {
+		t.Fatal("stale source accepted")
+	}
+}
+
+type pendingHookDB struct {
+	*sqlitetest.DB
+	pending  bool
+	commands []turso.Statement
+}
+
+func (d *pendingHookDB) CanonicalScope(context.Context) bool { return true }
+func (d *pendingHookDB) Batch(ctx context.Context, commands []turso.Statement) ([]turso.Result, error) {
+	for _, command := range commands {
+		if strings.HasPrefix(command.SQL, "UPDATE repo_connections SET repo_owner=") {
+			d.commands = commands
+			if d.pending {
+				encoded, _ := json.Marshal(commands)
+				if _, err := d.DB.Execute(ctx, sql("INSERT INTO domain_native_intents(account_id,project_id,status,statements_json) VALUES('account','project','pending',?)", turso.Text(string(encoded)))); err != nil {
+					return nil, err
+				}
+			}
+			return nil, fmt.Errorf("PDS unavailable")
+		}
+	}
+	return d.DB.Batch(ctx, commands)
+}
+func TestMigrationHookSurvivesOnlyItsDurableCanonicalIntent(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		t.Run(fmt.Sprint(pending), func(t *testing.T) {
+			s, db := setup(t)
+			ctx := context.Background()
+			for _, command := range []string{"CREATE TABLE domain_native_intents(account_id TEXT,project_id TEXT,status TEXT,statements_json TEXT)", "CREATE TABLE atproto_repo_bindings(connection_id TEXT PRIMARY KEY)", "INSERT INTO repo_connections(id,project_id,provider,repo_owner,repo_name,default_branch,auth_type) VALUES('original','project','tangled','did:plc:owner','old','main','atproto')", "INSERT INTO atproto_repo_bindings VALUES('original')"} {
+				if _, err := db.Execute(ctx, sql(command)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			bridge := &pendingHookDB{DB: db, pending: pending}
+			s.config.DB = bridge
+			s.config.Slug = ""
+			s.config.Client.Key = nil
+			deleted := 0
+			s.config.Client.HTTP = &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
+				switch r.Method + " " + r.URL.Path {
+				case "GET /repos/owner/repo":
+					return reply(200, `{"name":"repo"}`), nil
+				case "GET /repos/owner/repo/commits/main":
+					return reply(200, `{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`), nil
+				case "POST /repos/owner/repo/hooks":
+					return reply(201, `{"id":88}`), nil
+				case "DELETE /repos/owner/repo/hooks/88":
+					deleted++
+					return reply(204, ""), nil
+				default:
+					t.Fatalf("unexpected API %s %s", r.Method, r.URL)
+					return nil, nil
+				}
+			})}
+			input := map[string]json.RawMessage{"owner": json.RawMessage(`"owner"`), "repo": json.RawMessage(`"repo"`), "migrate_from": json.RawMessage(`{"provider":"tangled","repo_owner":"did:plc:owner","repo_name":"old","default_branch":"main"}`)}
+			if _, err := s.ConnectRepository(ctx, "account", "project", input); err == nil {
+				t.Fatal("outage was acknowledged")
+			}
+			if pending {
+				if deleted != 0 {
+					t.Fatal("durable pending hook deleted")
+				}
+				if _, err := db.Batch(ctx, bridge.commands); err != nil {
+					t.Fatal(err)
+				}
+				rows, _ := db.Execute(ctx, sql("SELECT webhook_id FROM repo_connections WHERE id='original'"))
+				if col(rows.Rows[0], 0) != "88" {
+					t.Fatal("replayed command lost webhook")
+				}
+			} else if deleted != 1 {
+				t.Fatal("unreserved orphan hook retained")
+			}
+		})
+	}
+}

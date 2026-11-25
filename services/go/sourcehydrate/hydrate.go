@@ -153,6 +153,13 @@ func (h Hydrator) HydrateRelease(ctx context.Context, account, project, release 
 				selected = candidate
 			}
 		}
+		if selected == nil && len(connections) == 1 && strings.TrimSpace(source.Repository) != "" {
+			// Migration changes the fetch location, not historical provenance.
+			// A unique current connection may supply copied history, but the exact
+			// revision, path and checksum below must match before caching it.
+			// The original canonical repository identity stays unchanged.
+			selected = &connections[0]
+		}
 		if selected == nil {
 			return ErrSourceMismatch
 		}

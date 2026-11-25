@@ -110,7 +110,7 @@ op('release.listCompiledSkills',R,obj({'skills':array(ref('compiledSkill'))},['s
 op('release.updateCompiledSkill',{**S,**fields('exposure_type risk_level status summary skill_body schema_json'),'replace_schema':boolean(),'routing':ref('routing'),'runtime':ref('runtimePatch')},ref('compiledSkill'),S)
 op('release.proposeMetadataChange',S,ref('proposal'),S)
 op('analytics.listRequestLogs',{**P,'limit':integer(minimum=1),'offset':integer(minimum=0)},obj({'logs':array(ref('requestLog'))},['logs']),P,'logs')
-op('repository.connectRepository',{**P,**fields('provider owner repo branch repo_owner repo_name default_branch auth_type token installation_id repository_did owner_did'), 'is_private':boolean()},ref('repositoryConnection'),P)
+op('repository.connectRepository',{**P,**fields('provider owner repo branch repo_owner repo_name default_branch auth_type token installation_id repository_did owner_did'), 'is_private':boolean(), 'migrate_from':obj(fields('provider repo_owner repo_name default_branch'), ['provider','repo_owner','repo_name','default_branch'])},ref('repositoryConnection'),P)
 op('repository.getConnection',P,ref('repositoryConnection'),P)
 op('telemetry.getUsage',{**P,**fields('window sort direction skill_id'),'page':integer(minimum=1,maximum=1000000),'page_size':integer(minimum=1,maximum=100)},ref('usage'),P)
 op('runtime.getSettings',P,ref('settings'),P)
