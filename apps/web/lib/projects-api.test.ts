@@ -154,6 +154,11 @@ describe("projects-api", () => {
     expect(await fetchRepoConnection("pid")).toBeNull();
   });
 
+  it("preserves repository connection failures instead of reporting disconnection", async () => {
+    get.mockRejectedValueOnce(new ApiError("unavailable", 503));
+    await expect(fetchRepoConnection("pid")).rejects.toMatchObject({ status: 503 });
+  });
+
   it("connectRepo, triggerSync, fetchUserGithubRepos", async () => {
     post.mockResolvedValueOnce({ id: "rc" });
     await connectRepo("pid", { owner: "a", repo: "b", branch: "main" });

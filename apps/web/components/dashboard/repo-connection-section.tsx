@@ -7,6 +7,7 @@ import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchRepoConnection,
+  type RepositoryMigrationSource,
   connectRepo,
   fetchUserGithubRepos,
   triggerSync,
@@ -33,6 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { repositoryProviderLabel } from "./project-connection-summary";
+import { RepositoryMigrationPreparation } from "./repository-migration-preparation";
 import { TangledRepositoryForm } from "./tangled-repository-form";
 import { RefreshCwIcon } from "lucide-react";
 
@@ -63,6 +65,8 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
   const [provider, setProvider] = useState<"github" | "tangled">("github");
   const [syncPending, setSyncPending] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [migrationSource, setMigrationSource] = useState<RepositoryMigrationSource>();
+  const [migrationConfirmed, setMigrationConfirmed] = useState(false);
   const resumedRepository = useRef<string | null>(null);
   const [installUrl, setInstallUrl] = useState("");
   const [repoFilter, setRepoFilter] = useState("");
@@ -71,7 +75,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
   const queryClient = useQueryClient();
   const pendingConnectKey = `pendingRepoConnect:${projectId}`;
 
-  const { data: connection, isLoading } = useQuery({
+  const { data: connection, isLoading, isError: connectionError, refetch: refetchConnection } = useQuery({
     queryKey: ["repo-connection", projectId],
     queryFn: () => fetchRepoConnection(projectId),
   });
@@ -132,9 +136,12 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
         const parsed = JSON.parse(stored) as {
           full_name: string;
           branch: string;
+          migrate_from?: RepositoryMigrationSource;
         };
         sessionStorage.removeItem(pendingConnectKey);
         resumedRepository.current = parsed.full_name;
+        setMigrationSource(parsed.migrate_from);
+        setMigrationConfirmed(false);
         setShowForm(true);
         reset({ full_name: parsed.full_name, branch: parsed.branch || "main" });
       } catch {
@@ -171,6 +178,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
 
   const connectMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      if (migrationSource && !migrationConfirmed) throw new Error("Confirm the destination before migrating.");
       const i = data.full_name.indexOf("/");
       const owner = data.full_name.slice(0, i);
       const repo = data.full_name.slice(i + 1);
@@ -180,6 +188,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
           owner,
           repo,
           branch,
+          ...(migrationSource ? { migrate_from: migrationSource } : {}),
         });
       } catch (err) {
         if (err instanceof ApiError && err.status === 409 && err.body && typeof err.body === "object") {
@@ -194,6 +203,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
                   branch,
                   owner,
                   repo,
+                  migrate_from: migrationSource,
                 })
               );
               window.location.href = installUrl;
@@ -215,6 +225,8 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
       queryClient.invalidateQueries({ queryKey: ["account-dashboard-summary"] });
       resumedRepository.current = null;
       setShowForm(false);
+      setMigrationSource(undefined);
+      setMigrationConfirmed(false);
       setRepoFilter("");
       reset({ full_name: "", branch: "main" });
     },
@@ -262,7 +274,11 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
     return <Skeleton className="h-48" />;
   }
 
-  if (connection) {
+  if (connectionError) {
+    return <Card><CardContent className="space-y-3 pt-6"><p role="alert">Could not load the repository connection.</p><Button onClick={() => refetchConnection()}>Retry connection</Button></CardContent></Card>;
+  }
+
+  if (connection && !showForm) {
     const automaticSync = connection.provider === "tangled" || Boolean(connection.webhook_id || connection.github_installation_configured);
     return (
       <Card>
@@ -312,6 +328,12 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
             />
             {syncMutation.isPending ? "Syncing…" : syncPending ? "Continue Sync" : "Sync Now"}
           </Button>
+          {(connection.provider === "github" || connection.provider === "tangled") && <Button variant="outline" disabled={syncMutation.isPending || syncPending} onClick={() => {
+            setMigrationSource({ provider: connection.provider, repo_owner: connection.repo_owner, repo_name: connection.repo_name, default_branch: connection.default_branch });
+            setMigrationConfirmed(false);
+            setProvider(connection.provider === "github" ? "tangled" : "github");
+            setShowForm(true);
+          }}>Migrate to {connection.provider === "github" ? "ATProto · Tangled" : "GitHub"}</Button>}
         </CardContent>
       </Card>
     );
@@ -321,17 +343,21 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Connect Repository</CardTitle>
+          <CardTitle>{migrationSource ? "Migrate Repository Connection" : "Connect Repository"}</CardTitle>
           <CardDescription>
             Choose GitHub or Tangled to sync SKILL.md files.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex gap-2" role="group" aria-label="Repository provider">
+          {migrationSource && <>
+            <RepositoryMigrationPreparation source={migrationSource} confirmed={migrationConfirmed} onConfirmedChange={setMigrationConfirmed} />
+            <Button className="mb-4" variant="outline" disabled={connectMutation.isPending} onClick={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); setConnectError(null); }}>Cancel migration</Button>
+          </>}
+          {!migrationSource && <div className="mb-4 flex gap-2" role="group" aria-label="Repository provider">
             <Button variant={provider === "github" ? "default" : "outline"} onClick={() => setProvider("github")}>GitHub</Button>
             <Button variant={provider === "tangled" ? "default" : "outline"} onClick={() => setProvider("tangled")}>Tangled</Button>
-          </div>
-          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} onConnected={() => setShowForm(false)} /> : <>
+          </div>}
+          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} migrateFrom={migrationSource} disabled={!!migrationSource && !migrationConfirmed} onConnected={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); }} /> : <>
           {reposQuery.isPending && (
             <div className="space-y-3">
               <Skeleton className="h-8 w-full" />
@@ -438,8 +464,8 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={connectMutation.isPending}>
-                  {connectMutation.isPending ? "Connecting…" : "Connect"}
+                <Button type="submit" disabled={connectMutation.isPending || (!!migrationSource && !migrationConfirmed)}>
+                  {connectMutation.isPending ? "Connecting…" : migrationSource ? "Migrate to GitHub" : "Connect"}
                 </Button>
               </div>
             </form>

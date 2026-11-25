@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RepoConnectionSection } from "./repo-connection-section";
 import { connectRepo, fetchRepoConnection, fetchUserGithubRepos } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
 import * as trustedRedirect from "@/lib/trusted-redirect";
+vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: "account" }) }));
 vi.mock("@/lib/projects-api", () => ({
   fetchRepoConnection: vi.fn(),
   fetchUserGithubRepos: vi.fn(),
@@ -48,6 +50,7 @@ describe("RepoConnectionSection GitHub access", () => {
   let root: Root;
   let client: QueryClient;
   beforeEach(() => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "account", login: "owner" } as Awaited<ReturnType<typeof getCurrentUser>>);
     vi.spyOn(trustedRedirect, "assertGitHubInstallUrl");
     window.history.replaceState({}, "", "/projects/project-1");
     sessionStorage.clear();
@@ -179,6 +182,51 @@ describe("RepoConnectionSection GitHub access", () => {
     await waitFor(() => expect(host.textContent).toContain("Configured through GitHub App"));
     expect(host.textContent).toContain("trigger a sync automatically");
     expect(host.textContent).not.toContain("Not configured (manual sync)");
+  });
+
+  it("requires confirmation before migrating Tangled to GitHub and sends the reviewed source", async () => {
+    const source = { provider: "tangled", repo_owner: "did:plc:owner", repo_name: "original", default_branch: "trunk" };
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ ...source, project_id: "project-1", auth_type: "atproto" });
+    vi.mocked(fetchUserGithubRepos).mockResolvedValue([repo]);
+    vi.mocked(connectRepo).mockRejectedValue(new ApiError("changed", 409, { reason: "Repository changed. Reload before migrating." }));
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate to GitHub"));
+    await click("Migrate to GitHub");
+    await waitFor(() => expect(host.querySelector("select")).not.toBeNull());
+    expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Migrate to GitHub")?.disabled).toBe(true);
+    await click("Create and copy repository");
+    expect(host.querySelector('a[href="https://github.com/new/import"]')).not.toBeNull();
+    expect(host.textContent).toContain("Git history, branches and tags");
+    await act(async () => {
+      const select = host.querySelector("select")!;
+      select.value = repo.full_name;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    });
+    await click("Migrate to GitHub");
+    await waitFor(() => expect(connectRepo).toHaveBeenCalledWith("project-1", { owner: "owner", repo: "skills", branch: "main", migrate_from: source }));
+    await waitFor(() => expect(host.textContent).toContain("Repository changed. Reload before migrating."));
+    await click("Cancel migration");
+    expect(host.textContent).toContain("did:plc:owner/original");
+  });
+
+  it("opens the ATProto destination and cancels without changing the GitHub connection", async () => {
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ project_id: "project-1", provider: "github", repo_owner: "owner", repo_name: "skills", default_branch: "main", auth_type: "oauth" });
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate to ATProto"));
+    await click("Migrate to ATProto · Tangled");
+    await click("Create and copy repository");
+    expect(host.querySelector('a[href="https://tangled.org/repo/migrate"]')).not.toBeNull();
+    await click("Cancel migration");
+    expect(host.textContent).toContain("owner/skills");
+    expect(connectRepo).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed connection lookup without offering a new connection", async () => {
+    vi.mocked(fetchRepoConnection).mockRejectedValue(new ApiError("unavailable", 503));
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Could not load the repository connection."));
+    expect(host.textContent).not.toContain("Connect Repository");
   });
 
 });
