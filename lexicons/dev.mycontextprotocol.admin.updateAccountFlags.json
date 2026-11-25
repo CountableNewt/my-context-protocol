@@ -1,0 +1,73 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.admin.updateAccountFlags",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /admin/account-flags. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "account_id": {
+              "type": "string"
+            },
+            "is_admin": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "account_id",
+            "is_admin"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "account_id": {
+              "type": "string"
+            },
+            "is_admin": {
+              "type": "boolean"
+            },
+            "paywall_bypass": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "account_id",
+            "is_admin",
+            "paywall_bypass"
+          ]
+        }
+      }
+    }
+  }
+}

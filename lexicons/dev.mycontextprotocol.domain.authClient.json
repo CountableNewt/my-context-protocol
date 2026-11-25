@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.domain.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Domain access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.domain.getDomain",
+            "dev.mycontextprotocol.domain.setDomain",
+            "dev.mycontextprotocol.domain.verifyDomain"
+          ]
+        }
+      ]
+    }
+  }
+}

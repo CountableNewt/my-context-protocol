@@ -1,0 +1,56 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.project.defs",
+  "description": "Typed XRPC views. Optional properties omit SQL nulls; REST retains its existing null behavior.",
+  "defs": {
+    "projectView": {
+      "type": "object",
+      "required": [
+        "id",
+        "account_id",
+        "name",
+        "slug",
+        "subdomain",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "subdomain": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "custom_domain": {
+          "type": "string"
+        },
+        "custom_domain_verified_at": {
+          "type": "string"
+        },
+        "active_release_id": {
+          "type": "string"
+        },
+        "mcp_url": {
+          "type": "string"
+        },
+        "suspended_at": {
+          "type": "string"
+        },
+        "mcp_oauth_enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

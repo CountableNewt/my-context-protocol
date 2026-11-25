@@ -12,6 +12,9 @@ import type { NextRequest } from "next/server";
 export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)" ] };
 
 export function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/xrpc/") || request.nextUrl.pathname.startsWith("/.well-known/")) {
+    return NextResponse.next();
+  }
   if (request.nextUrl.pathname === "/auth/mcp-oauth-resume") {
     return NextResponse.next();
   }

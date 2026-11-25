@@ -104,9 +104,12 @@ func decodeAccount(result *turso.Result) (*Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	gid, err := strconv.ParseInt(github, 10, 64)
-	if err != nil {
-		return nil, err
+	var gid int64
+	if github != "" {
+		gid, err = strconv.ParseInt(github, 10, 64)
+		if err != nil {
+			return nil, err
+		}
 	}
 	login, err := scalar(row, 2)
 	if err != nil {

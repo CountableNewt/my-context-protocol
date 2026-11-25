@@ -131,15 +131,49 @@ func (c *Client) Execute(ctx context.Context, stmt Statement) (*Result, error) {
 // if COMMIT did not succeed. close also releases the stream on any error.
 // SQL is application-owned; callers must not pass transaction-control SQL here.
 func (c *Client) Batch(ctx context.Context, statements []Statement) ([]Result, error) {
+	return c.batch(ctx, statements, false, false)
+}
+
+// SchemaBatch is restricted to explicit operator migrations which rebuild a
+// referenced table. Foreign keys are checked inside the transaction before it
+// can commit; ordinary application writes must use Batch with enforcement on.
+func (c *Client) SchemaBatch(ctx context.Context, statements []Statement) ([]Result, error) {
+	return c.batch(ctx, statements, true, false)
+}
+
+// DryRunBatch evaluates owned application commands in order and always rolls
+// them back. It is used to derive canonical changes without publishing SQL state.
+func (c *Client) DryRunBatch(ctx context.Context, statements []Statement) ([]Result, error) {
+	return c.batch(ctx, statements, false, true)
+}
+
+func (c *Client) batch(ctx context.Context, statements []Statement, rebuild, dryRun bool) ([]Result, error) {
 	if len(statements) == 0 || len(statements) > MaxStatements {
 		return nil, fmt.Errorf("batch requires 1 to %d statements", MaxStatements)
 	}
-	steps := []step{{Statement: Statement{SQL: "PRAGMA foreign_keys=ON"}}, {Condition: ok(0), Statement: Statement{SQL: "BEGIN IMMEDIATE"}}}
+	foreignKeys := "PRAGMA foreign_keys=ON"
+	if rebuild {
+		foreignKeys = "PRAGMA foreign_keys=OFF"
+	}
+	steps := []step{{Statement: Statement{SQL: foreignKeys}}, {Condition: ok(0), Statement: Statement{SQL: "BEGIN IMMEDIATE"}}}
 	for _, stmt := range statements {
 		steps = append(steps, step{Condition: ok(len(steps) - 1), Statement: stmt})
 	}
+	if rebuild {
+		for _, sql := range []string{
+			"CREATE TEMP TABLE schema_foreign_key_guard(violations INTEGER NOT NULL CHECK(violations=0))",
+			"INSERT INTO schema_foreign_key_guard SELECT COUNT(*) FROM pragma_foreign_key_check",
+			"DROP TABLE schema_foreign_key_guard",
+		} {
+			steps = append(steps, step{Condition: ok(len(steps) - 1), Statement: Statement{SQL: sql}})
+		}
+	}
 	commitIndex := len(steps)
-	steps = append(steps, step{Condition: ok(commitIndex - 1), Statement: Statement{SQL: "COMMIT"}})
+	end := "COMMIT"
+	if dryRun {
+		end = "ROLLBACK"
+	}
+	steps = append(steps, step{Condition: ok(commitIndex - 1), Statement: Statement{SQL: end}})
 	steps = append(steps, step{Condition: &condition{Type: "not", Cond: ok(commitIndex)}, Statement: Statement{SQL: "ROLLBACK"}})
 	raw, err := c.send(ctx, request{Type: "batch", Batch: &batch{Steps: steps}})
 	if err != nil {

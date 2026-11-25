@@ -1,0 +1,116 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.repository.connectRepository",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /projects/{project_id}/connect-repo. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "string"
+            },
+            "branch": {
+              "type": "string"
+            },
+            "repo_owner": {
+              "type": "string"
+            },
+            "repo_name": {
+              "type": "string"
+            },
+            "default_branch": {
+              "type": "string"
+            },
+            "auth_type": {
+              "type": "string"
+            },
+            "token": {
+              "type": "string"
+            },
+            "installation_id": {
+              "type": "string"
+            },
+            "repository_did": {
+              "type": "string"
+            },
+            "owner_did": {
+              "type": "string"
+            },
+            "is_private": {
+              "type": "boolean"
+            },
+            "migrate_from": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "repo_owner": {
+                  "type": "string"
+                },
+                "repo_name": {
+                  "type": "string"
+                },
+                "default_branch": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "repo_owner",
+                "repo_name",
+                "default_branch"
+              ]
+            }
+          },
+          "required": [
+            "project_id"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#repositoryConnection"
+        }
+      }
+    }
+  }
+}

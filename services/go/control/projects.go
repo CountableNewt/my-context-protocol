@@ -14,7 +14,16 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
 
+// Select one repository consistently for legacy projects with multiple connections.
+// The join keeps dashboard listings to one query regardless of project count.
+const projectSelect = `SELECT p.*,r.provider AS connection_provider,r.repo_owner AS connection_owner,r.repo_name AS connection_name,r.default_branch AS connection_branch
+FROM projects p LEFT JOIN repo_connections r ON r.id=(SELECT first.id FROM repo_connections first WHERE first.project_id=p.id ORDER BY first.created_at ASC,first.id ASC LIMIT 1)`
+
 func (s *Service) projectResponse(p row) row {
+	var connection any
+	if p["connection_provider"] != nil {
+		connection = row{"provider": p["connection_provider"], "repo_owner": p["connection_owner"], "repo_name": p["connection_name"], "default_branch": p["connection_branch"]}
+	}
 	var mcp any
 	host := ""
 	if p["custom_domain_verified_at"] != nil {
@@ -26,7 +35,7 @@ func (s *Service) projectResponse(p row) row {
 	if host != "" {
 		mcp = "https://" + host + s.cfg.MCPPath
 	}
-	return row{"id": p["id"], "account_id": p["account_id"], "name": p["name"], "slug": p["slug"], "subdomain": str(p["subdomain"]), "created_at": requiredDate(p["created_at"]), "custom_domain": p["custom_domain"], "custom_domain_verified_at": date(p["custom_domain_verified_at"]), "active_release_id": p["active_release_id"], "mcp_url": mcp, "mcp_oauth_enabled": s.cfg.MCPOAuthEnabled, "suspended_at": nil}
+	return row{"id": p["id"], "account_id": p["account_id"], "name": p["name"], "slug": p["slug"], "subdomain": str(p["subdomain"]), "created_at": requiredDate(p["created_at"]), "custom_domain": p["custom_domain"], "custom_domain_verified_at": date(p["custom_domain_verified_at"]), "active_release_id": p["active_release_id"], "mcp_url": mcp, "mcp_oauth_enabled": s.cfg.MCPOAuthEnabled, "suspended_at": nil, "repo_connection": connection}
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)

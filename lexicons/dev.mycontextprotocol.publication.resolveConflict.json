@@ -1,0 +1,73 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.publication.resolveConflict",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /projects/{project_id}/atproto/conflict. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "intent_id": {
+              "type": "string"
+            },
+            "expected_current_cid": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_id",
+            "intent_id",
+            "expected_current_cid",
+            "action"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        }
+      }
+    }
+  }
+}

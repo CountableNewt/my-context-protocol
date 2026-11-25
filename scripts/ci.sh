@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared local/GitHub CI entrypoint.
-# Runs Swift CLI checks, then frontend and Go checks in parallel.
+# Runs Go CLI checks, then frontend and Go checks in parallel.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,6 +8,12 @@ cd "$ROOT"
 
 export CI="${CI:-true}"
 export NEXT_PUBLIC_APP_ENV="${NEXT_PUBLIC_APP_ENV:-test}"
+
+# Draft contract structure is checked during incremental implementation. The
+# separate --require-complete gate must pass before an ATProto release.
+python3 scripts/generate-xrpc.py --check
+python3 scripts/check-lexicons.py
+python3 scripts/check-lexicons_test.py
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,7 +44,7 @@ run_logged() {
 # Install (serial — both sides need this done first)
 # ---------------------------------------------------------------------------
 
-header "Swift CLI format, test, and build"
+header "Go CLI format, test, and build"
 make -C "$ROOT/apps/context" check test build
 
 header "Bun workspace install"

@@ -15,6 +15,7 @@ import { GithubIcon } from "lucide-react";
 import { safeReturnPath } from "@/lib/safe-redirect";
 import { MAIN_CONTENT_ID } from "@/lib/a11y";
 import { loginErrorMessage } from "@/lib/login-errors";
+import { ATProtoAuth } from "@/components/atproto-auth";
 
 function LoginContent() {
   const { loginWithGitHub, isLoading: authLoading, user } = useAuth();
@@ -63,7 +64,7 @@ function LoginContent() {
             </h1>
           </CardTitle>
           <CardDescription>
-            Sign in with your Git host to access the dashboard
+            Sign in to manage your context and repositories
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -75,6 +76,7 @@ function LoginContent() {
               {loginError}
             </p>
           ) : null}
+          <ATProtoAuth returnTo={returnTo} />
           <Button
             onClick={() => loginWithGitHub(returnTo, selectAccount)}
             className="w-full"

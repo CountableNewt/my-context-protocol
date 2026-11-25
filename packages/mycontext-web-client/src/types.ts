@@ -7,6 +7,8 @@ export interface Project {
   slug: string;
   subdomain: string;
   created_at: string;
+  /** Repository used to sync this project's skills; null when disconnected. */
+  repo_connection?: Pick<RepoConnection, "provider" | "repo_owner" | "repo_name" | "default_branch"> | null;
   custom_domain?: string | null;
   custom_domain_verified_at?: string | null;
   /** Release currently serving MCP traffic. */
@@ -20,6 +22,9 @@ export interface Project {
 }
 
 export interface RepoConnection {
+  repository_did?: string;
+  owner_did?: string;
+  is_private?: boolean;
   project_id: string;
   provider: string;
   repo_owner: string;
@@ -339,6 +344,10 @@ export interface ProjectDashboardSummary {
 export type AppEnv = "local" | "dev" | "prod";
 
 export interface User {
+  github_connected?: boolean;
+  atproto_enabled?: boolean;
+  atproto_did?: string;
+  atproto_handle?: string;
   id: string;
   email?: string;
   login?: string;

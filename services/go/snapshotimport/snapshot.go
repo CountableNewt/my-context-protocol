@@ -47,6 +47,7 @@ type Table struct {
 	Data         [][]turso.Value `json:"-"`
 }
 type Snapshot struct {
+	Format string            `json:"-"`
 	ID     string            `json:"snapshot_id"`
 	Schema map[string]string `json:"-"`
 	Tables []*Table          `json:"tables"`
@@ -78,7 +79,13 @@ func Export(ctx context.Context, source, output string) (*Snapshot, error) {
 	name := temporary.Name()
 	defer os.Remove(name)
 	cmd := exec.CommandContext(ctx, "python3", "-c", exportScript, source)
-	cmd.Stdin = strings.NewReader(migrations.BaselineSQL)
+	allowed, e := ownedSchema()
+	if e != nil {
+		temporary.Close()
+		return nil, e
+	}
+	settings, _ := json.Marshal(map[string]any{"baseline": migrations.BaselineSQL, "allowed": allowed, "account_identity_schema": migrations.AccountIdentityDDL, "excluded": []string{"go_schema_migrations", runTable, progressTable}})
+	cmd.Stdin = bytes.NewReader(settings)
 	cmd.Stdout = temporary
 	cmd.Stderr = io.Discard
 	runErr := cmd.Run()
@@ -117,17 +124,14 @@ func Read(path string) (*Snapshot, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var h header
-	if decoder.Decode(&h) != nil || h.Format != Format {
+	if decoder.Decode(&h) != nil || (h.Format != Format && h.Format != CurrentFormat) {
 		return nil, errors.New("unsupported snapshot format")
 	}
-	schema, tables, e := baseline()
+	schema, tables, e := snapshotDefinitions(h.Format, h.Schema)
 	if e != nil {
 		return nil, e
 	}
-	if e = matchSchema(h.Schema, schema); e != nil {
-		return nil, e
-	}
-	snapshot := &Snapshot{Schema: h.Schema, Tables: []*Table{}}
+	snapshot := &Snapshot{Format: h.Format, Schema: h.Schema, Tables: []*Table{}}
 	byName := map[string]*Table{}
 	if len(h.Tables) != len(tables) {
 		return nil, errors.New("snapshot table set differs from baseline")
@@ -207,7 +211,7 @@ func Read(path string) (*Snapshot, error) {
 		Format string            `json:"format"`
 		Schema map[string]string `json:"schema"`
 		Tables any               `json:"tables"`
-	}{Format, schema, identities})
+	}{h.Format, schema, identities})
 	sum := sha256.Sum256(encoded)
 	snapshot.ID = hex.EncodeToString(sum[:])
 	return snapshot, nil
@@ -285,6 +289,8 @@ type tableSpec struct{ columns, dependencies []string }
 
 var createPattern = regexp.MustCompile(`(?is)^CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(?:IF\s+NOT\s+EXISTS\s+)?("[^"]+"|[a-zA-Z_][a-zA-Z_0-9]*)`)
 var referencePattern = regexp.MustCompile(`(?i)\bREFERENCES\s+("[^"]+"|[a-zA-Z_][a-zA-Z_0-9]*)`)
+var columnNamePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z_0-9]*$`)
+var tableConstraintPattern = regexp.MustCompile(`(?i)^(PRIMARY\s+KEY|UNIQUE\s*\(|CHECK\s*\(|CONSTRAINT\s|FOREIGN\s+KEY)`)
 
 func baseline() (map[string]string, map[string]tableSpec, error) {
 	statements, e := migrations.SplitSQL(migrations.BaselineSQL)
@@ -354,6 +360,21 @@ func columnsOf(sql string) ([]string, error) {
 	columns := []string{}
 	for _, segment := range segments {
 		if !strings.HasPrefix(segment, `"`) {
+			if tableConstraintPattern.MatchString(segment) {
+				continue
+			}
+			fields := strings.Fields(segment)
+			if len(fields) < 2 {
+				continue
+			}
+			switch strings.ToUpper(fields[0]) {
+			case "PRIMARY", "UNIQUE", "CHECK", "CONSTRAINT", "FOREIGN":
+				continue
+			}
+			if !columnNamePattern.MatchString(fields[0]) {
+				return nil, errors.New("invalid shipped column name")
+			}
+			columns = append(columns, fields[0])
 			continue
 		}
 		end := strings.Index(segment[1:], `"`)
@@ -379,7 +400,7 @@ func matchSchema(actual, expected map[string]string) error {
 	return nil
 }
 func orderedTables(snapshot *Snapshot) ([]*Table, error) {
-	_, specs, e := baseline()
+	_, specs, e := snapshotDefinitions(snapshot.Format, snapshot.Schema)
 	if e != nil {
 		return nil, e
 	}

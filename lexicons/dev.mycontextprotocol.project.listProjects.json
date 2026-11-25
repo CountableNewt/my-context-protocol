@@ -1,0 +1,55 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.project.listProjects",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "control operation /projects. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "projects": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "dev.mycontextprotocol.types.defs#project"
+              }
+            }
+          },
+          "required": [
+            "projects"
+          ]
+        }
+      }
+    }
+  }
+}

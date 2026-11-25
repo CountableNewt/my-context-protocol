@@ -1,0 +1,51 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "active_release_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "custom_domain": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "mcp_catalog_markdown_override": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "subdomain": {
+            "type": "string"
+          },
+          "suspended_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "name",
+          "slug"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.project",
+  "lexicon": 1
+}

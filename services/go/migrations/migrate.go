@@ -103,6 +103,11 @@ func Apply(ctx context.Context, db Database, options Options) error {
 			}
 		}
 		statements = append(statements, record("001_swift_schema", BaselineSQL))
+		if !initialize && normalize(names["accounts"]) == normalize(AccountIdentityDDL) {
+			// A verified current-schema offline restore has no live migration
+			// registry. Adopt its already rebuilt accounts table explicitly.
+			statements = append(statements, record(AccountIdentityVersion, AccountIdentitySQL))
+		}
 		if len(statements) > turso.MaxStatements {
 			return errors.New("baseline exceeds transaction statement limit")
 		}
@@ -125,6 +130,12 @@ func Apply(ctx context.Context, db Database, options Options) error {
 		if len(prior.Rows) > 0 {
 			if len(prior.Rows[0]) != 1 || prior.Rows[0][0].Value != checksum(m.SQL) {
 				return fmt.Errorf("migration checksum mismatch for %s", m.Version)
+			}
+			continue
+		}
+		if m.Version == AccountIdentityVersion {
+			if e := rebuildAccounts(ctx, db, m); e != nil {
+				return fmt.Errorf("account identity migration failed: %w", e)
 			}
 			continue
 		}
@@ -166,6 +177,9 @@ func verifyBaseline(names map[string]string, baseline []string) error {
 		}
 		name := strings.Trim(parts[index], "\"`")
 		actual, found := names[name]
+		if name == "accounts" && found && normalize(actual) == normalize(AccountIdentityDDL) {
+			continue
+		}
 		if !found || normalize(actual) != normalize(sql) {
 			return fmt.Errorf("legacy schema mismatch for %s", name)
 		}

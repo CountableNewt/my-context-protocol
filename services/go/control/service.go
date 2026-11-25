@@ -17,6 +17,7 @@ import (
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
 	"github.com/CountableNewt/my-context-protocol/services/go/session"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpc"
 )
 
 type DB interface {
@@ -36,7 +37,13 @@ type DomainProvider interface {
 	Verify(context.Context, string) (map[string]any, error)
 }
 type Config struct {
+	ListTangledRepositories func(context.Context, string) (map[string]any, error)
+	Records                 CanonicalRecords
+	// XRPCVerifier explicitly enables verified API authorization; nil keeps XRPC disabled.
+	XRPCVerifier          xrpc.Verifier
 	CronSecret            string
+	CanonicalMaintenance  bool
+	ExtraMaintenance      func(context.Context) (map[string]any, error)
 	MaintenanceRows       int
 	MaintenanceRollupRows int
 	FrontendOrigins       []string
@@ -46,12 +53,14 @@ type Config struct {
 	Catalog               Catalog
 	Domains               DomainProvider
 	Sync                  func(context.Context, string) (map[string]any, error)
+	SyncContinuation      func(context.Context, string) (bool, error)
 	ConnectRepository     func(context.Context, string, string, map[string]json.RawMessage) (map[string]any, error)
 	Writeback             func(context.Context, string, string, string, string) (map[string]any, error)
 	SyncLimit             int
 	SyncWindowSeconds     int64
 }
 type Service struct {
+	xrpc *xrpc.Handler
 	db   DB
 	auth Auth
 	cfg  Config
@@ -83,11 +92,27 @@ func New(db DB, auth Auth, cfg Config) (*Service, error) {
 	if cfg.MCPPath == "" {
 		cfg.MCPPath = "/mcp"
 	}
-	return &Service{db: db, auth: auth, cfg: cfg, now: time.Now}, nil
+	s := &Service{db: db, auth: auth, cfg: cfg, now: time.Now}
+	if cfg.XRPCVerifier != nil {
+		handler, err := xrpc.New(xrpc.Config{Verifier: cfg.XRPCVerifier, Invoker: controlXRPCInvoker{service: s}})
+		if err != nil {
+			return nil, err
+		}
+		s.xrpc = handler
+	}
+	return s, nil
 }
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if r.URL.Path == "/xrpc" || strings.HasPrefix(r.URL.Path, "/xrpc/") {
+		if s.xrpc == nil {
+			http.NotFound(w, r)
+		} else {
+			s.xrpc.ServeHTTP(w, r)
+		}
+		return
+	}
 	if r.URL.Path == "/internal/maintenance" {
 		s.maintenance(w, r)
 		return
@@ -98,6 +123,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	value, status, err := s.serve(r)
 	if err != nil {
+		err = recordError(err)
 		status = 503
 		message := "Control service temporarily unavailable"
 		var ae apiError
@@ -146,6 +172,10 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 		}
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) == 2 && parts[0] == "repositories" && parts[1] == "tangled" && r.Method == "GET" && s.cfg.ListTangledRepositories != nil {
+		value, e := s.cfg.ListTangledRepositories(r.Context(), account.ID)
+		return value, 200, e
+	}
 	if parts[0] == "admin" {
 		if !account.IsAdmin {
 			return nil, 0, apiError{403, "Admin access required"}
@@ -161,7 +191,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case "GET":
-			rows, e := s.query(r.Context(), "SELECT * FROM projects WHERE account_id=? ORDER BY created_at ASC,id ASC", account.ID)
+			rows, e := s.query(r.Context(), projectSelect+" WHERE p.account_id=? ORDER BY p.created_at ASC,p.id ASC", account.ID)
 			out := []row{}
 			for _, p := range rows {
 				out = append(out, s.projectResponse(p))
@@ -177,12 +207,29 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	if err != nil {
 		return nil, 0, bad("Invalid project ID")
 	}
-	project, err := s.one(r.Context(), "SELECT * FROM projects WHERE id=? AND account_id=?", pid, account.ID)
+	project, err := s.one(r.Context(), projectSelect+" WHERE p.id=? AND p.account_id=?", pid, account.ID)
 	if err != nil {
 		return nil, 0, err
 	}
 	if project == nil {
 		return nil, 0, missing("Project not found")
+	}
+	if len(parts) >= 3 && parts[2] == "atproto" {
+		return s.publication(r, account.ID, pid, parts[3:])
+	}
+	if s.cfg.Records != nil && !(len(parts) == 3 && parts[2] == "sync" && r.Method == "POST") {
+		ctx, e := s.cfg.Records.Scope(r.Context(), account.ID, pid)
+		if e != nil {
+			return nil, 0, recordError(e)
+		}
+		r = r.WithContext(ctx)
+		project, e = s.one(ctx, projectSelect+" WHERE p.id=? AND p.account_id=?", pid, account.ID)
+		if e != nil {
+			return nil, 0, e
+		}
+		if project == nil {
+			return nil, 0, missing("Project not found")
+		}
 	}
 	if len(parts) == 2 {
 		if r.Method == "GET" {
@@ -208,7 +255,15 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	switch parts[2] {
 	case "set-active":
 		if len(parts) == 3 && r.Method == "POST" {
-			_, e := s.exec(r.Context(), "UPDATE projects SET suspended_at=NULL WHERE account_id=?", account.ID)
+			query := "UPDATE projects SET suspended_at=NULL WHERE account_id=?"
+			args := []any{account.ID}
+			if s.cfg.Records != nil {
+				// A legacy sibling must never mutate a canonical project outside
+				// that project's ownership/publication scope.
+				query += " AND id=?"
+				args = append(args, pid)
+			}
+			_, e := s.exec(r.Context(), query, args...)
 			return s.projectResponse(project), 200, e
 		}
 	case "api-keys":
@@ -230,12 +285,23 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 		}
 	case "repo-connection":
 		if len(parts) == 3 && r.Method == "GET" {
-			v, e := s.one(r.Context(), "SELECT project_id,provider,repo_owner,repo_name,default_branch,auth_type,webhook_id,github_installation_id IS NOT NULL AS github_installation_configured FROM repo_connections WHERE project_id=? ORDER BY created_at ASC LIMIT 1", pid)
+			v, e := s.one(r.Context(), "SELECT project_id,provider,repo_owner,repo_name,default_branch,auth_type,webhook_id,github_installation_id IS NOT NULL AS github_installation_configured FROM repo_connections WHERE project_id=? ORDER BY created_at ASC,id ASC LIMIT 1", pid)
 			if v == nil && e == nil {
 				return nil, 0, missing("No repository connection")
 			}
 			if v != nil {
 				v["github_installation_configured"] = boolean(v["github_installation_configured"])
+				if v["provider"] == "tangled" && s.cfg.ListTangledRepositories != nil {
+					binding, e := s.one(r.Context(), "SELECT b.repository_did,b.owner_did,b.is_private FROM atproto_repo_bindings b JOIN repo_connections r ON r.id=b.connection_id WHERE r.project_id=?", pid)
+					if e != nil {
+						return nil, 0, e
+					}
+					if binding != nil {
+						v["repository_did"] = binding["repository_did"]
+						v["owner_did"] = binding["owner_did"]
+						v["is_private"] = boolean(binding["is_private"])
+					}
+				}
 			}
 			return v, 200, e
 		}
@@ -282,16 +348,35 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 			if window < 1 {
 				window = 3600
 			}
-			stamp := s.now().Unix() / window * window
-			permitted, e := s.one(r.Context(), "INSERT INTO mcp_rate_limits(bucket_key,window_start,count) VALUES(?,?,1) ON CONFLICT(bucket_key,window_start) DO UPDATE SET count=count+1 WHERE count<? RETURNING count", "sync:"+account.ID+":"+pid, stamp, limit)
-			if e != nil {
-				return nil, 0, e
+			continuation := false
+			if s.cfg.SyncContinuation != nil {
+				var err error
+				continuation, err = s.cfg.SyncContinuation(r.Context(), pid)
+				if err != nil {
+					return nil, 0, err
+				}
 			}
-			if permitted == nil {
-				return nil, 0, apiError{429, "Sync rate limit exceeded"}
+			if !continuation {
+				stamp := s.now().Unix() / window * window
+				permitted, err := s.one(r.Context(), "INSERT INTO mcp_rate_limits(bucket_key,window_start,count) VALUES(?,?,1) ON CONFLICT(bucket_key,window_start) DO UPDATE SET count=count+1 WHERE count<? RETURNING count", "sync:"+account.ID+":"+pid, stamp, limit)
+				if err != nil {
+					return nil, 0, err
+				}
+				if permitted == nil {
+					return nil, 0, apiError{429, "Sync rate limit exceeded"}
+				}
 			}
-			_, e = s.cfg.Sync(r.Context(), pid)
-			return nil, 204, e
+			result, err := s.cfg.Sync(r.Context(), pid)
+			if err != nil {
+				return nil, 0, err
+			}
+			if result["status"] == "publishing" {
+				return result, 202, nil
+			}
+			if _, ok := s.verifiedXRPC(r.Context()); ok {
+				return result, 200, nil
+			}
+			return nil, 204, nil
 		}
 	case "custom-domain":
 		if s.cfg.Domains != nil {
@@ -322,6 +407,16 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	return nil, 0, missing("Not found")
 }
 func (s *Service) account(r *http.Request) (*identity.Account, error) {
+	if authorization, ok := s.verifiedXRPC(r.Context()); ok {
+		account, err := s.auth.Account(r.Context(), authorization.accountID)
+		if err != nil {
+			return nil, err
+		}
+		if account == nil || !strings.EqualFold(account.ID, authorization.accountID) {
+			return nil, apiError{401, "Invalid API account"}
+		}
+		return account, nil
+	}
 	c, e := r.Cookie("vapor-session")
 	if e != nil || len(c.Value) != 64 {
 		return nil, apiError{401, "Not authenticated"}
@@ -347,6 +442,9 @@ func (s *Service) account(r *http.Request) (*identity.Account, error) {
 	return a, nil
 }
 func (s *Service) validOrigin(r *http.Request) bool {
+	if _, ok := s.verifiedXRPC(r.Context()); ok {
+		return true
+	}
 	raw := strings.TrimSpace(r.Header.Get("Origin"))
 	if raw == "" {
 		u, e := url.Parse(r.Header.Get("Referer"))

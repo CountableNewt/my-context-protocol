@@ -1,0 +1,59 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.admin.getMetrics",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "control operation /admin/metrics. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "total_users": {
+              "type": "integer"
+            },
+            "total_projects": {
+              "type": "integer"
+            },
+            "total_mcp_calls": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total_users",
+            "total_projects",
+            "total_mcp_calls"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.account.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Account access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.account.getAccount",
+            "dev.mycontextprotocol.account.logout"
+          ]
+        }
+      ]
+    }
+  }
+}

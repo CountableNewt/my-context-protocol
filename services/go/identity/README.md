@@ -11,6 +11,28 @@ migrated SQLite/Turso schema:
 - `POST /auth/logout`
 - `GET /health`
 
+ATProto is enabled explicitly with `ATPROTO_ENABLED`, `ATPROTO_CLIENT_ID`,
+`ATPROTO_CALLBACK_URL`, `ATPROTO_OAUTH_PRIVATE_KEY` (P-256 multibase), and
+`ATPROTO_OAUTH_KEY_ID`. `ATPROTO_RECORD_COLLECTIONS` lists exact collection NSIDs;
+`ATPROTO_SERVICE_PERMISSIONS` is JSON containing exact `{audience,method}` pairs,
+where the audience is a DID service reference such as
+`did:web:mycontextprotocol.dev#mycontextprotocol`. Publish client metadata at the
+configured client ID; callback and metadata must share an HTTPS origin.
+
+Enabled routes: `GET /auth/atproto/status`, `GET /auth/atproto`,
+`GET /auth/cli/atproto`, `GET /auth/atproto/callback`,
+`GET /auth/atproto/client-metadata.json`, `POST /auth/atproto/link`, and
+`POST /auth/github/link`. Login accepts `handle` and `return_to` query values;
+link requests accept JSON `{handle,return_to}` (GitHub omits `handle`) and return
+`{authorization_url}`. Link requests require the existing session and trusted
+Origin; callbacks require that same account plus one-use browser-bound state.
+Different accounts are never merged. New ATProto accounts require the explicit
+nullable-GitHub-ID migration and additive `ATProtoMigrationSQL` first.
+
+`/auth/me` reports `github_connected`, `atproto_enabled`, and linked
+`atproto_did` / `atproto_handle` without exposing OAuth session material. GitHub
+bootstrap admin allowlists apply only to proven GitHub identities.
+
 Session cookies remain `vapor-session`, with opaque 64-character keys and JSON
 payloads using `accountId`. Cookies are host-only, HTTP-only, SameSite=Lax, and
 secure for HTTPS frontend origins. Session establishment rotates keys; updates

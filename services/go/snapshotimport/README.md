@@ -142,3 +142,28 @@ go run ./cmd/import load \
 Do not copy the example count without independently auditing the target. All planned updates execute in one bounded transaction, guarded by original primary identity, REAL storage type, the exact observed SQLite decimal rendering, loading snapshot identity and the full completed progress manifest. A CHECK guard aborts the entire batch on a failed compare-and-swap; no partial repair is committed. Strict count/hash/FK verification follows, and the tool leaves the checkpoint loading until ordinary resume finalizes it. It never resets tables, changes non-REAL values or loosens verification. A lost transaction response is ambiguous: keep traffic and writers stopped, run strict verify, and review the result before retrying. This tool performs no deployment or routing actions.
 
 Remote export and the read-only `verify` command use a dedicated trusted-query HTTP path that sends no transaction or connection-setting statements. This supports an operator-enforced Turso BlockWrites freeze, which also rejects `PRAGMA foreign_keys=ON`. The exporter still runs the read-only `PRAGMA foreign_key_check`; it does not depend on the connection's enforcement flag to inspect existing violations. The adapter refuses Batch entirely. Ordinary load, staged repair and runtime queries retain their existing foreign-key enforcement and transaction setup. The query-shape guard is not a general SQL sandbox; only the tool's fixed, owned inspection SQL may use this path.
+
+## Current-schema recovery
+
+Legacy v1 artifacts remain supported. `ExportRemote` with `CurrentSchema: true`
+preserves every present shipped application table, including encrypted ATProto
+OAuth requests/sessions, logout tombstones, and pending publication intents.
+Artifacts containing additive tables use `mycontext-sqlite-snapshot-v2` and retain
+strict schema allowlisting and typed row/count/digest verification. Local export
+automatically recognizes these shipped schemas. Unknown or altered objects are
+rejected; existing files are never replaced.
+
+Use `go run ./cmd/import export-remote --current-schema --writers-paused
+--expected-host <independently-reviewed-host> --output <new-private-artifact>`
+for current Go recovery. The `--current-schema` flag is accepted only by remote
+export; local exports detect the exact shipped schema automatically.
+
+Only the migration registry and prior import checkpoints are reconstructed rather
+than copied. The destination applies explicit shipped migrations before loading
+current-schema rows. A current artifact must be restored into the Go application;
+it is not a baseline Swift rollback artifact. Legacy baseline-only remote export
+refuses nonempty ATProto tables, preventing accidental loss of private credentials
+or unfinished publication work. Keep writers paused and drained throughout remote
+export and verification, and preserve the encryption/signing configuration needed
+to decrypt restored secrets. Snapshot files remain owner-readable private data;
+never upload them to an ordinary preview or publish them as ATProto records.

@@ -21,3 +21,6 @@ node_modules/
 __pycache__/
 .vercel
 .env*
+
+# One-off encrypted operator build output
+.operator-output/

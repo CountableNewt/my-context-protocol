@@ -1,0 +1,44 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "client_identity": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "payload_hash": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "recorded_count": {
+            "type": "integer"
+          },
+          "report_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "client_identity",
+          "report_id",
+          "payload_hash",
+          "recorded_count"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.usageReport",
+  "lexicon": 1
+}

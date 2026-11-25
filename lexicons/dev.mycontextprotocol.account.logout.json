@@ -1,0 +1,47 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.account.logout",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "identity operation /auth/logout. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
+      }
+    }
+  }
+}

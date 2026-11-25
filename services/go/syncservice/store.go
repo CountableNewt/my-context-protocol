@@ -34,13 +34,13 @@ func stmt(sql string, args ...turso.Value) turso.Statement {
 	return turso.Statement{SQL: sql, Args: args, WantRows: true}
 }
 
-const connectionSelect = `SELECT r.id,r.project_id,r.repo_owner,r.repo_name,r.default_branch,r.token_encrypted,a.github_token_encrypted,r.webhook_secret,r.github_installation_id,p.active_release_id FROM repo_connections r JOIN projects p ON p.id=r.project_id JOIN accounts a ON a.id=p.account_id `
+const connectionSelect = `SELECT r.id,r.project_id,r.repo_owner,r.repo_name,r.default_branch,r.token_encrypted,CASE WHEN COALESCE(NULLIF(r.provider,''),'github')='github' THEN a.github_token_encrypted ELSE NULL END,r.webhook_secret,r.github_installation_id,p.active_release_id,r.provider FROM repo_connections r JOIN projects p ON p.id=r.project_id JOIN accounts a ON a.id=p.account_id `
 
 func connection(row []turso.Value) (Connection, error) {
-	if len(row) != 10 {
+	if len(row) != 11 {
 		return Connection{}, errors.New("invalid repository connection row")
 	}
-	return Connection{value(row, 0), value(row, 1), value(row, 2), value(row, 3), value(row, 4), value(row, 5), value(row, 6), value(row, 7), value(row, 8), value(row, 9)}, nil
+	return Connection{Provider: value(row, 10), ID: value(row, 0), ProjectID: value(row, 1), Owner: value(row, 2), Repository: value(row, 3), Branch: value(row, 4), EncryptedToken: value(row, 5), AccountEncryptedToken: value(row, 6), WebhookSecret: value(row, 7), InstallationID: value(row, 8), PriorReleaseID: value(row, 9)}, nil
 }
 func (s SQLStore) Connection(ctx context.Context, id string) (Connection, error) {
 	r, err := s.DB.Execute(ctx, stmt(connectionSelect+"WHERE p.id=? ORDER BY r.id LIMIT 1", turso.Text(id)))
@@ -53,7 +53,7 @@ func (s SQLStore) Connection(ctx context.Context, id string) (Connection, error)
 	return connection(r.Rows[0])
 }
 func (s SQLStore) Connections(ctx context.Context, owner, repo string) ([]Connection, error) {
-	r, err := s.DB.Execute(ctx, stmt(connectionSelect+"WHERE lower(r.repo_owner)=lower(?) AND lower(r.repo_name)=lower(?) ORDER BY r.project_id,r.id LIMIT 11", turso.Text(owner), turso.Text(repo)))
+	r, err := s.DB.Execute(ctx, stmt(connectionSelect+"WHERE COALESCE(NULLIF(r.provider,''),'github')='github' AND lower(r.repo_owner)=lower(?) AND lower(r.repo_name)=lower(?) ORDER BY r.project_id,r.id LIMIT 11", turso.Text(owner), turso.Text(repo)))
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +120,18 @@ func (s SQLStore) Job(ctx context.Context, id string) (Job, error) {
 	return decodeJob(r.Rows[0])
 }
 func (s SQLStore) Claim(ctx context.Context, c Connection, key string, now time.Time) (Job, bool, error) {
+	// Retrying a failed delivery changes sync_jobs.id. Remove only its terminal
+	// private plan first so its foreign key cannot prevent the fresh reservation.
+	if s.hasPublicationPlans() && key != "" {
+		_, err := s.DB.Batch(ctx, []turso.Statement{
+			stmt("DELETE FROM sync_publication_chunks WHERE job_id IN(SELECT p.job_id FROM sync_publication_plans p JOIN sync_jobs j ON j.id=p.job_id WHERE j.project_id=? AND j.delivery_key=? AND j.status='failed' AND p.state IN ('complete','failed'))", turso.Text(c.ProjectID), turso.Text(key)),
+			stmt("DELETE FROM sync_publication_plans WHERE job_id IN(SELECT id FROM sync_jobs WHERE project_id=? AND delivery_key=? AND status='failed') AND state IN ('complete','failed')", turso.Text(c.ProjectID), turso.Text(key)),
+		})
+		if err != nil {
+			return Job{}, false, err
+		}
+	}
+
 	id, err := identity.UUID()
 	if err != nil {
 		return Job{}, false, err
@@ -151,7 +163,7 @@ func (s SQLStore) Claim(ctx context.Context, c Connection, key string, now time.
 	if len(results[1].Rows) == 0 {
 		return job, false, nil
 	}
-	locked, err := s.DB.Execute(ctx, stmt("INSERT INTO sync_project_locks(project_id,job_id,lease_until) VALUES (?,?,?) ON CONFLICT(project_id) DO UPDATE SET job_id=excluded.job_id,lease_until=excluded.lease_until WHERE sync_project_locks.lease_until<=? RETURNING job_id", turso.Text(c.ProjectID), turso.Text(job.ID), turso.Integer(now.Add(120*time.Second).Unix()), turso.Integer(now.Unix())))
+	locked, err := s.DB.Execute(ctx, stmt("INSERT INTO sync_project_locks(project_id,job_id,lease_until) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM repo_connections WHERE id=? AND project_id=? AND COALESCE(NULLIF(provider,''),'github')=? AND repo_owner=? AND repo_name=? AND default_branch=?) ON CONFLICT(project_id) DO UPDATE SET job_id=excluded.job_id,lease_until=excluded.lease_until WHERE sync_project_locks.lease_until<=? RETURNING job_id", turso.Text(c.ProjectID), turso.Text(job.ID), turso.Integer(now.Add(120*time.Second).Unix()), turso.Text(c.ID), turso.Text(c.ProjectID), turso.Text(c.provider()), turso.Text(c.Owner), turso.Text(c.Repository), turso.Text(c.Branch), turso.Integer(now.Unix())))
 	if err != nil {
 		return job, false, err
 	}
@@ -161,6 +173,13 @@ func (s SQLStore) Claim(ctx context.Context, c Connection, key string, now time.
 	}
 	_, err = s.DB.Execute(ctx, stmt("INSERT INTO releases(id,project_id,commit_sha,status,created_at) VALUES (?,?,'pending','pending',?)", turso.Text(job.ReleaseID), turso.Text(c.ProjectID), turso.Integer(now.Unix())))
 	if err != nil {
+		if s.publicationEnabled(ctx) {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_, _ = s.DB.Execute(cleanup, stmt("UPDATE sync_jobs SET status='publishing',updated_at=? WHERE id=? AND release_id=?", turso.Integer(now.Unix()), turso.Text(job.ID), turso.Text(job.ReleaseID)))
+			job.Status = "publishing"
+			return job, false, errors.Join(ErrPending, err)
+		}
 		_ = s.Fail(ctx, job, "release_create_failed", now)
 		return job, false, err
 	}
@@ -233,43 +252,59 @@ func (s SQLStore) carryForward(ctx context.Context, prior string, c *compiler.Co
 	return compiler.BodyDiff(value(row, 5), c.Skill.Body), nil
 }
 
-func (s SQLStore) Publish(ctx context.Context, c Connection, job Job, revision string, skills []compiler.Compiled, report compiler.Report, now time.Time) error {
+// Publication statement templates are also the recovery allowlist.
+const (
+	publicationPackageSQL    = "INSERT INTO skill_packages(id,release_id,path,name,description,hash,validation_status,created_at) VALUES (?,?,?,?,?,?,?,?)"
+	publicationCompiledSQL   = "INSERT INTO compiled_skills(id,release_id,skill_package_id,path,name,summary,skill_body,exposure_type,risk_level,repo_specific,status,yaml_frontmatter_present,canonical_schema_version,skill_id,kind,scope,activation_mode,enforcement,priority,version,source_checksum,source_policy_json,source_policy_base_checksum,source_policy_stale,canonical_json,clarification_json,clarification_required,created_at,body_diff_unified,body_diff_prior_release_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+	publicationRoutingSQL    = "INSERT INTO routing_rules(id,compiled_skill_id,use_when_json,avoid_when_json,failure_modes_json,invoke_first,created_at) VALUES (?,?,?,?,?,?,?)"
+	publicationCapabilitySQL = "INSERT INTO capability_defs(id,compiled_skill_id,capability_name,type,schema_json,side_effect_level,created_at) VALUES (?,?,?,?,?,?,?)"
+	publicationFileSQL       = "INSERT INTO skill_package_files(id,skill_package_id,path,content,content_type,byte_count,checksum,created_at) VALUES (?,?,?,?,?,?,?,?)"
+	publicationValidationSQL = "INSERT INTO validation_reports(id,release_id,report_json,created_at) VALUES (?,?,?,?)"
+	publicationReleaseSQL    = "UPDATE releases SET commit_sha=?,status=?,error_summary=?,skill_body_changes_count=? WHERE id=?"
+	publicationActivateSQL   = "UPDATE projects SET active_release_id=? WHERE id=? AND COALESCE(active_release_id,'')=? AND EXISTS(SELECT 1 FROM sync_project_locks WHERE project_id=? AND job_id=? AND lease_until>?) RETURNING id"
+	publicationRevisionSQL   = "INSERT INTO mcp_catalog_revisions(project_id,revision) SELECT ?,1 WHERE EXISTS(SELECT 1 FROM projects WHERE id=? AND active_release_id=?) ON CONFLICT(project_id) DO UPDATE SET revision=mcp_catalog_revisions.revision+1"
+	publicationCompleteSQL   = "UPDATE sync_jobs SET status=?,error_code=?,updated_at=? WHERE id=? AND release_id=?"
+	publicationUnlockSQL     = "DELETE FROM sync_project_locks WHERE project_id=? AND job_id=?"
+)
+
+func (s SQLStore) buildPublication(ctx context.Context, c Connection, job Job, revision string, skills []compiler.Compiled, report compiler.Report, now time.Time) ([][]turso.Statement, bool, error) {
 	// Staged rows are unreachable until the final active_release_id transaction.
 	// Batches stay below Hrana limits; a failed stage leaves a failed release only.
+	batches := [][]turso.Statement{}
 	statements := []turso.Statement{}
 	flush := func() error {
 		if len(statements) == 0 {
 			return nil
 		}
-		_, err := s.DB.Batch(ctx, statements)
+		batches = append(batches, append([]turso.Statement(nil), statements...))
 		statements = nil
-		return err
+		return nil
 	}
 	allReady := report.Valid
 	bodyChanges := 0
 	for _, compiled := range skills {
 		diff, err := s.carryForward(ctx, c.PriorReleaseID, &compiled)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		if diff != "" {
 			bodyChanges++
 		}
 		packageID, err := identity.UUID()
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		compiledID, err := identity.UUID()
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		ruleID, err := identity.UUID()
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		capID, err := identity.UUID()
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		skill := compiled.Skill
 		status := "valid"
@@ -282,56 +317,50 @@ func (s SQLStore) Publish(ctx context.Context, c Connection, job Job, revision s
 		validation, _ := canonical["validation"].(map[string]any)
 		priority, _ := canonical["priority"].(int)
 		statements = append(statements,
-			stmt("INSERT INTO skill_packages(id,release_id,path,name,description,hash,validation_status,created_at) VALUES (?,?,?,?,?,?,?,?)", turso.Text(packageID), turso.Text(job.ReleaseID), turso.Text(skill.Path), turso.Text(skill.Name), nullableString(skill.Description), turso.Text(skill.Hash), turso.Text(status), turso.Integer(now.Unix())),
-			stmt("INSERT INTO compiled_skills(id,release_id,skill_package_id,path,name,summary,skill_body,exposure_type,risk_level,repo_specific,status,yaml_frontmatter_present,canonical_schema_version,skill_id,kind,scope,activation_mode,enforcement,priority,version,source_checksum,source_policy_json,source_policy_base_checksum,source_policy_stale,canonical_json,clarification_json,clarification_required,created_at,body_diff_unified,body_diff_prior_release_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", turso.Text(compiledID), turso.Text(job.ReleaseID), turso.Text(packageID), turso.Text(skill.Path), turso.Text(skill.Name), turso.Text(compiled.Summary), turso.Text(skill.Body), turso.Text(compiled.Exposure), turso.Text(compiled.Risk), flag(compiled.RepoSpecific), turso.Text(compiled.Status), flag(skill.Frontmatter), turso.Integer(1), turso.Text(skill.Name), turso.Text(fmt.Sprint(canonical["kind"])), turso.Text(fmt.Sprint(canonical["scope"])), turso.Text(fmt.Sprint(activation["mode"])), turso.Text(fmt.Sprint(canonical["enforcement"])), turso.Integer(int64(priority)), turso.Text(fmt.Sprint(canonical["version"])), turso.Text(skill.Hash), nullableString(compiled.SourcePolicyJSON), nullableString(compiled.SourcePolicyChecksum), flag(compiled.SourcePolicyStale), jsonValue(canonical), jsonValue(compiled.Clarifications), flag(validation["clarificationRequired"] == true), turso.Integer(now.Unix()), nullableString(diff), priorDiffRelease(diff, c.PriorReleaseID)),
-			stmt("INSERT INTO routing_rules(id,compiled_skill_id,use_when_json,avoid_when_json,failure_modes_json,invoke_first,created_at) VALUES (?,?,?,?,?,?,?)", turso.Text(ruleID), turso.Text(compiledID), jsonValue(compiled.UseWhen), jsonValue(compiled.AvoidWhen), jsonValue(compiled.FailureModes), boolValue(compiled.InvokeFirst), turso.Integer(now.Unix())),
-			stmt("INSERT INTO capability_defs(id,compiled_skill_id,capability_name,type,schema_json,side_effect_level,created_at) VALUES (?,?,?,?,?,?,?)", turso.Text(capID), turso.Text(compiledID), turso.Text(skill.Name), turso.Text(compiled.Exposure), jsonValue(compiled.Schema), turso.Text(compiled.SideEffects), turso.Integer(now.Unix())),
+			stmt(publicationPackageSQL, turso.Text(packageID), turso.Text(job.ReleaseID), turso.Text(skill.Path), turso.Text(skill.Name), nullableString(skill.Description), turso.Text(skill.Hash), turso.Text(status), turso.Integer(now.Unix())),
+			stmt(publicationCompiledSQL, turso.Text(compiledID), turso.Text(job.ReleaseID), turso.Text(packageID), turso.Text(skill.Path), turso.Text(skill.Name), turso.Text(compiled.Summary), turso.Text(skill.Body), turso.Text(compiled.Exposure), turso.Text(compiled.Risk), flag(compiled.RepoSpecific), turso.Text(compiled.Status), flag(skill.Frontmatter), turso.Integer(1), turso.Text(skill.Name), turso.Text(fmt.Sprint(canonical["kind"])), turso.Text(fmt.Sprint(canonical["scope"])), turso.Text(fmt.Sprint(activation["mode"])), turso.Text(fmt.Sprint(canonical["enforcement"])), turso.Integer(int64(priority)), turso.Text(fmt.Sprint(canonical["version"])), turso.Text(skill.Hash), nullableString(compiled.SourcePolicyJSON), nullableString(compiled.SourcePolicyChecksum), flag(compiled.SourcePolicyStale), jsonValue(canonical), jsonValue(compiled.Clarifications), flag(validation["clarificationRequired"] == true), turso.Integer(now.Unix()), nullableString(diff), priorDiffRelease(diff, c.PriorReleaseID)),
+			stmt(publicationRoutingSQL, turso.Text(ruleID), turso.Text(compiledID), jsonValue(compiled.UseWhen), jsonValue(compiled.AvoidWhen), jsonValue(compiled.FailureModes), boolValue(compiled.InvokeFirst), turso.Integer(now.Unix())),
+			stmt(publicationCapabilitySQL, turso.Text(capID), turso.Text(compiledID), turso.Text(skill.Name), turso.Text(compiled.Exposure), jsonValue(compiled.Schema), turso.Text(compiled.SideEffects), turso.Integer(now.Unix())),
 		)
 		for _, file := range compiled.Files {
 			id, err := identity.UUID()
 			if err != nil {
-				return err
+				return nil, false, err
 			}
-			statements = append(statements, stmt("INSERT INTO skill_package_files(id,skill_package_id,path,content,content_type,byte_count,checksum,created_at) VALUES (?,?,?,?,?,?,?,?)", turso.Text(id), turso.Text(packageID), turso.Text(file.Path), turso.Blob(file.Content), nullableString(file.ContentType), turso.Integer(int64(len(file.Content))), turso.Text(file.Checksum), turso.Integer(now.Unix())))
+			statements = append(statements, stmt(publicationFileSQL, turso.Text(id), turso.Text(packageID), turso.Text(file.Path), turso.Blob(file.Content), nullableString(file.ContentType), turso.Integer(int64(len(file.Content))), turso.Text(file.Checksum), turso.Integer(now.Unix())))
 			// Each blob can approach 256 KiB; flush before serialized Hrana
 			// requests can exceed its 4 MiB bound.
 			if len(statements) >= 8 {
 				if err = flush(); err != nil {
-					return err
+					return nil, false, err
 				}
 			}
 		}
 
 		if len(statements) >= 8 {
 			if err = flush(); err != nil {
-				return err
+				return nil, false, err
 			}
 		}
 	}
 	if err := flush(); err != nil {
-		return err
+		return nil, false, err
 	}
 	reportID, err := identity.UUID()
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	status := "ready"
 	if !report.Valid {
 		status = "failed"
 	}
-	statements = []turso.Statement{stmt("INSERT INTO validation_reports(id,release_id,report_json,created_at) VALUES (?,?,?,?)", turso.Text(reportID), turso.Text(job.ReleaseID), jsonValue(report), turso.Integer(now.Unix())), stmt("UPDATE releases SET commit_sha=?,status=?,error_summary=?,skill_body_changes_count=? WHERE id=?", turso.Text(revision), turso.Text(status), errorSummary(report), turso.Integer(int64(bodyChanges)), turso.Text(job.ReleaseID))}
+	statements = []turso.Statement{stmt(publicationValidationSQL, turso.Text(reportID), turso.Text(job.ReleaseID), jsonValue(report), turso.Integer(now.Unix())), stmt(publicationReleaseSQL, turso.Text(revision), turso.Text(status), errorSummary(report), turso.Integer(int64(bodyChanges)), turso.Text(job.ReleaseID))}
 	if allReady {
-		statements = append(statements, stmt("UPDATE projects SET active_release_id=? WHERE id=? AND COALESCE(active_release_id,'')=? AND EXISTS(SELECT 1 FROM sync_project_locks WHERE project_id=? AND job_id=? AND lease_until>?) RETURNING id", turso.Text(job.ReleaseID), turso.Text(c.ProjectID), turso.Text(c.PriorReleaseID), turso.Text(c.ProjectID), turso.Text(job.ID), turso.Integer(now.Unix())), stmt("INSERT INTO mcp_catalog_revisions(project_id,revision) SELECT ?,1 WHERE EXISTS(SELECT 1 FROM projects WHERE id=? AND active_release_id=?) ON CONFLICT(project_id) DO UPDATE SET revision=mcp_catalog_revisions.revision+1", turso.Text(c.ProjectID), turso.Text(c.ProjectID), turso.Text(job.ReleaseID)))
+		statements = append(statements, stmt(publicationActivateSQL, turso.Text(job.ReleaseID), turso.Text(c.ProjectID), turso.Text(c.PriorReleaseID), turso.Text(c.ProjectID), turso.Text(job.ID), turso.Integer(now.Unix())), stmt(publicationRevisionSQL, turso.Text(c.ProjectID), turso.Text(c.ProjectID), turso.Text(job.ReleaseID)))
 	}
-	statements = append(statements, stmt("UPDATE sync_jobs SET status=?,error_code=?,updated_at=? WHERE id=? AND release_id=?", turso.Text(status), errorCode(report), turso.Integer(now.Unix()), turso.Text(job.ID), turso.Text(job.ReleaseID)), stmt("DELETE FROM sync_project_locks WHERE project_id=? AND job_id=?", turso.Text(c.ProjectID), turso.Text(job.ID)))
-	results, err := s.DB.Batch(ctx, statements)
-	if err != nil {
-		return err
-	}
-	if allReady && (len(results) < 3 || len(results[2].Rows) != 1) {
-		return ErrBusy
-	}
-	return nil
+	statements = append(statements, stmt(publicationCompleteSQL, turso.Text(status), errorCode(report), turso.Integer(now.Unix()), turso.Text(job.ID), turso.Text(job.ReleaseID)), stmt(publicationUnlockSQL, turso.Text(c.ProjectID), turso.Text(job.ID)))
+	batches = append(batches, statements)
+	return batches, allReady, nil
 }
 func boolValue(b *bool) turso.Value {
 	if b == nil {

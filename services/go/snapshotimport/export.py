@@ -3,6 +3,7 @@ import base64
 import json
 import math
 import pathlib
+import re
 import sqlite3
 import sys
 
@@ -12,7 +13,7 @@ def quoted(value):
 
 
 def normalized(value):
-    return ' '.join(value.split())
+    return ' '.join(re.sub(r'\bIF\s+NOT\s+EXISTS\s+', '', value, flags=re.I).split())
 
 
 def objects(db):
@@ -42,7 +43,8 @@ def emit(value):
 
 
 def main():
-    baseline = sys.stdin.read()
+    settings = json.load(sys.stdin)
+    baseline = settings['baseline']
     expected = sqlite3.connect(':memory:')
     expected.executescript(baseline)
     expected_objects = objects(expected)
@@ -60,17 +62,19 @@ def main():
     if source.execute('PRAGMA foreign_key_check').fetchone() is not None:
         raise ValueError('source foreign keys')
     actual = objects(source)
-    if set(actual) != set(expected_objects):
-        raise ValueError('source objects differ from baseline')
-    if any(normalized(actual[name]) != normalized(sql) for name, sql in expected_objects.items()):
-        raise ValueError('source schema differs from baseline')
-    names = sorted(row[0] for row in source.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
+    if not set(expected_objects).issubset(actual):
+        raise ValueError('source baseline missing')
+    if any(name not in settings['allowed'] or (normalized(sql) != normalized(settings['allowed'][name]) and not (name == 'accounts' and normalized(sql) == normalized(settings['account_identity_schema']))) for name, sql in actual.items()):
+        raise ValueError('source schema is not shipped')
+    actual = {name: sql for name, sql in actual.items() if name not in settings['excluded']}
+    names = sorted(row[0] for row in source.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'") if row[0] not in settings['excluded'])
     tables = []
     for name in names:
         columns = [row[1] for row in source.execute('PRAGMA table_info(' + quoted(name) + ')')]
         count = source.execute('SELECT COUNT(*) FROM ' + quoted(name)).fetchone()[0]
         tables.append({'name': name, 'columns': columns, 'rows': count})
-    emit({'format': 'mycontext-sqlite-snapshot-v1', 'schema': actual, 'tables': tables})
+    legacy = set(actual) == set(expected_objects) and all(normalized(actual[name]) == normalized(sql) for name, sql in expected_objects.items())
+    emit({'format': 'mycontext-sqlite-snapshot-v1' if legacy else 'mycontext-sqlite-snapshot-v2', 'schema': actual, 'tables': tables})
     for table in tables:
         columns = ','.join(quoted(name) for name in table['columns'])
         query = 'SELECT ' + columns + ' FROM ' + quoted(table['name']) + ' ORDER BY rowid'

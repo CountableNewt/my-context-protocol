@@ -369,11 +369,14 @@ func (s SQLStore) RateLimit(ctx context.Context, bucket string, limit int, now t
 	return len(r.Rows) > 0, nil
 }
 func (s SQLStore) Record(ctx context.Context, project, client string, events []Observation) error {
+	if !s.telemetryAllowed(ctx) {
+		return nil
+	}
 	if len(events) == 0 {
 		return nil
 	}
-	for offset := 0; offset < len(events); offset += 120 {
-		end := min(len(events), offset+120)
+	for offset := 0; offset < len(events); offset += 100 {
+		end := min(len(events), offset+100)
 		statements := make([]turso.Statement, 0, end-offset)
 		for _, event := range events[offset:end] {
 			id, err := identity.UUID()
@@ -403,6 +406,9 @@ func (s SQLStore) Record(ctx context.Context, project, client string, events []O
 	return nil
 }
 func (s SQLStore) Log(ctx context.Context, event RequestLog) error {
+	if !s.telemetryAllowed(ctx) {
+		return nil
+	}
 	id, err := identity.UUID()
 	if err != nil {
 		return err
@@ -453,4 +459,13 @@ func (s SQLStore) Subscriptions(ctx context.Context, p Principal) ([]string, err
 		uris = append(uris, text(r, "uri"))
 	}
 	return uris, nil
+}
+
+func (s SQLStore) CanonicalTelemetry(ctx context.Context) bool {
+	d, ok := s.DB.(interface{ CanonicalScope(context.Context) bool })
+	return ok && d.CanonicalScope(ctx)
+}
+func (s SQLStore) telemetryAllowed(ctx context.Context) bool {
+	d, ok := s.DB.(interface{ TelemetryPublicationAllowed(context.Context) bool })
+	return !ok || d.TelemetryPublicationAllowed(ctx)
 }

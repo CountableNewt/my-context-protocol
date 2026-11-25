@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { ATProtoAuth } from "@/components/atproto-auth";
+import { linkGitHub } from "@/lib/auth";
 import {
   Card,
   CardContent,
@@ -19,6 +22,16 @@ import {
 
 export default function AccountPage() {
   const { user, isLoading, logout } = useAuth();
+  const [linkingGitHub, setLinkingGitHub] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  async function connectGitHub() {
+    if (linkingGitHub) return;
+    setLinkingGitHub(true);
+    setLinkError(null);
+    try { window.location.assign(await linkGitHub()); }
+    catch { setLinkError("Could not start GitHub authorization. Please try again."); setLinkingGitHub(false); }
+  }
 
   if (isLoading || !user) {
     return (
@@ -35,14 +48,16 @@ export default function AccountPage() {
     : user.email
       ? user.email.slice(0, 2).toUpperCase()
       : "?";
-  const githubHref = user.login ? `https://github.com/${user.login}` : null;
+  const githubConnected = user.github_connected ?? !user.atproto_did;
+  const githubHref = githubConnected && user.login ? `https://github.com/${encodeURIComponent(user.login)}` : null;
+  const displayName = user.atproto_handle ?? user.login ?? "Account";
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Account</h1>
         <p className="text-muted-foreground mt-1">
-          Your profile and session. You sign in with GitHub.
+          Your profile, connected identities, and browser session.
         </p>
       </div>
 
@@ -58,11 +73,11 @@ export default function AccountPage() {
             <div className="min-w-0 flex-1 space-y-1">
               <CardTitle className="flex flex-wrap items-center gap-2 text-xl">
                 <UserIcon className="text-muted-foreground size-5 shrink-0" />
-                <span className="truncate">{user.login ?? "GitHub User"}</span>
+                <span className="truncate">{displayName}</span>
 
               </CardTitle>
               <CardDescription>
-                {user.email ?? "No public email on GitHub"}
+                {user.email ?? "No public email available"}
               </CardDescription>
               {githubHref && (
                 <a
@@ -78,6 +93,24 @@ export default function AccountPage() {
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Connected Accounts</CardTitle>
+          <CardDescription>Use GitHub or ATProto to sign in to the same account.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <h2 className="text-sm font-medium">GitHub</h2>
+            {githubConnected ? <p className="text-muted-foreground text-sm">Connected{user.login ? ` as ${user.login}` : ""}</p> : <Button variant="outline" onClick={connectGitHub} disabled={linkingGitHub}>{linkingGitHub ? "Opening authorization…" : "Link GitHub Account"}</Button>}
+            {linkError ? <p role="alert" className="text-sm text-destructive">{linkError}</p> : null}
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-sm font-medium">ATProto</h2>
+            {user.atproto_did ? <div className="space-y-1 text-sm"><p>{user.atproto_handle ?? "Connected ATProto identity"}</p><p className="text-muted-foreground break-all font-mono text-xs">{user.atproto_did}</p></div> : user.atproto_enabled ? <ATProtoAuth linking enabled returnTo="/account" /> : <p className="text-muted-foreground text-sm">ATProto sign-in is not enabled on this server.</p>}
+          </div>
+        </CardContent>
       </Card>
 
       <Card>

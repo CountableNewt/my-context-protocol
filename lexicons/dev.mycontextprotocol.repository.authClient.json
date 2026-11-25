@@ -1,0 +1,26 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.repository.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Repository access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.repository.connectRepository",
+            "dev.mycontextprotocol.repository.getConnection",
+            "dev.mycontextprotocol.repository.syncRepository",
+            "dev.mycontextprotocol.repository.listRepositories",
+            "dev.mycontextprotocol.repository.getSyncJob",
+            "dev.mycontextprotocol.repository.listTangledRepositories"
+          ]
+        }
+      ]
+    }
+  }
+}

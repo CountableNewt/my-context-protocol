@@ -9,16 +9,18 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/migrations"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
 
 // RemoteExportOptions records an operator precondition, not a database lock.
 // Stop and drain every writer before setting WritersPaused, and keep them stopped
 // until the snapshot and replacement SQLite database have been verified.
-type RemoteExportOptions struct{ WritersPaused bool }
+type RemoteExportOptions struct{ WritersPaused, CurrentSchema bool }
 
-// ExportRemote reads only baseline application tables, retaining Fluent history
-// but excluding Go-owned transient state. Independent HTTP queries cannot form a
+// ExportRemote defaults to baseline-only legacy rollback. CurrentSchema also
+// preserves all present additive application tables, including private OAuth and
+// publication state. Independent HTTP queries cannot form a
 // consistent snapshot while writers run. A second full digest pass detects drift
 // but is not a substitute for the explicit pause/drain precondition.
 func ExportRemote(ctx context.Context, db Database, output string, options RemoteExportOptions) (*Snapshot, error) {
@@ -42,7 +44,37 @@ func ExportRemote(ctx context.Context, db Database, output string, options Remot
 	if e != nil {
 		return nil, e
 	}
-	h := header{Format: Format, Schema: baselineSchema}
+	format := Format
+	if options.CurrentSchema {
+		baselineSchema, definitions, e = currentDefinitions(schema)
+		if e != nil {
+			return nil, e
+		}
+		baselineOnly, _, err := baseline()
+		if err != nil {
+			return nil, err
+		}
+		if len(baselineSchema) > len(baselineOnly) {
+			format = CurrentFormat
+		}
+	} else {
+		if normalizedCreate(schema["accounts"]) == normalizedCreate(migrations.AccountIdentityDDL) {
+			return nil, errors.New("ATProto account schema requires current-schema export")
+		}
+		for _, name := range []string{"atproto_oauth_requests", "atproto_oauth_sessions", "atproto_publication_intents"} {
+			if _, ok := schema[name]; !ok {
+				continue
+			}
+			count, err := rowCount(ctx, db, name)
+			if err != nil {
+				return nil, err
+			}
+			if count != 0 {
+				return nil, errors.New("legacy rollback would omit ATProto state; select current-schema export")
+			}
+		}
+	}
+	h := header{Format: format, Schema: baselineSchema}
 	names := make([]string, 0, len(definitions))
 	for name := range definitions {
 		names = append(names, name)

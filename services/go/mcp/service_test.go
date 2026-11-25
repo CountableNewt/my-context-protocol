@@ -394,6 +394,7 @@ func TestOriginAndMediaValidation(t *testing.T) {
 }
 func TestVercelClientIPHeaderTrustIsExplicit(t *testing.T) {
 	service, _, _ := fixture(t)
+	service.now = func() time.Time { return time.Unix(120, 0) }
 	service.config.RateLimitPerMinute = 1
 	service.config.TrustVercelClientIP = true
 	for i, ip := range []string{"198.51.100.1", "198.51.100.2", "198.51.100.1"} {
@@ -444,6 +445,9 @@ func TestAllowedBrowserMCPPreflightAndExposedChallenge(t *testing.T) {
 
 func TestOAuthAndMCPShareIngressQuota(t *testing.T) {
 	service, _, _ := fixture(t)
+	// Keep both requests in one quota window regardless of CI scheduling.
+	now := time.Unix(120, 0)
+	service.now = func() time.Time { return now }
 	service.config.RateLimitPerMinute = 1
 	register := httptest.NewRequest("POST", "https://tenant.mcp.example.com/register", nil)
 	allowed, err := service.AllowIngress(register)
@@ -454,7 +458,13 @@ func TestOAuthAndMCPShareIngressQuota(t *testing.T) {
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, ping)
 	if w.Code != 429 {
-		t.Fatal("OAuth and MCP use separate quota buckets")
+		t.Fatalf("OAuth and MCP use separate quota buckets: status %d", w.Code)
+	}
+	now = now.Add(time.Minute)
+	w = httptest.NewRecorder()
+	service.ServeHTTP(w, ping)
+	if w.Code != 200 {
+		t.Fatalf("quota did not reset in the next minute: status %d", w.Code)
 	}
 }
 func TestConfiguredMCPPathIsNormalized(t *testing.T) {

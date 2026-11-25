@@ -9,11 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/CountableNewt/my-context-protocol/services/go/control"
-	"github.com/CountableNewt/my-context-protocol/services/go/githubapp"
-	"github.com/CountableNewt/my-context-protocol/services/go/mcp"
+	"github.com/CountableNewt/my-context-protocol/services/go/appschema"
 	"github.com/CountableNewt/my-context-protocol/services/go/migrations"
-	"github.com/CountableNewt/my-context-protocol/services/go/syncservice"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
 
@@ -30,7 +27,7 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	e = migrations.Apply(ctx, db, migrations.Options{Initialize: *initialize, AdoptLegacy: *adopt, Additions: []migrations.Migration{{Version: "002_mcp_shared_state", SQL: mcp.MigrationSQL}, {Version: "003_sync_jobs", SQL: syncservice.MigrationSQL}, {Version: "004_github_operations", SQL: githubapp.MigrationSQL}, {Version: "005_maintenance_indexes", SQL: control.MaintenanceSQL}}})
+	e = migrations.Apply(ctx, db, migrations.Options{Initialize: *initialize, AdoptLegacy: *adopt, Additions: appschema.Registry()})
 	if e != nil {
 		log.Fatal(e)
 	}

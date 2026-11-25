@@ -107,6 +107,37 @@ func (s *Service) runMaintenance(ctx context.Context) (row, error) {
 		{"skill_runtime_events", `DELETE FROM skill_runtime_events WHERE rowid IN (SELECT e.rowid FROM skill_runtime_events e WHERE e.created_at < ? - 86400 * MAX(1,COALESCE((SELECT s.telemetry_retention_days FROM project_runtime_settings s WHERE s.project_id=e.project_id),30)) ORDER BY e.created_at,e.rowid LIMIT ?)`, []any{now, limit}},
 		{"skill_usage_reports", `DELETE FROM skill_usage_reports WHERE rowid IN (SELECT e.rowid FROM skill_usage_reports e WHERE e.created_at < ? - 86400 * MAX(1,COALESCE((SELECT s.telemetry_retention_days FROM project_runtime_settings s WHERE s.project_id=e.project_id),30)) ORDER BY e.created_at,e.rowid LIMIT ?)`, []any{now, limit}},
 	}
+	if s.cfg.CanonicalMaintenance {
+		// Global operational cleanup must not mutate owner-record projections or
+		// remove the leases/jobs needed to resume interrupted publication.
+		// OAuth states are consumed on success; only expired abandoned requests
+		// remain here. Replay hashes outlive their token validity, and stale
+		// leases retain a five-minute grace period. Durable publication and
+		// attestation ledgers have no TTL: deleting them would break retries.
+		categories = append(categories,
+			cleanup{"atproto_oauth_requests", `DELETE FROM atproto_oauth_requests WHERE state_hash IN(SELECT state_hash FROM atproto_oauth_requests WHERE expires_at<=? ORDER BY expires_at,state_hash LIMIT ?)`, []any{now, limit}},
+			cleanup{"atproto_login_flows", `DELETE FROM atproto_login_flows WHERE state_hash IN(SELECT state_hash FROM atproto_login_flows WHERE expires_at<=? ORDER BY expires_at,state_hash LIMIT ?)`, []any{now, limit}},
+			cleanup{"atproto_xrpc_replays", `DELETE FROM atproto_xrpc_replays WHERE token_hash IN(SELECT token_hash FROM atproto_xrpc_replays WHERE expires_at<=? ORDER BY expires_at,token_hash LIMIT ?)`, []any{now, limit}},
+			cleanup{"atproto_session_leases", `DELETE FROM atproto_session_leases WHERE rowid IN(SELECT rowid FROM atproto_session_leases WHERE lease_until<=? ORDER BY lease_until,rowid LIMIT ?)`, []any{leaseCutoff, limit}},
+			cleanup{"provider_operation_locks", `DELETE FROM provider_operation_locks WHERE project_id IN(SELECT l.project_id FROM provider_operation_locks l WHERE l.lease_until<=? AND NOT EXISTS(SELECT 1 FROM domain_native_intents n WHERE n.project_id=l.project_id AND n.status='pending') AND NOT EXISTS(SELECT 1 FROM atproto_metadata_proposals p WHERE p.project_id=l.project_id AND p.status<>'complete') ORDER BY l.lease_until,l.project_id LIMIT ?)`, []any{leaseCutoff, limit}},
+		)
+		protectedJob := "NOT EXISTS(SELECT 1 FROM sync_publication_plans p WHERE p.job_id=sync_jobs.id AND p.state IN ('staging','publishing')) AND NOT EXISTS(SELECT 1 FROM domain_native_intents n WHERE n.project_id=sync_jobs.project_id AND n.status='pending')"
+		for i := range categories {
+			c := &categories[i]
+			switch c.name {
+			case "skill_runtime_events", "skill_usage_reports":
+				c.sql = strings.Replace(c.sql, "WHERE e.created_at", "WHERE NOT EXISTS(SELECT 1 FROM domain_canonical_projects p WHERE p.project_id=e.project_id) AND e.created_at", 1)
+			case "failed_sync_releases":
+				c.sql = strings.Replace(c.sql, "WHERE status='pending'", "WHERE NOT EXISTS(SELECT 1 FROM domain_canonical_projects p WHERE p.project_id=releases.project_id) AND status='pending'", 1)
+				c.sql = strings.Replace(c.sql, "WHERE status='running'", "WHERE "+protectedJob+" AND status='running'", 1)
+			case "failed_sync_jobs", "expired_sync_jobs":
+				c.sql = strings.Replace(c.sql, "SELECT id FROM sync_jobs WHERE", "SELECT id FROM sync_jobs WHERE "+protectedJob+" AND", 1)
+				c.sql = strings.Replace(c.sql, "SELECT rowid FROM sync_jobs WHERE", "SELECT rowid FROM sync_jobs WHERE "+protectedJob+" AND", 1)
+			case "sync_locks":
+				c.sql = strings.Replace(c.sql, "WHERE lease_until<=?", "WHERE NOT EXISTS(SELECT 1 FROM sync_publication_plans p WHERE p.project_id=sync_project_locks.project_id AND p.state IN ('staging','publishing')) AND NOT EXISTS(SELECT 1 FROM domain_native_intents n WHERE n.project_id=sync_project_locks.project_id AND n.status='pending') AND lease_until<=?", 1)
+			}
+		}
+	}
 	statements := make([]turso.Statement, len(categories))
 	for i, c := range categories {
 		statements[i] = turso.Statement{SQL: c.sql, Args: values(c.args...)}
@@ -130,7 +161,14 @@ func (s *Service) runMaintenance(ctx context.Context) (row, error) {
 	if e != nil {
 		return nil, e
 	}
-	return row{"completed_at": date(now), "batch_limit": limit, "counts": counts, "more_work": more || deferred, "rollup_refreshed": refreshed, "rollup_deferred": deferred}, nil
+	extra := map[string]any{}
+	if s.cfg.ExtraMaintenance != nil {
+		extra, e = s.cfg.ExtraMaintenance(ctx)
+		if e != nil {
+			return nil, e
+		}
+	}
+	return row{"canonical": extra, "completed_at": date(now), "batch_limit": limit, "counts": counts, "more_work": more || deferred, "rollup_refreshed": refreshed, "rollup_deferred": deferred}, nil
 }
 
 // A daily Hobby cron refreshes the overlapping latest 48 hours. Historic hourly

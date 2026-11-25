@@ -23,6 +23,12 @@
           "service": "sync",
           "format": "url",
           "env": "SYNC_SERVICE_URL"
+        },
+        {
+          "type": "service",
+          "service": "mcp",
+          "format": "url",
+          "env": "MCP_SERVICE_URL"
         }
       ],
       "installCommand": "cd ../.. && bun install --frozen-lockfile"
@@ -297,6 +303,18 @@
       "source": "/webhooks/:path*",
       "destination": {
         "service": "sync"
+      }
+    },
+    {
+      "source": "/auth/atproto/:path*",
+      "destination": {
+        "service": "identity"
+      }
+    },
+    {
+      "source": "/auth/cli/atproto",
+      "destination": {
+        "service": "identity"
       }
     },
     {

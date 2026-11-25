@@ -1,0 +1,34 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "refs": {
+            "items": {
+              "ref": "com.atproto.repo.strongRef",
+              "type": "ref"
+            },
+            "maxLength": 1000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "projectId",
+          "digest",
+          "refs"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.manifest",
+  "lexicon": 1
+}

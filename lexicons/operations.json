@@ -1,0 +1,1028 @@
+{
+  "version": 1,
+  "namespace": "dev.mycontextprotocol",
+  "status": "implementation-in-progress",
+  "operations": [
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects",
+      "nsid": "dev.mycontextprotocol.project.listProjects",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects",
+      "nsid": "dev.mycontextprotocol.project.createProject",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}",
+      "nsid": "dev.mycontextprotocol.project.getProject",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "PATCH",
+      "path": "/projects/{project_id}",
+      "nsid": "dev.mycontextprotocol.project.updateProject",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/set-active",
+      "nsid": "dev.mycontextprotocol.project.setActive",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/api-keys",
+      "nsid": "dev.mycontextprotocol.security.listKeys",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/api-keys",
+      "nsid": "dev.mycontextprotocol.security.createKey",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "PATCH",
+      "path": "/projects/{project_id}/api-keys/{key_id}",
+      "nsid": "dev.mycontextprotocol.security.updateKey",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "DELETE",
+      "path": "/projects/{project_id}/api-keys/{key_id}",
+      "nsid": "dev.mycontextprotocol.security.revokeKey",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/releases",
+      "nsid": "dev.mycontextprotocol.release.listReleases",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/releases/{release_id}/activate",
+      "nsid": "dev.mycontextprotocol.release.activateRelease",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/releases/{release_id}/validation",
+      "nsid": "dev.mycontextprotocol.release.getValidation",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/releases/{release_id}/compiled-skills",
+      "nsid": "dev.mycontextprotocol.release.listCompiledSkills",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "PATCH",
+      "path": "/projects/{project_id}/releases/{release_id}/compiled-skills/{skill_id}",
+      "nsid": "dev.mycontextprotocol.release.updateCompiledSkill",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/releases/{release_id}/compiled-skills/{skill_id}/writeback",
+      "nsid": "dev.mycontextprotocol.release.proposeMetadataChange",
+      "source": "services/go/control/projects.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/request-logs",
+      "nsid": "dev.mycontextprotocol.analytics.listRequestLogs",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/connect-repo",
+      "nsid": "dev.mycontextprotocol.repository.connectRepository",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/repo-connection",
+      "nsid": "dev.mycontextprotocol.repository.getConnection",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/skill-usage",
+      "nsid": "dev.mycontextprotocol.telemetry.getUsage",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/skill-runtime",
+      "nsid": "dev.mycontextprotocol.runtime.getSettings",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "PATCH",
+      "path": "/projects/{project_id}/skill-runtime",
+      "nsid": "dev.mycontextprotocol.runtime.updateSettings",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/catalog",
+      "nsid": "dev.mycontextprotocol.catalog.getCatalog",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "PATCH",
+      "path": "/projects/{project_id}/catalog-markdown",
+      "nsid": "dev.mycontextprotocol.catalog.updateMarkdown",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/sync",
+      "nsid": "dev.mycontextprotocol.repository.syncRepository",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/custom-domain",
+      "nsid": "dev.mycontextprotocol.domain.getDomain",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/custom-domain",
+      "nsid": "dev.mycontextprotocol.domain.setDomain",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/custom-domain/verify",
+      "nsid": "dev.mycontextprotocol.domain.verifyDomain",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/dashboard/summary",
+      "nsid": "dev.mycontextprotocol.analytics.getAccountSummary",
+      "source": "services/go/control/analytics.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/dashboard/timeseries",
+      "nsid": "dev.mycontextprotocol.analytics.getAccountTimeseries",
+      "source": "services/go/control/analytics.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/dashboard/summary",
+      "nsid": "dev.mycontextprotocol.analytics.getProjectSummary",
+      "source": "services/go/control/analytics.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/dashboard/timeseries",
+      "nsid": "dev.mycontextprotocol.analytics.getProjectTimeseries",
+      "source": "services/go/control/analytics.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/admin/metrics",
+      "nsid": "dev.mycontextprotocol.admin.getMetrics",
+      "source": "services/go/control/admin.go",
+      "authorization": "admin",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/admin/privileged-accounts",
+      "nsid": "dev.mycontextprotocol.admin.listPrivilegedAccounts",
+      "source": "services/go/control/admin.go",
+      "authorization": "admin",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/admin/lookup",
+      "nsid": "dev.mycontextprotocol.admin.lookupAccount",
+      "source": "services/go/control/admin.go",
+      "authorization": "admin",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/admin/account-flags",
+      "nsid": "dev.mycontextprotocol.admin.updateAccountFlags",
+      "source": "services/go/control/admin.go",
+      "authorization": "admin",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/admin/timeseries",
+      "nsid": "dev.mycontextprotocol.admin.getTimeseries",
+      "source": "services/go/control/admin.go",
+      "authorization": "admin",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/admin/analytics/rollup-refresh",
+      "nsid": "dev.mycontextprotocol.admin.refreshRollups",
+      "source": "services/go/control/admin.go",
+      "authorization": "admin",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "identity",
+      "method": "GET",
+      "path": "/auth/me",
+      "nsid": "dev.mycontextprotocol.account.getAccount",
+      "source": "services/go/identity/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "identity",
+      "method": "POST",
+      "path": "/auth/logout",
+      "nsid": "dev.mycontextprotocol.account.logout",
+      "source": "services/go/identity/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "githubapp",
+      "method": "GET",
+      "path": "/github/repos",
+      "nsid": "dev.mycontextprotocol.repository.listRepositories",
+      "source": "services/go/githubapp/http.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "sync",
+      "method": "GET",
+      "path": "/internal/sync/jobs/{job_id}",
+      "nsid": "dev.mycontextprotocol.repository.getSyncJob",
+      "source": "services/go/syncservice/service.go",
+      "authorization": "internal",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "resolve_context",
+      "nsid": "dev.mycontextprotocol.agent.resolveContext",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "discover_skills",
+      "nsid": "dev.mycontextprotocol.agent.discoverSkills",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "list_capabilities",
+      "nsid": "dev.mycontextprotocol.agent.listCapabilities",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "mycontext_catalog",
+      "nsid": "dev.mycontextprotocol.agent.getCatalog",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "get_skill",
+      "nsid": "dev.mycontextprotocol.agent.getSkill",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "report_skill_feedback",
+      "nsid": "dev.mycontextprotocol.agent.reportFeedback",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_TOOL",
+      "path": "report_skill_usage",
+      "nsid": "dev.mycontextprotocol.agent.reportUsage",
+      "source": "services/go/mcp/tools.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "tools/list",
+      "nsid": "dev.mycontextprotocol.agent.listTools",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "resources/list",
+      "nsid": "dev.mycontextprotocol.agent.listResources",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "prompts/list",
+      "nsid": "dev.mycontextprotocol.agent.listPrompts",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "resources/read",
+      "nsid": "dev.mycontextprotocol.agent.readResource",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "prompts/get",
+      "nsid": "dev.mycontextprotocol.agent.getPrompt",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "resources/subscribe",
+      "nsid": "dev.mycontextprotocol.agent.subscribeResource",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "mcp",
+      "method": "MCP_METHOD",
+      "path": "resources/unsubscribe",
+      "nsid": "dev.mycontextprotocol.agent.unsubscribeResource",
+      "source": "services/go/mcp/service.go",
+      "authorization": "tenant",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/atproto/publication",
+      "nsid": "dev.mycontextprotocol.publication.getReview",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/publication",
+      "nsid": "dev.mycontextprotocol.publication.publishReview",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/reconcile",
+      "nsid": "dev.mycontextprotocol.publication.reconcileProject",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/repositories/tangled",
+      "nsid": "dev.mycontextprotocol.repository.listTangledRepositories",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "GET",
+      "path": "/projects/{project_id}/atproto/conflict",
+      "nsid": "dev.mycontextprotocol.publication.getConflict",
+      "source": "services/go/control/atproto.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/conflict",
+      "nsid": "dev.mycontextprotocol.publication.resolveConflict",
+      "source": "services/go/control/atproto.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    }
+  ],
+  "exceptions": [
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/github",
+      "reason": "OAuth redirect or one-use handoff protocol; retain native transport.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/cli/github",
+      "reason": "OAuth redirect or one-use handoff protocol; retain native transport.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/github/callback",
+      "reason": "OAuth redirect or one-use handoff protocol; retain native transport.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/confirm",
+      "reason": "OAuth redirect or one-use handoff protocol; retain native transport.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "githubapp",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/github/app/install",
+      "reason": "Provider installation redirect protocol.",
+      "source": "services/go/githubapp/http.go"
+    },
+    {
+      "service": "githubapp",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/github/app/callback",
+      "reason": "Provider installation redirect protocol.",
+      "source": "services/go/githubapp/http.go"
+    },
+    {
+      "service": "githubapp",
+      "methods": [
+        "POST"
+      ],
+      "path": "/webhooks/github-app",
+      "reason": "Signed provider webhook.",
+      "source": "services/go/githubapp/http.go"
+    },
+    {
+      "service": "sync",
+      "methods": [
+        "POST"
+      ],
+      "path": "/webhooks/github",
+      "reason": "Signed provider webhook.",
+      "source": "services/go/syncservice/service.go"
+    },
+    {
+      "service": "sync",
+      "methods": [
+        "POST"
+      ],
+      "path": "/internal/sync",
+      "reason": "Private service invocation; product companion is repository.syncRepository.",
+      "source": "services/go/syncservice/service.go"
+    },
+    {
+      "service": "control",
+      "methods": [
+        "POST"
+      ],
+      "path": "/internal/maintenance",
+      "reason": "Private bounded maintenance; preserve internal authentication.",
+      "source": "services/go/control/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/.well-known/oauth-protected-resource*",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/.well-known/oauth-authorization-server*",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/register",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/authorize",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/oauth/consent",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/token",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/auth/github/mcp-oauth-start",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "oauth",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/auth/mcp-oauth-resume",
+      "reason": "OAuth wire protocol; methods vary by route as defined in owning source.",
+      "source": "services/go/oauth/service.go"
+    },
+    {
+      "service": "mcp",
+      "methods": [
+        "GET",
+        "POST",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "path": "/mcp",
+      "reason": "MCP HTTP/SSE protocol; product tool companions are inventoried separately.",
+      "source": "services/go/mcp/service.go"
+    },
+    {
+      "service": "mcp",
+      "methods": [
+        "GET",
+        "POST",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "path": "/mcp/events",
+      "reason": "MCP HTTP/SSE protocol; product tool companions are inventoried separately.",
+      "source": "services/go/mcp/service.go"
+    },
+    {
+      "service": "mcp",
+      "methods": [
+        "GET",
+        "POST",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "path": "/mcp/ping",
+      "reason": "MCP HTTP/SSE protocol; product tool companions are inventoried separately.",
+      "source": "services/go/mcp/service.go"
+    },
+    {
+      "service": "mcp",
+      "methods": [
+        "GET"
+      ],
+      "path": "/",
+      "reason": "Tenant landing response.",
+      "source": "services/go/mcp/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/health",
+      "reason": "Deployment health probe.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "control",
+      "methods": [
+        "GET"
+      ],
+      "path": "/health",
+      "reason": "Deployment health probe.",
+      "source": "services/go/control/service.go"
+    },
+    {
+      "service": "sync",
+      "methods": [
+        "GET"
+      ],
+      "path": "/health",
+      "reason": "Deployment health probe.",
+      "source": "services/go/syncservice/service.go"
+    },
+    {
+      "service": "mcp",
+      "methods": [
+        "GET"
+      ],
+      "path": "/health",
+      "reason": "Deployment health probe.",
+      "source": "services/go/mcp/service.go"
+    },
+    {
+      "service": "mcp",
+      "methods": [
+        "MCP_METHOD"
+      ],
+      "path": "tools/call:{compiled_capability_name}",
+      "reason": "Dynamic legacy compiled tool aliases serve skill instructions; use the typed agent.getSkill companion rather than minting an NSID for each repository-defined name.",
+      "source": "services/go/mcp/tools.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto/status",
+      "reason": "Public authentication-provider metadata; native authentication transport.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto/client-metadata.json",
+      "reason": "ATProto OAuth client metadata document.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto",
+      "reason": "ATProto OAuth browser initiation redirect.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/cli/atproto",
+      "reason": "ATProto OAuth CLI browser initiation redirect.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "GET"
+      ],
+      "path": "/auth/atproto/callback",
+      "reason": "ATProto OAuth browser-bound callback.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "POST"
+      ],
+      "path": "/auth/atproto/link",
+      "reason": "Proof-of-both account linking OAuth initiation protocol.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "identity",
+      "methods": [
+        "POST"
+      ],
+      "path": "/auth/github/link",
+      "reason": "Proof-of-both account linking OAuth initiation protocol.",
+      "source": "services/go/identity/service.go"
+    },
+    {
+      "service": "operator",
+      "methods": [
+        "POST"
+      ],
+      "path": "/operator",
+      "reason": "Temporary, unaliased release-only deployment for signed internal schema and recovery maintenance. It is never routed through the product application and exposes no product operation uniquely.",
+      "source": "services/go/operatorservice/service.go"
+    }
+  ],
+  "frontend": {
+    "prefix": "/api",
+    "strategy": "Same-origin adapters delegate to the inventoried operations; they are not duplicate XRPC operations.",
+    "sources": [
+      "apps/web/app/api/[...path]/route.ts",
+      "apps/web/app/api/admin/account-flags/route.ts",
+      "apps/web/app/api/admin/analytics/rollup-refresh/route.ts",
+      "apps/web/app/api/admin/lookup/route.ts",
+      "apps/web/app/api/admin/metrics/route.ts",
+      "apps/web/app/api/admin/privileged-accounts/route.ts",
+      "apps/web/app/api/admin/timeseries/route.ts",
+      "apps/web/app/api/auth/confirm/route.ts",
+      "apps/web/app/api/auth/mcp-oauth-resume/route.ts",
+      "apps/web/app/api/auth/me/route.ts"
+    ]
+  }
+}

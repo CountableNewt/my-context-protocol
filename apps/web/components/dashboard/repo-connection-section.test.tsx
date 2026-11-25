@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RepoConnectionSection } from "./repo-connection-section";
 import { connectRepo, fetchRepoConnection, fetchUserGithubRepos } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api";
+import { fetchTangledRepositories } from "@/lib/atproto-projects-api";
+import { getCurrentUser } from "@/lib/auth";
 import * as trustedRedirect from "@/lib/trusted-redirect";
+vi.mock("@/lib/atproto-projects-api", () => ({ fetchTangledRepositories: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: "account" }) }));
 vi.mock("@/lib/projects-api", () => ({
   fetchRepoConnection: vi.fn(),
   fetchUserGithubRepos: vi.fn(),
@@ -48,6 +52,8 @@ describe("RepoConnectionSection GitHub access", () => {
   let root: Root;
   let client: QueryClient;
   beforeEach(() => {
+    vi.mocked(fetchTangledRepositories).mockResolvedValue({ provider: "tangled", repositories: [{ repository_did: "did:plc:repo", owner_did: "did:plc:owner", name: "skills", default_branch: "main", uri: "at://repo", cid: "cid" }], private_repository_selection: "exact" });
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "account", login: "owner" } as Awaited<ReturnType<typeof getCurrentUser>>);
     vi.spyOn(trustedRedirect, "assertGitHubInstallUrl");
     window.history.replaceState({}, "", "/projects/project-1");
     sessionStorage.clear();
@@ -179,6 +185,109 @@ describe("RepoConnectionSection GitHub access", () => {
     await waitFor(() => expect(host.textContent).toContain("Configured through GitHub App"));
     expect(host.textContent).toContain("trigger a sync automatically");
     expect(host.textContent).not.toContain("Not configured (manual sync)");
+  });
+
+  it("requires confirmation before migrating Tangled to GitHub and sends the reviewed source", async () => {
+    const source = { provider: "tangled", repo_owner: "did:plc:owner", repo_name: "original", default_branch: "trunk" };
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ ...source, project_id: "project-1", auth_type: "atproto" });
+    vi.mocked(fetchUserGithubRepos).mockResolvedValue([repo]);
+    vi.mocked(connectRepo).mockRejectedValue(new ApiError("changed", 409, { reason: "Repository changed. Reload before migrating." }));
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate to GitHub"));
+    await click("Migrate to GitHub");
+    await waitFor(() => expect(host.querySelector("select")).not.toBeNull());
+    expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Migrate to GitHub")?.disabled).toBe(true);
+    await click("Create and copy repository");
+    expect(host.querySelector('a[href="https://github.com/new/import"]')).not.toBeNull();
+    expect(host.textContent).toContain("Git history, branches and tags");
+    await act(async () => {
+      const select = host.querySelector("select")!;
+      select.value = repo.full_name;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    });
+    await click("Migrate to GitHub");
+    await waitFor(() => expect(connectRepo).toHaveBeenCalledWith("project-1", { owner: "owner", repo: "skills", branch: "main", migrate_from: source }));
+    await waitFor(() => expect(host.textContent).toContain("Repository changed. Reload before migrating."));
+    await click("Cancel migration");
+    expect(host.textContent).toContain("did:plc:owner/original");
+  });
+
+  it("opens the ATProto destination and cancels without changing the GitHub connection", async () => {
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ project_id: "project-1", provider: "github", repo_owner: "owner", repo_name: "skills", default_branch: "main", auth_type: "oauth" });
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate to ATProto"));
+    await click("Migrate to ATProto · Tangled");
+    await click("Create and copy repository");
+    expect(host.querySelector('a[href="https://tangled.org/repo/migrate"]')).not.toBeNull();
+    await click("Cancel migration");
+    expect(host.textContent).toContain("owner/skills");
+    expect(connectRepo).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed connection lookup without offering a new connection", async () => {
+    vi.mocked(fetchRepoConnection).mockRejectedValue(new ApiError("unavailable", 503));
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Could not load the repository connection."));
+    expect(host.textContent).not.toContain("Connect Repository");
+  });
+
+  it("restores a migration source after GitHub installation and requires confirmation again", async () => {
+    const source = { provider: "tangled", repo_owner: "did:plc:owner", repo_name: "original", default_branch: "trunk" };
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ ...source, project_id: "project-1", auth_type: "atproto" });
+    vi.mocked(fetchUserGithubRepos).mockResolvedValue([repo]);
+    window.history.replaceState({}, "", "/projects/project-1?github_app_installed=1");
+    sessionStorage.setItem("pendingRepoConnect:project-1", JSON.stringify({ full_name: repo.full_name, branch: "release", migrate_from: source }));
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate Repository Connection"));
+    await waitFor(() => expect(host.querySelector<HTMLSelectElement>("select")?.value).toBe(repo.full_name));
+    expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Migrate to GitHub")?.disabled).toBe(true);
+    expect(host.querySelector<HTMLInputElement>("#branch")?.value).toBe("release");
+    expect(connectRepo).not.toHaveBeenCalled();
+  });
+
+  it("preserves migration intent when configuring GitHub access before choosing a repository", async () => {
+    const source = { provider: "tangled", repo_owner: "did:plc:owner", repo_name: "original", default_branch: "main" };
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ ...source, project_id: "project-1", auth_type: "atproto" });
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate to GitHub"));
+    await click("Migrate to GitHub");
+    await waitFor(() => expect(host.textContent).toContain("No repositories are accessible"));
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Configure GitHub Access")!;
+    link.addEventListener("click", (event) => event.preventDefault());
+    await act(async () => link.click());
+    expect(JSON.parse(sessionStorage.getItem("pendingRepoConnect:project-1")!)).toMatchObject({ migrate_from: source, full_name: "", branch: "main" });
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    window.history.replaceState({}, "", "/projects/project-1?github_app_installed=1");
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate Repository Connection"));
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    expect(host.textContent).toContain("did:plc:owner/original");
+    expect(connectRepo).not.toHaveBeenCalled();
+  });
+
+  it("prevents canceling an in-flight Tangled migration and resets confirmation after destination edits", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: "account", login: "owner", atproto_did: "did:plc:owner" } as Awaited<ReturnType<typeof getCurrentUser>>);
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ project_id: "project-1", provider: "github", repo_owner: "owner", repo_name: "skills", default_branch: "main", auth_type: "oauth" });
+    let reject!: (error: Error) => void;
+    vi.mocked(connectRepo).mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+    await render();
+    await waitFor(() => expect(host.textContent).toContain("Migrate to ATProto"));
+    await click("Migrate to ATProto · Tangled");
+    await waitFor(() => expect(host.querySelectorAll("#tangled-selection option")).toHaveLength(2));
+    await act(async () => {
+      host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+      const select = host.querySelector<HTMLSelectElement>("#tangled-selection")!;
+      select.value = "did:plc:repo";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    await click("Migrate to ATProto · Tangled");
+    await waitFor(() => expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Cancel migration")?.disabled).toBe(true));
+    await act(async () => reject(new Error("Destination unavailable")));
+    await waitFor(() => expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Cancel migration")?.disabled).toBe(false));
   });
 
 });

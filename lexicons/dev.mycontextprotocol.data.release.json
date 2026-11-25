@@ -1,0 +1,43 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "commit_sha": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "error_summary": {
+            "type": "string"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "skill_body_changes_count": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "commit_sha",
+          "status",
+          "skill_body_changes_count"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.release",
+  "lexicon": 1
+}

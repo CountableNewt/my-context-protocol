@@ -1,0 +1,45 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "actor_did": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "is_private": {
+            "type": "boolean"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "owner_did": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "repository_did": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "repository_did",
+          "owner_did",
+          "actor_did",
+          "is_private",
+          "branch"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.repositoryIdentity",
+  "lexicon": 1
+}

@@ -1,0 +1,91 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.release.updateCompiledSkill",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /projects/{project_id}/releases/{release_id}/compiled-skills/{skill_id}. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "release_id": {
+              "type": "string"
+            },
+            "skill_id": {
+              "type": "string"
+            },
+            "exposure_type": {
+              "type": "string"
+            },
+            "risk_level": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "skill_body": {
+              "type": "string"
+            },
+            "schema_json": {
+              "type": "string"
+            },
+            "replace_schema": {
+              "type": "boolean"
+            },
+            "routing": {
+              "type": "ref",
+              "ref": "dev.mycontextprotocol.types.defs#routing"
+            },
+            "runtime": {
+              "type": "ref",
+              "ref": "dev.mycontextprotocol.types.defs#runtimePatch"
+            }
+          },
+          "required": [
+            "project_id",
+            "release_id",
+            "skill_id"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#compiledSkill"
+        }
+      }
+    }
+  }
+}

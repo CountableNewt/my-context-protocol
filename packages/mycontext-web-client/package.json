@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./xrpc": "./src/xrpc.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

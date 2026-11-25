@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "operator": {
+      "root": "services/go",
+      "framework": "go",
+      "entrypoint": "cmd/operator-service/main.go",
+      "buildCommand": "go build -buildvcs=false -o server ./cmd/operator-service"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/operator",
+      "destination": {
+        "service": "operator"
+      }
+    }
+  ]
+}

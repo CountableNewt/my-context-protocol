@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -9,12 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/atidentity"
 	"github.com/CountableNewt/my-context-protocol/services/go/githubapp"
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
 	"github.com/CountableNewt/my-context-protocol/services/go/mcp"
 	"github.com/CountableNewt/my-context-protocol/services/go/oauth"
 	"github.com/CountableNewt/my-context-protocol/services/go/security"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpc"
+	"github.com/CountableNewt/my-context-protocol/services/go/xrpcauth"
+	"github.com/bluesky-social/indigo/atproto/atcrypto"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 func enabled(key string) bool {
@@ -44,11 +50,41 @@ func main() {
 	if apiOrigin != "" {
 		oauthOrigins = append(oauthOrigins, apiOrigin)
 	}
-	login, err := identity.New(identity.Config{ClientID: os.Getenv("GITHUB_CLIENT_ID"), ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"), RedirectURI: callback, EncryptionKey: os.Getenv("ENCRYPTION_KEY"), FrontendOrigins: origins, OAuthReturnOrigins: oauthOrigins, AppEnvironment: os.Getenv("APP_ENV"), GitHubAppConfigured: os.Getenv("GITHUB_APP_SLUG") != "" && os.Getenv("WEBHOOK_BASE_URL") != "", AdminLogins: strings.Split(os.Getenv("INTERNAL_ADMIN_GITHUB_LOGINS"), ","), AdminIDs: identity.ParseAdminIDs(os.Getenv("INTERNAL_ADMIN_GITHUB_IDS"))}, sessions, identity.NewGitHubHTTP())
+	cipher, err := security.NewTokenCipher(os.Getenv("ENCRYPTION_KEY"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	cipher, err := security.NewTokenCipher(os.Getenv("ENCRYPTION_KEY"))
+	loginConfig := identity.Config{ClientID: os.Getenv("GITHUB_CLIENT_ID"), ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"), RedirectURI: callback, EncryptionKey: os.Getenv("ENCRYPTION_KEY"), FrontendOrigins: origins, OAuthReturnOrigins: oauthOrigins, AppEnvironment: os.Getenv("APP_ENV"), GitHubAppConfigured: os.Getenv("GITHUB_APP_SLUG") != "" && os.Getenv("WEBHOOK_BASE_URL") != "", AdminLogins: strings.Split(os.Getenv("INTERNAL_ADMIN_GITHUB_LOGINS"), ","), AdminIDs: identity.ParseAdminIDs(os.Getenv("INTERNAL_ADMIN_GITHUB_IDS"))}
+	if enabled("ATPROTO_ENABLED") {
+		key, e := atcrypto.ParsePrivateMultibase(os.Getenv("ATPROTO_OAUTH_PRIVATE_KEY"))
+		if e != nil {
+			log.Fatal("invalid ATProto OAuth assertion key")
+		}
+		collections := []string{}
+		for _, v := range strings.Split(os.Getenv("ATPROTO_RECORD_COLLECTIONS"), ",") {
+			if v = strings.TrimSpace(v); v != "" {
+				collections = append(collections, v)
+			}
+		}
+		permissions := []atidentity.ServicePermission{}
+		if raw := os.Getenv("ATPROTO_SERVICE_PERMISSIONS"); raw != "" {
+			if json.Unmarshal([]byte(raw), &permissions) != nil {
+				log.Fatal("invalid ATPROTO_SERVICE_PERMISSIONS JSON")
+			}
+		}
+		app, metadata, e := atidentity.NewClient(atidentity.ClientConfig{ClientID: os.Getenv("ATPROTO_CLIENT_ID"), CallbackURL: os.Getenv("ATPROTO_CALLBACK_URL"), Collections: collections, ServiceAuth: permissions, PrivateKey: key, KeyID: os.Getenv("ATPROTO_OAUTH_KEY_ID")}, &atidentity.Store{DB: db, Cipher: cipher})
+		if e != nil {
+			log.Fatal(e)
+		}
+		loginConfig.ATProto = &identity.ATProtoConfig{Client: atidentity.FlowClient{ClientApp: app}, Accounts: identity.ATProtoSQLStore{DB: db, Cipher: cipher}, Metadata: metadata, Handle: func(ctx context.Context, did syntax.DID) (string, error) {
+			ident, e := app.Dir.LookupDID(ctx, did)
+			if e != nil {
+				return "", e
+			}
+			return ident.Handle.String(), nil
+		}}
+	}
+	login, err := identity.New(loginConfig, sessions, identity.NewGitHubHTTP())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,6 +137,28 @@ func main() {
 		}
 	}
 	handler := newIdentityRouter(login, github, authorization)
+	verifier, err := xrpcauth.FromEnvironment(db, os.Getenv)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if verifier != nil {
+		accountRPC, e := login.XRPCHandler(verifier)
+		if e != nil {
+			log.Fatal(e)
+		}
+		repositoryRPC, e := github.XRPCHandler(verifier)
+		if e != nil {
+			log.Fatal(e)
+		}
+		handler = xrpcauth.Route(handler, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			operation, ok := xrpc.Lookup(strings.TrimPrefix(r.URL.Path, "/xrpc/"))
+			if ok && operation.Service == "githubapp" {
+				repositoryRPC.ServeHTTP(w, r)
+				return
+			}
+			accountRPC.ServeHTTP(w, r)
+		}))
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"

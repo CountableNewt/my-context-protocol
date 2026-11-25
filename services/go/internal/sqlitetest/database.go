@@ -54,11 +54,20 @@ func (db *DB) Execute(ctx context.Context, s turso.Statement) (*turso.Result, er
 	return &r[0], nil
 }
 func (db *DB) Batch(ctx context.Context, statements []turso.Statement) ([]turso.Result, error) {
+	return db.batch(ctx, statements, "runtime")
+}
+func (db *DB) SchemaBatch(ctx context.Context, statements []turso.Statement) ([]turso.Result, error) {
+	return db.batch(ctx, statements, "schema")
+}
+func (db *DB) DryRunBatch(ctx context.Context, statements []turso.Statement) ([]turso.Result, error) {
+	return db.batch(ctx, statements, "dryrun")
+}
+func (db *DB) batch(ctx context.Context, statements []turso.Statement, mode string) ([]turso.Result, error) {
 	input, e := json.Marshal(statements)
 	if e != nil {
 		return nil, e
 	}
-	cmd := exec.CommandContext(ctx, db.python, "-c", driver, db.path)
+	cmd := exec.CommandContext(ctx, db.python, "-c", driver, db.path, mode)
 	cmd.Stdin = bytes.NewReader(input)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -74,7 +83,7 @@ func (db *DB) Batch(ctx context.Context, statements []turso.Statement) ([]turso.
 const driver = `
 import sys,json,sqlite3,base64
 conn=sqlite3.connect(sys.argv[1],timeout=15)
-conn.execute('PRAGMA foreign_keys=ON')
+conn.execute('PRAGMA foreign_keys='+('OFF' if sys.argv[2]=='schema' else 'ON'))
 def decode(v):
  t=v['type']
  if t=='null': return None
@@ -95,7 +104,12 @@ try:
   cursor=conn.execute(stmt['sql'],[decode(v) for v in stmt.get('args',[])])
   rows=cursor.fetchall() if cursor.description else []
   out.append({'cols':[{'name':c[0]} for c in cursor.description] if cursor.description else [],'rows':[[encode(v) for v in row] for row in rows],'affected_row_count':max(cursor.rowcount,0)})
- conn.commit()
+ if sys.argv[2]=='schema' and conn.execute('PRAGMA foreign_key_check').fetchone() is not None:
+  raise ValueError('schema migration foreign key violation')
+ if sys.argv[2]=='dryrun':
+  conn.rollback()
+ else:
+  conn.commit()
  print(json.dumps(out))
 except:
  conn.rollback()

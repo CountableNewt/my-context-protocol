@@ -1,0 +1,118 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.agent.reportFeedback",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "mcp operation report_skill_feedback. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "skill_id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "evidence": {
+              "type": "string",
+              "maxLength": 8000
+            },
+            "suggested_change": {
+              "type": "string",
+              "maxLength": 8000
+            },
+            "create_issue": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "skill_id",
+            "version",
+            "category",
+            "summary",
+            "evidence"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "integer"
+            },
+            "feedbackId": {
+              "type": "string"
+            },
+            "effectStatus": {
+              "type": "string"
+            },
+            "issueDraft": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "body"
+              ]
+            },
+            "creationAuthorized": {
+              "type": "boolean"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "feedbackId",
+            "effectStatus",
+            "issueDraft",
+            "creationAuthorized",
+            "message"
+          ]
+        }
+      }
+    }
+  }
+}

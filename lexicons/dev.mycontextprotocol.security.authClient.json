@@ -1,0 +1,24 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.security.authClient",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Security access",
+      "detail": "Call the published operations for this capability. Account authorization, ownership and administrator restrictions still apply.",
+      "permissions": [
+        {
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true,
+          "lxm": [
+            "dev.mycontextprotocol.security.listKeys",
+            "dev.mycontextprotocol.security.createKey",
+            "dev.mycontextprotocol.security.updateKey",
+            "dev.mycontextprotocol.security.revokeKey"
+          ]
+        }
+      ]
+    }
+  }
+}

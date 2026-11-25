@@ -9,6 +9,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { ProjectConnectionSummary } from "./project-connection-summary";
 import type { Project } from "@/lib/types";
 
 interface ProjectCardProps {
@@ -40,7 +41,8 @@ export function ProjectCard({ project, onRequestRename }: ProjectCardProps) {
               ) : null}
             </div>
           </CardHeader>
-          <CardContent className="flex flex-1 flex-col">
+          <CardContent className="flex flex-1 flex-col gap-4">
+            <ProjectConnectionSummary project={project} />
             <p className="text-muted-foreground mt-auto font-mono text-xs break-all">
               {project.mcp_url ?? "MCP URL not configured on server"}
             </p>

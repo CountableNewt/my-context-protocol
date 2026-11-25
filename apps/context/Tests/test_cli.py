@@ -1,4 +1,4 @@
-"""Exercise the compiled Swift executable against isolated HTTP servers."""
+"""Exercise the compiled Go executable against isolated HTTP servers."""
 import contextlib
 import http.server
 import json
@@ -69,6 +69,105 @@ class CLITests(unittest.TestCase):
             self.assertEqual(self.run_cli(*args).returncode, 0)
         self.assertIn("projects get", self.run_cli("help", "projects").stdout)
         self.assertNotIn("billing checkout", self.run_cli("help", "projects").stdout)
+
+    def test_named_operations_match_xrpc_contracts(self):
+        root = Path(__file__).resolve().parents[3]
+        inventory = json.loads((root / "lexicons/operations.json").read_text())
+        operations = json.loads(self.run_cli("commands").stdout)
+        expected = {entry["nsid"] for entry in inventory["operations"]
+                    if entry["authorization"] in ("account", "admin")}
+        self.assertEqual({entry["nsid"] for entry in operations if entry.get("nsid")}, expected)
+        received = []
+        identifiers = {"project_id": ("--id", "project"),
+                       "release_id": ("--release-id", "release"),
+                       "skill_id": ("--compiled-skill-id", "skill"),
+                       "key_id": ("--key-id", "key"),
+                       "job_id": ("--job-id", "job")}
+        with server(lambda *args: (received.append(args) or (200, {}, b"{}"))) as origin:
+            for operation in operations:
+                nsid = operation.get("nsid")
+                if not nsid:
+                    continue
+                with self.subTest(command=operation["name"]):
+                    schema = json.loads((root / "lexicons" / (nsid + ".json")).read_text())["defs"]["main"]
+                    method = "GET" if schema["type"] == "query" else "POST"
+                    self.assertEqual(operation["method"], method)
+                    self.assertEqual(operation["path"], "/xrpc/" + nsid)
+                    self.assertIn("rest_method", operation)
+                    self.assertIn("rest_path", operation)
+                    params = schema.get("parameters", schema.get("input", {}).get("schema", {}))
+                    args = operation["name"].split()
+                    required_ids = {}
+                    for field, (flag, value) in identifiers.items():
+                        if field in params.get("required", []):
+                            args += [flag, value]
+                            required_ids[field] = value
+                    if method == "POST":
+                        args += ["--data", "{}"]
+                    result = self.run_cli(*args, "--url", origin, env=dict(self.env, MYCTX_TOKEN="method-token"))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    actual_method, path, headers, body = received[-1]
+                    self.assertEqual(headers["Authorization"], "Bearer method-token")
+                    self.assertNotIn("Cookie", headers)
+                    parsed = urllib.parse.urlsplit(path)
+                    self.assertEqual((actual_method, parsed.path), (method, "/xrpc/" + nsid))
+                    if method == "GET":
+                        self.assertEqual(body, b"")
+                        expected_query = {key: [value] for key, value in required_ids.items()}
+                        if operation["name"] == "github repos":
+                            expected_query["provider"] = ["github"]
+                        self.assertEqual(urllib.parse.parse_qs(parsed.query), expected_query)
+                    else:
+                        payload = json.loads(body)
+                        for field, value in required_ids.items():
+                            self.assertEqual(payload[field], value)
+
+    def test_raw_xrpc_request_uses_explicit_method_and_preserves_query(self):
+        received = []
+        with server(lambda *args: (received.append(args) or (200, {}, b"{}"))) as origin:
+            result = self.run_cli("api", "GET", "/xrpc/dev.mycontextprotocol.project.getProject",
+                                  "--query", "project_id=project", "--url", origin + "/api",
+                                  env=dict(self.env, MYCTX_TOKEN="method-token"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(received[0][:2],
+                         ("GET", "/xrpc/dev.mycontextprotocol.project.getProject?project_id=project"))
+
+    def test_transport_choice_never_falls_back_or_mixes_credentials(self):
+        for use_token in [False, True]:
+            with self.subTest(use_token=use_token):
+                received = []
+                with server(lambda *args: (received.append(args) or (404, {}, b'{"error":"NotFound"}'))) as origin:
+                    self.config.write_text(json.dumps({"profiles": {"default": {
+                        "url": origin, "session": "session-secret", "web_url": "https://web.example"}}}))
+                    env = dict(self.env)
+                    if use_token:
+                        env["MYCTX_TOKEN"] = "method-token"
+                    result = self.run_cli("projects", "list", env=env)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(len(received), 1)
+                method, path, headers, body = received[0]
+                self.assertEqual(method, "GET")
+                if use_token:
+                    self.assertEqual(path, "/xrpc/dev.mycontextprotocol.project.listProjects")
+                    self.assertEqual(headers["Authorization"], "Bearer method-token")
+                    self.assertNotIn("Cookie", headers)
+                else:
+                    self.assertEqual(path, "/projects")
+                    self.assertEqual(headers["Cookie"], "vapor-session=session-secret")
+                    self.assertNotIn("Authorization", headers)
+
+    def test_xrpc_request_injects_ids_into_body_and_retains_exact_numbers(self):
+        received = []
+        with server(lambda *args: (received.append(args) or (200, {}, args[3]))) as origin:
+            result = self.run_cli("skills", "update", "--id", "project", "--release-id", "release",
+                                  "--compiled-skill-id", "skill", "--data",
+                                  '{"n":123456789012345678901234567890}', "--url", origin,
+                                  env=dict(self.env, MYCTX_TOKEN="method-token"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(received[0][:2], ("POST", "/xrpc/dev.mycontextprotocol.release.updateCompiledSkill"))
+        self.assertEqual(json.loads(received[0][3]), {"project_id": "project", "release_id": "release",
+                                                      "skill_id": "skill", "n": 123456789012345678901234567890})
+        self.assertIn("123456789012345678901234567890", result.stdout)
 
     def test_request_path_query_body_and_headers(self):
         received = []
@@ -282,6 +381,40 @@ class CLITests(unittest.TestCase):
             stdout, stderr = process.communicate(timeout=5)
             self.assertEqual(process.returncode, 130, stderr)
             self.assertFalse(self.config.exists())
+
+    def test_tangled_and_review_bound_publication_aliases(self):
+        received = []
+        def response(*request):
+            received.append(request)
+            return 202, {"Content-Type": "application/json"}, b'{"status":"pending","digest":"reviewed"}'
+        with server(response) as origin:
+            env = dict(self.env, MYCTX_URL=origin + "/api", MYCTX_SESSION="secret")
+            result = self.run_cli("tangled", "connect", "--project", "project", "--data",
+                                  '{"repo_owner":"did:plc:owner","repo_name":"private","branch":"main","is_private":true}', env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(received[-1][:2], ("POST", "/api/projects/project/connect-repo"))
+            self.assertEqual(json.loads(received[-1][3])["provider"], "tangled")
+            self.assertTrue(json.loads(received[-1][3])["is_private"])
+            for command, method, path, data in [
+                ("review", "GET", "/api/projects/project/atproto/publication", None),
+                ("publish", "POST", "/api/projects/project/atproto/publication", '{"review_digest":"reviewed","public":true,"telemetry":false}'),
+                ("reconcile", "POST", "/api/projects/project/atproto/reconcile", None),
+                ("conflict", "GET", "/api/projects/project/atproto/conflict", None),
+                ("discard", "POST", "/api/projects/project/atproto/conflict", '{"intent_id":"reviewed-intent","expected_current_cid":"current","action":"discard"}'),
+            ]:
+                args = ["publication", command, "--project", "project"]
+                if data is not None:
+                    args += ["--data", data]
+                result = self.run_cli(*args, env=env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(received[-1][:2], (method, path))
+                self.assertEqual(json.loads(result.stdout)["status"], "pending")
+                if data is not None:
+                    self.assertEqual(json.loads(received[-1][3]), json.loads(data))
+            before = len(received)
+            result = self.run_cli("tangled", "connect", "--project", "project", "--data", '{"provider":"github"}', env=env)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(len(received), before)
 
 
 if __name__ == "__main__":

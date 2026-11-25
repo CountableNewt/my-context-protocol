@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/identity"
+	"github.com/CountableNewt/my-context-protocol/services/go/repomigration"
 	"github.com/CountableNewt/my-context-protocol/services/go/reposync"
 	"github.com/CountableNewt/my-context-protocol/services/go/security"
 	"github.com/CountableNewt/my-context-protocol/services/go/turso"
@@ -140,6 +141,15 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 	if err := s.ownedProject(ctx, account, project); err != nil {
 		return nil, err
 	}
+	source, err := repomigration.Parse(input, "github")
+	if err != nil {
+		return nil, err
+	}
+	migrationUnlock, err := repomigration.Acquire(ctx, s.config.DB, project, source)
+	if err != nil {
+		return nil, err
+	}
+	defer migrationUnlock()
 	var owner, repo, branch string
 	for key, target := range map[string]*string{"owner": &owner, "repo": &repo, "branch": &branch} {
 		if raw, ok := input[key]; ok {
@@ -163,13 +173,16 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.config.DB.Execute(ctx, sql("SELECT id,repo_owner,repo_name,webhook_id,github_installation_id,token_encrypted FROM repo_connections WHERE project_id=? ORDER BY id LIMIT 1", turso.Text(project)))
+	current, err := s.config.DB.Execute(ctx, sql("SELECT id,repo_owner,repo_name,webhook_id,github_installation_id,token_encrypted,provider FROM repo_connections WHERE project_id=? ORDER BY id LIMIT 1", turso.Text(project)))
 	if err != nil {
 		return nil, err
 	}
 	var old []turso.Value
 	if len(current.Rows) > 0 {
 		old = current.Rows[0]
+		if provider := col(old, 6); provider != "" && provider != "github" && source == nil {
+			return nil, &PublicError{409, "Project is connected to another repository provider", nil}
+		}
 		if id := col(old, 4); id != "" {
 			installation = id
 		}
@@ -190,6 +203,18 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 			return nil, &PublicError{422, "Your GitHub App installation does not include this repository. Add it in GitHub App repository access settings.", nil}
 		}
 		return nil, err
+	}
+	if source != nil {
+		base, _ := repoAPI(owner, repo)
+		var commit struct {
+			SHA string `json:"sha"`
+		}
+		if err = s.config.Client.api(ctx, "GET", base+"/commits/"+url.PathEscape(branch), token, "migration branch verification", nil, &commit, 200); err != nil {
+			return nil, err
+		}
+		if commit.SHA == "" {
+			return nil, &PublicError{409, "Destination branch has no commit", nil}
+		}
 	}
 	// GitHub Apps already have one signed webhook for their installation events.
 	// Creating a second repository hook with an installation token unnecessarily
@@ -213,13 +238,27 @@ func (s *Service) ConnectRepository(ctx context.Context, account, project string
 		if !committed && hookID != "" {
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
+			// Canonical publication can persist this exact connection command
+			// before reporting a PDS outage. Its replay still needs the new hook.
+			if s.pendingConnectionHook(cleanup, account, project, hookSecret) {
+				return
+			}
 			s.config.Client.DeleteWebhook(cleanup, owner, repo, hookID, token)
 		}
 	}()
 	id := col(old, 0)
 	var r *turso.Result
 	if id != "" {
-		r, err = s.config.DB.Execute(ctx, sql("UPDATE repo_connections SET repo_owner=?,repo_name=?,default_branch=?,provider='github',auth_type='oauth',webhook_id=?,webhook_secret=?,github_installation_id=?,token_encrypted=NULL WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM projects WHERE id=? AND account_id=?) RETURNING id", turso.Text(owner), turso.Text(repo), turso.Text(branch), nullable(hookID), nullable(hookSecret), nullableInstallation(installation), turso.Text(id), turso.Text(project), turso.Text(project), turso.Text(account)))
+		update := sql("UPDATE repo_connections SET repo_owner=?,repo_name=?,default_branch=?,provider='github',auth_type='oauth',webhook_id=?,webhook_secret=?,github_installation_id=?,token_encrypted=NULL WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM projects WHERE id=? AND account_id=?) RETURNING id", turso.Text(owner), turso.Text(repo), turso.Text(branch), nullable(hookID), nullable(hookSecret), nullableInstallation(installation), turso.Text(id), turso.Text(project), turso.Text(project), turso.Text(account))
+		if source != nil {
+			results, batchErr := s.config.DB.Batch(ctx, []turso.Statement{repomigration.Guard(project, source), update, sql("DELETE FROM atproto_repo_bindings WHERE connection_id=?", turso.Text(id)), repomigration.ReleaseStatement(project, source)})
+			err = batchErr
+			if err == nil && len(results) > 0 {
+				r = &results[1]
+			}
+		} else {
+			r, err = s.config.DB.Execute(ctx, update)
+		}
 	} else {
 		id, err = identity.UUID()
 		if err != nil {
@@ -280,7 +319,7 @@ func (s *Service) InstallationToken(ctx context.Context, id, oauth string) (stri
 	token, err := s.config.Client.InstallationToken(ctx, id, oauth)
 	var apiErr *APIError
 	if errors.As(err, &apiErr) && apiErr.Status == 404 {
-		s.config.DB.Batch(ctx, []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE github_installation_id=?", nullableInstallation(id)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", nullableInstallation(id))})
+		s.config.DB.Batch(ctx, []turso.Statement{sql("UPDATE repo_connections SET github_installation_id=NULL,webhook_id=NULL,webhook_secret=NULL WHERE provider='github' AND github_installation_id=?", nullableInstallation(id)), sql("UPDATE accounts SET github_app_installation_id=NULL WHERE github_app_installation_id=?", nullableInstallation(id))})
 	}
 	return token, err
 }
@@ -290,4 +329,18 @@ func installationWebhookID(id string) any {
 		return nil
 	}
 	return id
+}
+
+// pendingConnectionHook only retains a hook referenced by this project's own
+// durable native command. The random signing secret uniquely identifies the
+// newly created hook without trusting an unrelated pending intent or hook ID.
+func (s *Service) pendingConnectionHook(ctx context.Context, account, project, secret string) bool {
+	scoped, ok := s.config.DB.(interface{ CanonicalScope(context.Context) bool })
+	if !ok || !scoped.CanonicalScope(ctx) {
+		return false
+	}
+	rows, err := s.config.DB.Execute(ctx, sql(`SELECT 1 FROM domain_native_intents i WHERE account_id=? AND project_id=? AND status='pending' AND EXISTS(SELECT 1 FROM json_each(i.statements_json) command,json_each(json_extract(command.value,'$.args')) argument WHERE json_extract(argument.value,'$.value')=?) LIMIT 1`, turso.Text(account), turso.Text(project), turso.Text(secret)))
+	// If local confirmation is unavailable, preserve a potentially durable hook;
+	// deleting it would make a later native replay silently lose automatic sync.
+	return err != nil || rows != nil && len(rows.Rows) > 0
 }

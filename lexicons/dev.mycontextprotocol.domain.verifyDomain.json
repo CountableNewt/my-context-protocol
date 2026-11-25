@@ -1,0 +1,54 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.domain.verifyDomain",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /projects/{project_id}/custom-domain/verify. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_id"
+          ]
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#domain"
+        }
+      }
+    }
+  }
+}

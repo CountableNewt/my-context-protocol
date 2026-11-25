@@ -195,3 +195,38 @@ func TestSQLRuntimeOverrideSelectionAndStaleChecksums(t *testing.T) {
 		t.Fatalf("stale flag %+v %v", r, err)
 	}
 }
+
+func TestSQLConnectionsPreserveProviderAndFilterGitHubWebhookTargets(t *testing.T) {
+	ctx := context.Background()
+	db := sqlitetest.New(t, migrations.BaselineSQL+MigrationSQL+seedSQL)
+	if _, err := db.Execute(ctx, stmt("UPDATE repo_connections SET provider='tangled' WHERE id='connection'")); err != nil {
+		t.Fatal(err)
+	}
+	store := SQLStore{DB: db}
+	c, err := store.Connection(ctx, "project")
+	if err != nil || c.Provider != "tangled" {
+		t.Fatalf("provider lost: %+v %v", c, err)
+	}
+	targets, err := store.Connections(ctx, "owner", "repo")
+	if err != nil || len(targets) != 0 {
+		t.Fatalf("native connection selected by GitHub webhook: %+v %v", targets, err)
+	}
+}
+
+func TestSQLClaimRejectsConnectionReadBeforeMigration(t *testing.T) {
+	ctx := context.Background()
+	db := sqlitetest.New(t, migrations.BaselineSQL+MigrationSQL+seedSQL)
+	store := SQLStore{DB: db}
+	source, err := store.Connection(ctx, "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Execute(ctx, stmt("UPDATE repo_connections SET provider='tangled',repo_owner='did:plc:owner' WHERE id='connection'"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, claimed, err := store.Claim(ctx, source, "stale-source", time.Now())
+	if claimed || !errors.Is(err, ErrBusy) {
+		t.Fatalf("stale source claimed: %v %v", claimed, err)
+	}
+}

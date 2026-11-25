@@ -1,0 +1,54 @@
+{
+  "defs": {
+    "main": {
+      "key": "any",
+      "record": {
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "integer"
+          },
+          "legacyId": {
+            "type": "string"
+          },
+          "mcp_capability_key": {
+            "type": "string"
+          },
+          "mcp_capability_kind": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "legacyId",
+          "method",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "record"
+    }
+  },
+  "id": "dev.mycontextprotocol.data.requestLog",
+  "lexicon": 1
+}

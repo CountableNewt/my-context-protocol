@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import type {
   Project,
   RepoConnection,
@@ -134,8 +134,9 @@ export async function verifyProjectCustomDomain(projectId: string): Promise<Cust
 export async function fetchRepoConnection(projectId: string): Promise<RepoConnection | null> {
   try {
     return await api.get<RepoConnection>(`/projects/${projectId}/repo-connection`);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
   }
 }
 
@@ -143,15 +144,18 @@ export async function fetchUserGithubRepos(): Promise<GithubRepoListItem[]> {
   return api.get<GithubRepoListItem[]>("/github/repos");
 }
 
+export type RepositoryMigrationSource = Pick<RepoConnection, "provider" | "repo_owner" | "repo_name" | "default_branch">;
+
 export async function connectRepo(
   projectId: string,
-  data: { owner: string; repo: string; branch: string }
+  data: ({ provider?: "github"; owner: string; repo: string; branch: string } | { provider: "tangled"; owner: string; repo: string; branch: string; is_private?: boolean }) & { migrate_from?: RepositoryMigrationSource }
 ): Promise<RepoConnection> {
   return api.post<RepoConnection>(`/projects/${projectId}/connect-repo`, data);
 }
 
-export async function triggerSync(projectId: string): Promise<void> {
-  await api.post(`/projects/${projectId}/sync`);
+export interface SyncProgress { status: string; id?: string; release_id?: string }
+export async function triggerSync(projectId: string): Promise<SyncProgress | void> {
+  return api.post<SyncProgress | void>(`/projects/${projectId}/sync`);
 }
 
 export async function fetchReleases(projectId: string): Promise<Release[]> {

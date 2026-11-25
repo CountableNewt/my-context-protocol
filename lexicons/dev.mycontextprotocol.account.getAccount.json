@@ -1,0 +1,44 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.account.getAccount",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "identity operation /auth/me. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "parameters": {
+        "type": "params",
+        "properties": {}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "dev.mycontextprotocol.types.defs#account"
+        }
+      }
+    }
+  }
+}

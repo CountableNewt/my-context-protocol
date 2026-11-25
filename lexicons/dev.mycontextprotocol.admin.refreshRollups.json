@@ -1,0 +1,40 @@
+{
+  "lexicon": 1,
+  "id": "dev.mycontextprotocol.admin.refreshRollups",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "control operation /admin/analytics/rollup-refresh. Authorization and resource ownership are required.",
+      "errors": [
+        {
+          "name": "InvalidRequest"
+        },
+        {
+          "name": "AuthenticationRequired"
+        },
+        {
+          "name": "Forbidden"
+        },
+        {
+          "name": "NotFound"
+        },
+        {
+          "name": "Conflict"
+        },
+        {
+          "name": "RateLimitExceeded"
+        },
+        {
+          "name": "ServiceUnavailable"
+        }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
+}
