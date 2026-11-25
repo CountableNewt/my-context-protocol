@@ -301,9 +301,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="gap-2 pb-2 pt-2.5 pl-4 pr-2.5">
         <div className="flex min-w-0 items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element -- favicon.ico; avoids Image ICO quirks */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- local branding asset */}
           <img
-            src="/favicon.ico"
+            src="/logo.png"
             alt=""
             width={28}
             height={28}
