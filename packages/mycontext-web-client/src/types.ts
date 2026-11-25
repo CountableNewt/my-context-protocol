@@ -7,6 +7,8 @@ export interface Project {
   slug: string;
   subdomain: string;
   created_at: string;
+  /** Repository used to sync this project's skills; null when disconnected. */
+  repo_connection?: Pick<RepoConnection, "provider" | "repo_owner" | "repo_name" | "default_branch"> | null;
   custom_domain?: string | null;
   custom_domain_verified_at?: string | null;
   /** Release currently serving MCP traffic. */

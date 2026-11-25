@@ -19,7 +19,7 @@ export function TangledRepositoryForm({ projectId, onConnected }: { projectId: s
   const [branch, setBranch] = useState("main");
   const [privateRepo, setPrivateRepo] = useState(false);
   const client = useQueryClient();
-  const mutation = useMutation({ mutationFn: () => connectRepo(projectId, { provider: "tangled", repo_owner: owner.trim(), repo_name: name.trim(), branch: branch.trim(), is_private: privateRepo }), onSuccess: () => { void client.invalidateQueries({ queryKey: ["repo-connection", projectId] }); onConnected(); } });
+  const mutation = useMutation({ mutationFn: () => connectRepo(projectId, { provider: "tangled", repo_owner: owner.trim(), repo_name: name.trim(), branch: branch.trim(), is_private: privateRepo }), onSuccess: () => { void client.invalidateQueries({ queryKey: ["repo-connection", projectId] }); void client.invalidateQueries({ queryKey: ["project", projectId] }); void client.invalidateQueries({ queryKey: ["projects"] }); onConnected(); } });
   if (account.isPending) return <p role="status">Checking ATProto identity…</p>;
   if (account.isError) return <p role="alert">Could not check your identity. <Button onClick={() => account.refetch()}>Retry identity check</Button></p>;
   if (!linked) return <p>Connect an ATProto identity in <a className="underline" href="/account">Account settings</a> before using Tangled.</p>;

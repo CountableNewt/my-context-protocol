@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { repositoryProviderLabel } from "./project-connection-summary";
 import { TangledRepositoryForm } from "./tangled-repository-form";
 import { RefreshCwIcon } from "lucide-react";
 
@@ -209,6 +210,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
       queryClient.invalidateQueries({ queryKey: ["repo-connection", projectId] });
       queryClient.invalidateQueries({ queryKey: ["releases", projectId] });
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project-dashboard-summary", projectId] });
       queryClient.invalidateQueries({ queryKey: ["account-dashboard-summary"] });
       resumedRepository.current = null;
@@ -234,6 +236,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
       queryClient.invalidateQueries({ queryKey: ["repo-connection", projectId] });
       queryClient.invalidateQueries({ queryKey: ["project-catalog", projectId] });
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project-dashboard-summary", projectId] });
       queryClient.invalidateQueries({ queryKey: ["account-dashboard-summary"] });
     },
@@ -273,6 +276,10 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
         </CardHeader>
         <CardContent className="space-y-4">
           <dl className="space-y-2 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Connected through</dt>
+              <dd className="font-medium">{repositoryProviderLabel(connection.provider)}</dd>
+            </div>
             <div>
               <dt className="text-muted-foreground">Repository</dt>
               <dd className="font-medium">

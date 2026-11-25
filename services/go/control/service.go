@@ -191,7 +191,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case "GET":
-			rows, e := s.query(r.Context(), "SELECT * FROM projects WHERE account_id=? ORDER BY created_at ASC,id ASC", account.ID)
+			rows, e := s.query(r.Context(), projectSelect+" WHERE p.account_id=? ORDER BY p.created_at ASC,p.id ASC", account.ID)
 			out := []row{}
 			for _, p := range rows {
 				out = append(out, s.projectResponse(p))
@@ -207,7 +207,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	if err != nil {
 		return nil, 0, bad("Invalid project ID")
 	}
-	project, err := s.one(r.Context(), "SELECT * FROM projects WHERE id=? AND account_id=?", pid, account.ID)
+	project, err := s.one(r.Context(), projectSelect+" WHERE p.id=? AND p.account_id=?", pid, account.ID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -223,7 +223,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 			return nil, 0, recordError(e)
 		}
 		r = r.WithContext(ctx)
-		project, e = s.one(ctx, "SELECT * FROM projects WHERE id=? AND account_id=?", pid, account.ID)
+		project, e = s.one(ctx, projectSelect+" WHERE p.id=? AND p.account_id=?", pid, account.ID)
 		if e != nil {
 			return nil, 0, e
 		}
@@ -285,7 +285,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 		}
 	case "repo-connection":
 		if len(parts) == 3 && r.Method == "GET" {
-			v, e := s.one(r.Context(), "SELECT project_id,provider,repo_owner,repo_name,default_branch,auth_type,webhook_id,github_installation_id IS NOT NULL AS github_installation_configured FROM repo_connections WHERE project_id=? ORDER BY created_at ASC LIMIT 1", pid)
+			v, e := s.one(r.Context(), "SELECT project_id,provider,repo_owner,repo_name,default_branch,auth_type,webhook_id,github_installation_id IS NOT NULL AS github_installation_configured FROM repo_connections WHERE project_id=? ORDER BY created_at ASC,id ASC LIMIT 1", pid)
 			if v == nil && e == nil {
 				return nil, 0, missing("No repository connection")
 			}

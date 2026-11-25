@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ProjectConnectionSummary } from "@/components/dashboard/project-connection-summary";
 import { useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -141,6 +143,11 @@ export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
+          <div className="space-y-3 rounded-lg border p-4">
+            <h3 className="font-medium">Repository connection</h3>
+            <ProjectConnectionSummary project={project} />
+            <Link href={`/projects/${projectId}?tab=repo`} className="inline-block text-sm underline underline-offset-4">Manage connection</Link>
+          </div>
           <ProjectOverviewMetrics projectId={projectId} />
           <div className="rounded-lg border p-4">
             <h3 className="font-medium">Project Info</h3>
