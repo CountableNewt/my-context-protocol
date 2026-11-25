@@ -321,21 +321,23 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
           {syncError && (
             <p className="text-destructive text-sm">{syncError}</p>
           )}
-          <Button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-          >
-            <RefreshCwIcon
-              className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-            />
-            {syncMutation.isPending ? "Syncing…" : syncPending ? "Continue Sync" : "Sync Now"}
-          </Button>
-          {(connection.provider === "github" || connection.provider === "tangled") && <Button variant="outline" disabled={syncMutation.isPending || syncPending} onClick={() => {
-            setMigrationSource({ provider: connection.provider, repo_owner: connection.repo_owner, repo_name: connection.repo_name, default_branch: connection.default_branch });
-            setMigrationConfirmed(false);
-            setProvider(connection.provider === "github" ? "tangled" : "github");
-            setShowForm(true);
-          }}>Migrate to {connection.provider === "github" ? "ATProto · Tangled" : "GitHub"}</Button>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+            >
+              <RefreshCwIcon
+                className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+              />
+              {syncMutation.isPending ? "Syncing…" : syncPending ? "Continue Sync" : "Sync Now"}
+            </Button>
+            {(connection.provider === "github" || connection.provider === "tangled") && <Button variant="outline" disabled={syncMutation.isPending || syncPending} onClick={() => {
+              setMigrationSource({ provider: connection.provider, repo_owner: connection.repo_owner, repo_name: connection.repo_name, default_branch: connection.default_branch });
+              setMigrationConfirmed(false);
+              setProvider(connection.provider === "github" ? "tangled" : "github");
+              setShowForm(true);
+            }}>Migrate to {connection.provider === "github" ? "ATProto · Tangled" : "GitHub"}</Button>}
+          </div>
         </CardContent>
       </Card>
     );
