@@ -5843,6 +5843,128 @@
         }
       }
     },
+    "dev.mycontextprotocol.publication.verifyProject": {
+      "lexicon": 1,
+      "id": "dev.mycontextprotocol.publication.verifyProject",
+      "defs": {
+        "main": {
+          "type": "procedure",
+          "description": "control operation /projects/{project_id}/atproto/verify. Authorization and resource ownership are required.",
+          "errors": [
+            {
+              "name": "InvalidRequest"
+            },
+            {
+              "name": "AuthenticationRequired"
+            },
+            {
+              "name": "Forbidden"
+            },
+            {
+              "name": "NotFound"
+            },
+            {
+              "name": "Conflict"
+            },
+            {
+              "name": "RateLimitExceeded"
+            },
+            {
+              "name": "ServiceUnavailable"
+            }
+          ],
+          "input": {
+            "encoding": "application/json",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "project_id"
+              ]
+            }
+          },
+          "output": {
+            "encoding": "application/json",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "owner_did": {
+                  "type": "string"
+                },
+                "project_id": {
+                  "type": "string"
+                },
+                "checked_records": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "collections": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "collection": {
+                        "type": "string"
+                      },
+                      "checked_records": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "collection",
+                      "checked_records"
+                    ]
+                  }
+                },
+                "issues": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "uri": {
+                        "type": "string"
+                      },
+                      "expected_cid": {
+                        "type": "string"
+                      },
+                      "actual_cid": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "status",
+                "owner_did",
+                "project_id",
+                "checked_records",
+                "collections",
+                "issues"
+              ]
+            }
+          }
+        }
+      }
+    },
     "dev.mycontextprotocol.repository.listTangledRepositories": {
       "lexicon": 1,
       "id": "dev.mycontextprotocol.repository.listTangledRepositories",
@@ -6283,6 +6405,7 @@
                 "dev.mycontextprotocol.publication.getReview",
                 "dev.mycontextprotocol.publication.publishReview",
                 "dev.mycontextprotocol.publication.reconcileProject",
+                "dev.mycontextprotocol.publication.verifyProject",
                 "dev.mycontextprotocol.publication.getConflict",
                 "dev.mycontextprotocol.publication.resolveConflict"
               ]
@@ -8653,6 +8776,99 @@
         },
         "required": [
           "status"
+        ]
+      }
+    },
+    {
+      "nsid": "dev.mycontextprotocol.publication.verifyProject",
+      "service": "control",
+      "method": "POST",
+      "restMethod": "POST",
+      "restPath": "/projects/{project_id}/atproto/verify",
+      "admin": false,
+      "noOutput": false,
+      "envelope": "",
+      "input": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "owner_did": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "checked_records": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "collection": {
+                  "type": "string"
+                },
+                "checked_records": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "collection",
+                "checked_records"
+              ]
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "uri": {
+                  "type": "string"
+                },
+                "expected_cid": {
+                  "type": "string"
+                },
+                "actual_cid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "status",
+          "owner_did",
+          "project_id",
+          "checked_records",
+          "collections",
+          "issues"
         ]
       }
     },

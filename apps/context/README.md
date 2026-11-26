@@ -294,6 +294,7 @@ Review every inventory page before explicitly authorizing public owner records:
 myctx publication review --project PROJECT_ID --query limit=25
 myctx publication review --project PROJECT_ID --query cursor=25 --query limit=25
 myctx publication publish --project PROJECT_ID --data '{"review_digest":"EXACT_REVIEWED_DIGEST","public":true,"telemetry":false}'
+myctx publication verify --project PROJECT_ID --timeout 60s
 myctx publication reconcile --project PROJECT_ID
 myctx publication conflict --project PROJECT_ID
 ```

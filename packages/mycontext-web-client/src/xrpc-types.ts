@@ -117,6 +117,7 @@ export interface XRPCMethods {
   "dev.mycontextprotocol.publication.getReview": { input: { "project_id": string; "cursor"?: number; "limit"?: number }; output: { "owner_did": string; "project_id": string; "digest": string; "entry_count": number; "has_telemetry": boolean; "warnings": Array<string>; "entries_json": string; "next_cursor"?: number }; method: "GET" };
   "dev.mycontextprotocol.publication.publishReview": { input: { "project_id": string; "review_digest": string; "public": boolean; "telemetry": boolean }; output: { "status": string; "digest": string; "completed"?: number; "total"?: number; "uri"?: string; "cid"?: string }; method: "POST" };
   "dev.mycontextprotocol.publication.reconcileProject": { input: { "project_id": string }; output: { "status": string }; method: "POST" };
+  "dev.mycontextprotocol.publication.verifyProject": { input: { "project_id": string }; output: { "status": string; "owner_did": string; "project_id": string; "checked_records": number; "collections": Array<{ "collection": string; "checked_records": number }>; "issues": Array<{ "code": string; "message": string; "uri"?: string; "expected_cid"?: string; "actual_cid"?: string }> }; method: "POST" };
   "dev.mycontextprotocol.repository.listTangledRepositories": { input: { "cursor"?: string }; output: { "provider": string; "repositories": Array<{ "repository_did": string; "owner_did": string; "owner_handle"?: string; "name": string; "default_branch": string; "uri": string; "cid": string }>; "cursor"?: string; "private_repository_selection": string }; method: "GET" };
   "dev.mycontextprotocol.publication.getConflict": { input: { "project_id": string }; output: { "status": string; "intent_id"?: string; "source_cid"?: string; "target_digest"?: string; "current_manifest_cid"?: string; "current_digest"?: string }; method: "GET" };
   "dev.mycontextprotocol.publication.resolveConflict": { input: { "project_id": string; "intent_id": string; "expected_current_cid": string; "action": string }; output: { "status": string }; method: "POST" };
@@ -181,6 +182,7 @@ export const XRPC_HTTP_METHODS = {
   "dev.mycontextprotocol.publication.getReview": "GET",
   "dev.mycontextprotocol.publication.publishReview": "POST",
   "dev.mycontextprotocol.publication.reconcileProject": "POST",
+  "dev.mycontextprotocol.publication.verifyProject": "POST",
   "dev.mycontextprotocol.repository.listTangledRepositories": "GET",
   "dev.mycontextprotocol.publication.getConflict": "GET",
   "dev.mycontextprotocol.publication.resolveConflict": "POST",
@@ -245,6 +247,7 @@ export const XRPC_NO_OUTPUT = {
   "dev.mycontextprotocol.publication.getReview": false,
   "dev.mycontextprotocol.publication.publishReview": false,
   "dev.mycontextprotocol.publication.reconcileProject": false,
+  "dev.mycontextprotocol.publication.verifyProject": false,
   "dev.mycontextprotocol.repository.listTangledRepositories": false,
   "dev.mycontextprotocol.publication.getConflict": false,
   "dev.mycontextprotocol.publication.resolveConflict": false,
@@ -309,6 +312,7 @@ export const XRPC_SERVICES = {
   "dev.mycontextprotocol.publication.getReview": "control",
   "dev.mycontextprotocol.publication.publishReview": "control",
   "dev.mycontextprotocol.publication.reconcileProject": "control",
+  "dev.mycontextprotocol.publication.verifyProject": "control",
   "dev.mycontextprotocol.repository.listTangledRepositories": "control",
   "dev.mycontextprotocol.publication.getConflict": "control",
   "dev.mycontextprotocol.publication.resolveConflict": "control",

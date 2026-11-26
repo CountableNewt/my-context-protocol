@@ -74,7 +74,7 @@ func TestOperationRegistryParity(t *testing.T) {
 			t.Fatal("missing account XRPC", nsid)
 		}
 	}
-	if len(Operations) != 49 {
+	if len(Operations) != 50 {
 		t.Fatalf("unexpected registry size %d", len(Operations))
 	}
 }
@@ -84,7 +84,7 @@ func TestDiscoveryAndErrors(t *testing.T) {
 		t.Fatal(code, diag.String())
 	}
 	var ops []Operation
-	if json.Unmarshal(out.Bytes(), &ops) != nil || len(ops) != 49 {
+	if json.Unmarshal(out.Bytes(), &ops) != nil || len(ops) != 50 {
 		t.Fatal(out.String())
 	}
 	out.Reset()

@@ -17,7 +17,7 @@ export function PublicationVerificationResult({ result }: { result: PublicationV
       <h3 className="font-medium">{title}</h3>
       <p className="text-muted-foreground text-sm">{description}</p>
     </div>
-    <p className="text-sm">{result.checked_records} records checked in <span className="break-all font-mono">{result.owner_did}</span>.</p>
+    <p className="text-sm">{result.checked_records} {result.checked_records === 1 ? "record" : "records"} checked in <span className="break-all font-mono">{result.owner_did}</span>.</p>
     {result.collections.length > 0 && <details>
       <summary className="cursor-pointer text-sm">Records checked by collection</summary>
       <dl className="mt-2 space-y-2 text-sm">{result.collections.map((entry) => <div className="flex items-start justify-between gap-4" key={entry.collection}>
