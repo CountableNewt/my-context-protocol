@@ -88,6 +88,7 @@ export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
       );
     }
     return (
+      <div className="space-y-4">
       <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
         <p className="font-medium text-destructive">Failed to load project.</p>
         {error instanceof ApiError ? (
@@ -97,6 +98,8 @@ export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
         ) : (
           <p className="text-muted-foreground text-xs">{String(error)}</p>
         )}
+      </div>
+      {error instanceof ApiError && error.status === 503 && <PublicationReviewSection key={projectId} projectId={projectId} />}
       </div>
     );
   }

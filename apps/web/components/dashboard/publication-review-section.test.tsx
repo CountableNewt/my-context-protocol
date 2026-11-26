@@ -4,8 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PublicationReviewSection } from "./publication-review-section";
-import { fetchPublicationReview, publishProjectReview, reconcileProjectRecords, fetchPublicationConflict, discardPublicationConflict } from "@/lib/atproto-projects-api";
-vi.mock("@/lib/atproto-projects-api", () => ({ fetchPublicationReview: vi.fn(), publishProjectReview: vi.fn(), reconcileProjectRecords: vi.fn(), fetchPublicationConflict: vi.fn(), discardPublicationConflict: vi.fn() }));
+import { fetchPublicationReview, publishProjectReview, verifyProjectRecords, type PublicationVerification, reconcileProjectRecords, fetchPublicationConflict, discardPublicationConflict } from "@/lib/atproto-projects-api";
+vi.mock("@/lib/atproto-projects-api", () => ({ fetchPublicationReview: vi.fn(), publishProjectReview: vi.fn(), verifyProjectRecords: vi.fn(), reconcileProjectRecords: vi.fn(), fetchPublicationConflict: vi.fn(), discardPublicationConflict: vi.fn() }));
 let host: HTMLDivElement, root: Root, client: QueryClient;
 const review = { owner_did: "did:plc:owner", project_id: "project", digest: "reviewed-digest", entry_count: 30, has_telemetry: true, warnings: ["Sensitive feedback"], entries_json: '[{"table":"feedback"}]' };
 beforeEach(async () => { host=document.createElement("div"); document.body.append(host);root=createRoot(host);client=new QueryClient();vi.mocked(fetchPublicationReview).mockResolvedValue(review);await act(async()=>root.render(<QueryClientProvider client={client}><PublicationReviewSection projectId="project" /></QueryClientProvider>)); });
@@ -30,3 +30,57 @@ it("keeps bounded pending publication resumable under the same explicit consent"
 it("offers owner reconciliation without granting publication consent",async()=>{vi.mocked(reconcileProjectRecords).mockResolvedValue({status:"complete"});await click("Reconcile owner records");expect(reconcileProjectRecords).toHaveBeenCalledWith("project",expect.any(AbortSignal));expect(publishProjectReview).not.toHaveBeenCalled();});
 
 it("requires separate explicit conflict review before CID-bound discard",async()=>{vi.mocked(fetchPublicationConflict).mockResolvedValue({status:"superseded",intent_id:"intent",current_manifest_cid:"current-cid",source_cid:"prior-cid",target_digest:"pending-digest"});vi.mocked(discardPublicationConflict).mockResolvedValue({status:"complete"});await click("Inspect publication conflict");const button=[...host.querySelectorAll("button")].find(b=>b.textContent==="Discard reviewed pending mutation");expect(button?.disabled).toBe(true);expect(discardPublicationConflict).not.toHaveBeenCalled();await act(async()=>host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());await click("Discard reviewed pending mutation");expect(discardPublicationConflict).toHaveBeenCalledWith("project","intent","current-cid",expect.any(AbortSignal));});
+
+const verification: PublicationVerification = { status: "verified", owner_did: "did:plc:owner", project_id: "project", checked_records: 3, collections: [{ collection: "dev.mycontextprotocol.data.frontmatter", checked_records: 1 }], issues: [] };
+it("verifies owner records and shows per-collection results without publication or reconciliation", async () => {
+  vi.mocked(verifyProjectRecords).mockResolvedValue(verification);
+  await click("Verify records");
+  expect(verifyProjectRecords).toHaveBeenCalledWith("project", expect.any(AbortSignal));
+  expect(host.textContent).toContain("All published records verified");
+  expect(host.textContent).toContain("3 records checked");
+  expect(host.textContent).toContain("dev.mycontextprotocol.data.frontmatter");
+  expect(publishProjectReview).not.toHaveBeenCalled();
+  expect(reconcileProjectRecords).not.toHaveBeenCalled();
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+});
+it.each([
+  ["not_published", "Project records are not published"],
+  ["missing", "Published records are missing"],
+  ["invalid", "Published records do not match"],
+  ["out_of_sync", "Published metadata is out of sync"],
+  ["unavailable", "Verification unavailable"],
+  ["incomplete", "Verification incomplete"],
+] as const)("does not claim a successful verification for %s", async (status, title) => {
+  vi.mocked(verifyProjectRecords).mockResolvedValue({ ...verification, status, checked_records: 0, collections: [], issues: [{ code: "RecordCheck", message: "Check could not confirm this record.", uri: "at://did:plc:owner/dev.mycontextprotocol.data.frontmatter/key", expected_cid: "expected-cid" }] });
+  await click("Verify records");
+  expect(host.textContent).toContain(title);
+  expect(host.textContent).not.toContain("All published records verified");
+  expect(host.textContent).toContain("at://did:plc:owner/dev.mycontextprotocol.data.frontmatter/key");
+  expect(publishProjectReview).not.toHaveBeenCalled();
+});
+it("cancels a verification and ignores its late success response", async () => {
+  let finish!: (result: PublicationVerification) => void;
+  vi.mocked(verifyProjectRecords).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  await click("Verify records");
+  expect([...host.querySelectorAll("button")].find((button) => button.textContent === "Verifying records…")?.disabled).toBe(true);
+  await click("Cancel verification");
+  expect(vi.mocked(verifyProjectRecords).mock.calls[0][1]?.aborted).toBe(true);
+  await act(async () => finish(verification));
+  expect(host.textContent).toContain("Verification canceled");
+  expect(host.textContent).not.toContain("All published records verified");
+  expect(publishProjectReview).not.toHaveBeenCalled();
+});
+it("clears a prior result if a retry fails", async () => {
+  vi.mocked(verifyProjectRecords).mockResolvedValueOnce(verification).mockRejectedValueOnce(new Error("Offline"));
+  await click("Verify records");
+  await click("Verify records");
+  expect(host.textContent).not.toContain("All published records verified");
+  expect(host.textContent).toContain("The operation could not finish");
+});
+
+it("rejects a verification result belonging to a different project", async () => {
+  vi.mocked(verifyProjectRecords).mockResolvedValue({ ...verification, project_id: "another-project" });
+  await click("Verify records");
+  expect(host.textContent).not.toContain("All published records verified");
+  expect(host.textContent).toContain("The operation could not finish");
+});

@@ -20,3 +20,15 @@ export function reconcileProjectRecords(id: string, signal?: AbortSignal) {
 export interface PublicationConflict { status: string; intent_id?: string; source_cid?: string; target_digest?: string; current_manifest_cid?: string; current_digest?: string }
 export function fetchPublicationConflict(id: string, signal?: AbortSignal) { return apiFetch<PublicationConflict>(`/projects/${encodeURIComponent(id)}/atproto/conflict`, { signal }); }
 export function discardPublicationConflict(id: string, intentId: string, currentCID: string, signal?: AbortSignal) { return apiFetch<{ status: string }>(`/projects/${encodeURIComponent(id)}/atproto/conflict`, { method: "POST", body: JSON.stringify({ intent_id: intentId, expected_current_cid: currentCID, action: "discard" }), signal }); }
+
+export interface PublicationVerification {
+  status: "verified" | "not_published" | "missing" | "invalid" | "out_of_sync" | "unavailable" | "incomplete";
+  owner_did: string;
+  project_id: string;
+  checked_records: number;
+  collections: Array<{ collection: string; checked_records: number }>;
+  issues: Array<{ code: string; message: string; uri?: string; expected_cid?: string; actual_cid?: string }>;
+}
+export function verifyProjectRecords(id: string, signal?: AbortSignal) {
+  return apiFetch<PublicationVerification>(`/projects/${encodeURIComponent(id)}/atproto/verify`, { method: "POST", body: "{}", signal });
+}
