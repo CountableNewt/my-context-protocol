@@ -88,6 +88,16 @@ func (e Engine) verify(ctx context.Context, account, owner, project string, trac
 	if err != nil {
 		return Review{}, err
 	}
+	consent, _, err := e.state(ctx, account, project)
+	if err != nil {
+		return Review{}, err
+	}
+	if consent.Public && !consent.Telemetry {
+		local, err = metadataOnlyReview(local)
+		if err != nil {
+			return Review{}, err
+		}
+	}
 	if local.Digest != review.Digest {
 		return Review{}, ErrChanged
 	}

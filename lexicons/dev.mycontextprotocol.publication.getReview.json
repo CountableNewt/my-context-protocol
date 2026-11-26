@@ -34,6 +34,9 @@
           "project_id": {
             "type": "string"
           },
+          "include_telemetry": {
+            "type": "boolean"
+          },
           "cursor": {
             "type": "integer",
             "minimum": 0

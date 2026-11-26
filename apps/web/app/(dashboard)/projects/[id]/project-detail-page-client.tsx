@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ProjectConnectionSummary } from "@/components/dashboard/project-connection-summary";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetchProject } from "@/lib/projects-api";
@@ -27,6 +27,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [publicationReviewRequest, setPublicationReviewRequest] = useState<{ projectId: string; nonce: number } | null>(null);
 
   // Legacy connect callbacks omit tab; mount the repository flow to consume the callback.
   const tab = searchParams.get("github_app_installed") === "1"
@@ -176,8 +177,8 @@ export function ProjectDetailPageClient({ projectId }: { projectId: string }) {
           <CustomDomainSection projectId={projectId} />
         </TabsContent>
         <TabsContent value="repo" className="space-y-5">
-          <RepoConnectionSection projectId={projectId} />
-          <PublicationReviewSection key={projectId} projectId={projectId} />
+          <RepoConnectionSection projectId={projectId} onReviewPublication={() => setPublicationReviewRequest((prior) => ({ projectId, nonce: (prior?.nonce ?? 0) + 1 }))} />
+          <PublicationReviewSection key={projectId} projectId={projectId} reviewRequest={publicationReviewRequest?.projectId === projectId ? publicationReviewRequest.nonce : 0} />
         </TabsContent>
         <TabsContent value="releases">
           <ReleaseTable projectId={projectId} />

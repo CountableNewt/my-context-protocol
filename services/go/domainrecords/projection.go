@@ -123,7 +123,7 @@ func (e Engine) project(ctx context.Context, account string, review Review, cons
 			batch = append(batch, statement("INSERT INTO domain_projection_guards(token,valid) SELECT ?||':'||?,CASE WHEN NOT EXISTS(SELECT 1 FROM "+d.Table+" t JOIN domain_projection_rows s ON s.row_id=t."+d.IDColumn()+" WHERE s.project_id=? AND s.generation=? AND s.table_name=? AND NOT(t."+d.Selector+")) THEN 1 ELSE 0 END", turso.Text(token), turso.Text(d.Table), turso.Text(review.ProjectID), turso.Text(review.Digest), turso.Text(d.Table), turso.Text(review.ProjectID)))
 			batch = append(batch, statement("INSERT INTO "+d.Table+"("+strings.Join(columns, ",")+") SELECT "+strings.Join(expressions, ",")+" FROM domain_projection_rows WHERE project_id=? AND generation=? AND table_name=? ON CONFLICT("+d.IDColumn()+") DO UPDATE SET "+strings.Join(updates, ","), args...))
 		}
-		batch = append(batch, pruneStatements(review.ProjectID, review.Digest, true)...)
+		batch = append(batch, pruneStatements(review.ProjectID, review.Digest, true, !consent.Telemetry)...)
 
 		batch = append(batch, statement("INSERT INTO mcp_catalog_revisions(project_id,revision) VALUES(?,1) ON CONFLICT(project_id) DO UPDATE SET revision=revision+1", turso.Text(review.ProjectID)))
 	}
@@ -163,7 +163,7 @@ func (e Engine) finishActivation(ctx context.Context, account, project string, r
 			return err
 		}
 	}
-	r, err := e.DB.Execute(ctx, statement("SELECT target_active_release_id,hydrated,review_digest,native_projection FROM domain_canonical_projects WHERE project_id=? AND account_id=? AND manifest_cid=?", turso.Text(project), turso.Text(account), turso.Text(ref.CID)))
+	r, err := e.DB.Execute(ctx, statement("SELECT target_active_release_id,hydrated,review_digest,native_projection,telemetry_consent FROM domain_canonical_projects WHERE project_id=? AND account_id=? AND manifest_cid=?", turso.Text(project), turso.Text(account), turso.Text(ref.CID)))
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func (e Engine) finishActivation(ctx context.Context, account, project string, r
 	}
 	batch := []turso.Statement{statement("INSERT INTO mcp_catalog_revisions(project_id,revision) SELECT ?,1 WHERE COALESCE((SELECT active_release_id FROM projects WHERE id=?),'')<>COALESCE(?,'') ON CONFLICT(project_id) DO UPDATE SET revision=revision+1", turso.Text(project), turso.Text(project), active), statement("UPDATE projects SET active_release_id=? WHERE id=? AND account_id=? AND EXISTS(SELECT 1 FROM domain_canonical_projects WHERE project_id=? AND manifest_cid=?)", active, turso.Text(project), turso.Text(account), turso.Text(project), turso.Text(ref.CID))}
 	if fmt.Sprint(r.Rows[0][3].Value) == "0" {
-		batch = append(batch, pruneStatements(project, fmt.Sprint(r.Rows[0][2].Value), false)...)
+		batch = append(batch, pruneStatements(project, fmt.Sprint(r.Rows[0][2].Value), false, fmt.Sprint(r.Rows[0][4].Value) == "0")...)
 	}
 	batch = append(batch, statement("UPDATE domain_canonical_projects SET hydrated=1 WHERE project_id=? AND account_id=? AND manifest_cid=?", turso.Text(project), turso.Text(account), turso.Text(ref.CID)))
 	_, err = e.DB.Batch(ctx, batch)
@@ -199,11 +199,13 @@ func nativeFlag(v bool) int64 {
 	}
 	return 0
 }
-func pruneStatements(project, generation string, preserveActive bool) []turso.Statement {
+func pruneStatements(project, generation string, preserveActive, preserveTelemetry bool) []turso.Statement {
+	// Omitted telemetry remains private local history, rather than a deletion
+	// requested by the canonical metadata generation.
 	out := []turso.Statement{}
 	for i := len(definitions) - 1; i >= 0; i-- {
 		d := definitions[i]
-		if d.Table == "projects" {
+		if d.Table == "projects" || preserveTelemetry && d.Telemetry {
 			continue
 		}
 		extra := ""

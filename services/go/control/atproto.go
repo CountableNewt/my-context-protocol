@@ -117,7 +117,25 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 		if len(parts) != 1 || parts[0] != "publication" {
 			return missing("Not found")
 		}
-		review, err := e.Inventory(ctx, account, owner, project)
+		includeTelemetry := false
+		var consent domainrecords.Consent
+		if r.Method == "GET" {
+			if raw := r.URL.Query().Get("include_telemetry"); raw != "" {
+				value, err := strconv.ParseBool(raw)
+				if err != nil {
+					return bad("Invalid telemetry review option")
+				}
+				includeTelemetry = value
+			}
+		} else if r.Method == "POST" {
+			if err := decode(r, &consent); err != nil {
+				return err
+			}
+			includeTelemetry = consent.Telemetry
+		} else {
+			return missing("Not found")
+		}
+		review, err := e.PublicationReview(ctx, account, owner, project, includeTelemetry)
 		if err != nil {
 			return err
 		}
@@ -151,10 +169,6 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 		}
 		if r.Method != "POST" {
 			return missing("Not found")
-		}
-		var consent domainrecords.Consent
-		if err := decode(r, &consent); err != nil {
-			return err
 		}
 		ref, err := e.Publish(ctx, account, review, consent)
 		var pending *domainrecords.PendingError

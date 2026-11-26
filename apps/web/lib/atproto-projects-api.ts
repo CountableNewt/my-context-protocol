@@ -8,8 +8,8 @@ export function fetchTangledRepositories(cursor?: string) {
 export interface PublicationReview { owner_did: string; project_id: string; digest: string; entry_count: number; has_telemetry: boolean; warnings: string[]; entries_json: string; next_cursor?: number }
 export interface PublicationProgress { status: string; digest: string; completed?: number; total?: number; uri?: string; cid?: string }
 const publicationPath = (id: string) => `/projects/${encodeURIComponent(id)}/atproto/publication`;
-export function fetchPublicationReview(id: string, cursor = 0, signal?: AbortSignal) {
-  return apiFetch<PublicationReview>(`${publicationPath(id)}?cursor=${cursor}&limit=25`, { signal });
+export function fetchPublicationReview(id: string, cursor = 0, signal?: AbortSignal, includeTelemetry = false) {
+  return apiFetch<PublicationReview>(`${publicationPath(id)}?cursor=${cursor}&limit=25&include_telemetry=${includeTelemetry}`, { signal });
 }
 export function publishProjectReview(id: string, digest: string, telemetry: boolean, signal?: AbortSignal) {
   return apiFetch<PublicationProgress>(publicationPath(id), { method: "POST", body: JSON.stringify({ review_digest: digest, public: true, telemetry }), signal });

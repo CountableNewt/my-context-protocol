@@ -1,6 +1,8 @@
 export type ReleaseStatus = "pending" | "ready" | "failed";
 
 export interface Project {
+  /** Initial consent-bound PDS publication completed; live verification is separate. */
+  atproto_publication_completed?: boolean;
   id: string;
   account_id: string;
   name: string;
@@ -22,6 +24,7 @@ export interface Project {
 }
 
 export interface RepoConnection {
+  atproto_publication_completed?: boolean;
   /** Verified current Tangled owner handle, for display only. */
   owner_handle?: string;
   repository_did?: string;

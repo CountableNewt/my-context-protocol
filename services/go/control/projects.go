@@ -35,7 +35,11 @@ func (s *Service) projectResponse(p row) row {
 	if host != "" {
 		mcp = "https://" + host + s.cfg.MCPPath
 	}
-	return row{"id": p["id"], "account_id": p["account_id"], "name": p["name"], "slug": p["slug"], "subdomain": str(p["subdomain"]), "created_at": requiredDate(p["created_at"]), "custom_domain": p["custom_domain"], "custom_domain_verified_at": date(p["custom_domain_verified_at"]), "active_release_id": p["active_release_id"], "mcp_url": mcp, "mcp_oauth_enabled": s.cfg.MCPOAuthEnabled, "suspended_at": nil, "repo_connection": connection}
+	result := row{"id": p["id"], "account_id": p["account_id"], "name": p["name"], "slug": p["slug"], "subdomain": str(p["subdomain"]), "created_at": requiredDate(p["created_at"]), "custom_domain": p["custom_domain"], "custom_domain_verified_at": date(p["custom_domain_verified_at"]), "active_release_id": p["active_release_id"], "mcp_url": mcp, "mcp_oauth_enabled": s.cfg.MCPOAuthEnabled, "suspended_at": nil, "repo_connection": connection}
+	if completed, ok := p["atproto_publication_completed"]; ok && s.cfg.Records != nil {
+		result["atproto_publication_completed"] = completed
+	}
+	return result
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -76,7 +80,11 @@ func (s *Service) createProject(r *http.Request, account string) (any, int, erro
 	if e != nil {
 		return nil, 0, e
 	}
-	return s.projectResponse(row{"id": id, "account_id": account, "name": name, "slug": slug, "subdomain": subdomain, "created_at": now}), 200, nil
+	project := row{"id": id, "account_id": account, "name": name, "slug": slug, "subdomain": subdomain, "created_at": now}
+	if s.cfg.Records != nil {
+		project["atproto_publication_completed"] = false
+	}
+	return s.projectResponse(project), 200, nil
 }
 func (s *Service) keys(r *http.Request, p row, path []string) (any, int, error) {
 	pid := str(p["id"])

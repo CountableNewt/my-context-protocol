@@ -47,6 +47,7 @@ type FormData = z.infer<typeof schema>;
 
 interface RepoConnectionSectionProps {
   projectId: string;
+  onReviewPublication?: () => void;
 }
 
 function reposErrorMessage(err: unknown): string {
@@ -61,7 +62,7 @@ function reposErrorMessage(err: unknown): string {
   return "Could not load your repositories.";
 }
 
-export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps) {
+export function RepoConnectionSection({ projectId, onReviewPublication }: RepoConnectionSectionProps) {
   const [provider, setProvider] = useState<"github" | "tangled">("github");
   const [syncPending, setSyncPending] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -317,6 +318,11 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
               </dd>
             </div>
           </dl>
+          {connection.provider === "tangled" && connection.atproto_publication_completed === false && <div className="space-y-3 rounded-md border p-4">
+            <h3 className="font-medium">Finish ATProto migration</h3>
+            <p className="text-muted-foreground text-sm">Your repository is connected. The project’s MCP metadata has not been published to your ATProto account yet. Review the records, explicitly authorize publication, then verify them to finish.</p>
+            <Button variant="outline" onClick={onReviewPublication}>Review and publish project records</Button>
+          </div>}
           {syncPending && <div className="space-y-2"><p role="status" className="text-sm">Publishing the next batch automatically. The previous release remains active until completion.</p><Button variant="outline" onClick={() => setSyncPending(false)}>Pause automatic continuation</Button></div>}
           {syncError && (
             <p className="text-destructive text-sm">{syncError}</p>
@@ -347,7 +353,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{migrationSource ? "Migrate Repository Connection" : "Connect Repository"}</CardTitle>
+          <CardTitle>{migrationSource ? "Step 1: Connect destination repository" : "Connect Repository"}</CardTitle>
           <CardDescription>
             Choose GitHub or Tangled to sync SKILL.md files.
           </CardDescription>
@@ -361,7 +367,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
             <Button variant={provider === "github" ? "default" : "outline"} onClick={() => setProvider("github")}>GitHub</Button>
             <Button variant={provider === "tangled" ? "default" : "outline"} onClick={() => setProvider("tangled")}>Tangled</Button>
           </div>}
-          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} migrateFrom={migrationSource} onPendingChange={setTangledPending} onDestinationChange={() => setMigrationConfirmed(false)} disabled={!!migrationSource && !migrationConfirmed} onConnected={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); }} /> : <>
+          {provider === "tangled" ? <TangledRepositoryForm projectId={projectId} migrateFrom={migrationSource} onPendingChange={setTangledPending} onDestinationChange={() => setMigrationConfirmed(false)} disabled={!!migrationSource && !migrationConfirmed} onConnected={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); if (connection?.atproto_publication_completed !== true) onReviewPublication?.(); }} /> : <>
           {reposQuery.isPending && (
             <div className="space-y-3">
               <Skeleton className="h-8 w-full" />
