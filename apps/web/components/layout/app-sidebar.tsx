@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Overview", icon: LayoutDashboardIcon },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboardIcon },
   { href: "/projects", label: "Projects", icon: FolderIcon },
 ] as const;
 
@@ -333,8 +333,8 @@ export function AppSidebar() {
                     );
                   }
                   const isActive =
-                    item.href === "/"
-                      ? pathname === "/"
+                    item.href === "/dashboard"
+                      ? pathname === "/dashboard"
                       : pathname.startsWith(item.href);
                   return (
                     <SidebarMenuItem

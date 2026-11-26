@@ -21,7 +21,7 @@ function LoginContent() {
   const { loginWithGitHub, isLoading: authLoading, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = safeReturnPath(searchParams.get("redirect") ?? "/");
+  const returnTo = safeReturnPath(searchParams.get("redirect") ?? "/dashboard");
   const loginError = loginErrorMessage(searchParams.get("error"));
   const selectAccount = searchParams.get("select_account") === "1";
 
