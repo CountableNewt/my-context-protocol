@@ -35,7 +35,7 @@ git -C project-migration.git push <destination-clone-url> 'refs/heads/*:refs/hea
         <p className="mt-2 text-muted-foreground">For Git LFS repositories, transfer the LFS objects too before switching. Keep the source repository until the destination has been verified.</p>
       </details>
     </div>}
-    <p className="text-muted-foreground text-sm">Your project URL, API keys and releases stay with this project. Copy the Git history before switching. After connecting an ATProto repository, review and publish the project records to finish migration. This requires separate publication consent.</p>
+    <p className="text-muted-foreground text-sm">Your project URL, API keys and releases stay with this project. Copy the Git history before switching. After connecting an ATProto repository, select Publish records to publish your MCP metadata and verify it automatically.</p>
     <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={(event) => onConfirmedChange(event.target.checked)} />The destination contains my project’s Git history and I want future syncs to use it.</label>
   </div>;
 }

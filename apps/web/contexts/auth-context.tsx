@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
       // Recovery: redirect immediately when we have user + auth_failed, before any effect re-run
       if (u && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("error") === "auth_failed") {
-        window.location.replace("/");
+        window.location.replace("/dashboard");
         return;
       }
     } catch {
@@ -102,12 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user && typeof window !== "undefined") {
       const err = new URLSearchParams(window.location.search).get("error");
       if (err === "auth_failed") {
-        window.location.replace("/");
+        window.location.replace("/dashboard");
       }
     }
   }, [user]);
 
-  const loginWithGitHub = useCallback((returnTo = "/", selectAccount = false) => {
+  const loginWithGitHub = useCallback((returnTo = "/dashboard", selectAccount = false) => {
     returnTo = safeReturnPath(returnTo);
     window.location.href = getGitHubLoginUrl(returnTo, selectAccount);
   }, []);

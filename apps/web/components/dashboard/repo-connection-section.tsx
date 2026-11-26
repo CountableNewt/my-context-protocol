@@ -320,8 +320,7 @@ export function RepoConnectionSection({ projectId, onReviewPublication }: RepoCo
           </dl>
           {connection.provider === "tangled" && connection.atproto_publication_completed === false && <div className="space-y-3 rounded-md border p-4">
             <h3 className="font-medium">Finish ATProto migration</h3>
-            <p className="text-muted-foreground text-sm">Your repository is connected. The project’s MCP metadata has not been published to your ATProto account yet. Review the records, explicitly authorize publication, then verify them to finish.</p>
-            <Button variant="outline" onClick={onReviewPublication}>Review and publish project records</Button>
+            <p className="text-muted-foreground text-sm">Your repository is connected. Select Publish records below to publish your project’s MCP metadata to your ATProto account and verify it automatically.</p>
           </div>}
           {syncPending && <div className="space-y-2"><p role="status" className="text-sm">Publishing the next batch automatically. The previous release remains active until completion.</p><Button variant="outline" onClick={() => setSyncPending(false)}>Pause automatic continuation</Button></div>}
           {syncError && (

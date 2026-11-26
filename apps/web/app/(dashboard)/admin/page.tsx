@@ -233,7 +233,7 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button nativeButton={false} render={<Link href="/" />}>
+            <Button nativeButton={false} render={<Link href="/dashboard" />}>
               Back to Overview
             </Button>
           </CardContent>

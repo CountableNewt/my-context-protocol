@@ -40,20 +40,22 @@ source. Failed verification retains the source connection. Migration requires
 the source provider, repository and branch to still match the reviewed values.
 Finish running syncs and pending sync publication before migrating.
 
-Changing repository providers does not authorize new public ATProto publication;
-publication consent continues through the separate ATProto records review flow.
+Changing repository providers connects the Git source. Select **Publish records**
+to publish the project's MCP metadata to your ATProto account.
 
 ## Finish ATProto record publication
 
 Connecting Tangled completes the repository step. For a project that has not
-published its MCP records, the dashboard opens the publication review and keeps
+published its MCP records, the dashboard opens the publication section and keeps
 **Finish ATProto migration** visible until publication completes. Already-switched
-projects can use **Review and publish project records** to finish this step.
+projects can use **Publish records** to finish this step.
 
-Review the record values, then explicitly authorize public publication. Telemetry
-is excluded by default: this disables runtime telemetry in the published settings
-and retains existing telemetry history privately. Including telemetry requires a
-new review and separate telemetry consent.
+**Publish records** prepares the metadata, publishes every batch automatically,
+and verifies the result. Progress remains visible; pause and resume use the same
+publication snapshot. Record values and recovery tools are available under
+**Advanced**. Telemetry is excluded by default: this disables runtime telemetry
+in the published settings and retains existing telemetry history privately.
+Publishing telemetry requires selecting the explicit public telemetry option.
 
 After publication, the dashboard verifies records against the owner's PDS and
 only reports migration complete when verification passes. **Verify records** can
