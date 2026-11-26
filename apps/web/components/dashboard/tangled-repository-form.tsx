@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCurrentUser } from "@/lib/auth";
 import { fetchTangledRepositories } from "@/lib/atproto-projects-api";
@@ -27,14 +28,19 @@ export function TangledRepositoryForm({ projectId, onConnected, migrateFrom, dis
   return <div className="space-y-4">
     <p className="text-muted-foreground text-sm">Choose a public repository or enter its exact owner DID and name. Private access is verified with your linked account.</p>
     <Label htmlFor="tangled-selection">Public Tangled repositories</Label>
-    <select id="tangled-selection" className="w-full rounded-md border p-2" value="" onChange={(event) => { const row = rows.find((r) => r.repository_did === event.target.value); if (row) { onDestinationChange?.(); setOwner(row.owner_did); setName(row.name); setBranch(row.default_branch || "main"); setPrivateRepo(false); } }}>
+    <div className="relative">
+    <select id="tangled-selection" className="h-9 w-full min-w-0 appearance-none rounded-md border border-input bg-background py-2 pl-3 pr-10 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" value={rows.find((row) => row.owner_did === owner && row.name === name)?.repository_did ?? ""} onChange={(event) => { const row = rows.find((r) => r.repository_did === event.target.value); if (row) { onDestinationChange?.(); setOwner(row.owner_did); setName(row.name); setBranch(row.default_branch || "main"); setPrivateRepo(false); } }}>
       <option value="">Choose a repository…</option>
-      {rows.map((row) => <option key={row.repository_did} value={row.repository_did}>{row.owner_did}/{row.name}</option>)}
+      {rows.map((row) => <option key={row.repository_did} value={row.repository_did}>{row.owner_handle || row.owner_did}/{row.name}</option>)}
     </select>
+    <ChevronDownIcon aria-hidden className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+    </div>
     {repositories.isPending && <p role="status">Loading Tangled repositories…</p>}
     {repositories.isError && <p role="alert">Could not load public repositories. Exact selection remains available. <Button variant="outline" onClick={() => repositories.refetch()}>Retry repositories</Button></p>}
+    <div className="flex flex-wrap items-center gap-2">
     <Button type="button" variant="outline" disabled={repositories.isFetching} onClick={() => repositories.refetch()}>{repositories.isFetching ? "Refreshing…" : "Refresh Tangled repositories"}</Button>
     {repositories.hasNextPage && <Button variant="outline" disabled={repositories.isFetchingNextPage} onClick={() => repositories.fetchNextPage()}>Load more repositories</Button>}
+    </div>
     <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!disabled) mutation.mutate(); }}>
       <div className="space-y-2"><Label htmlFor="tangled-owner">Owner DID</Label><Input id="tangled-owner" required pattern="did:.+" value={owner} onChange={(event) => { onDestinationChange?.(); setOwner(event.target.value); }} placeholder="did:plc:…" /></div>
       <div className="space-y-2"><Label htmlFor="tangled-name">Repository name</Label><Input id="tangled-name" required value={name} onChange={(event) => { onDestinationChange?.(); setName(event.target.value); }} /></div>

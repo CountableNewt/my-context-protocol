@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { repositoryProviderLabel } from "./project-connection-summary";
+import { repositoryProviderLabel, repositoryOwnerLabel } from "./project-connection-summary";
 import { RepositoryMigrationPreparation } from "./repository-migration-preparation";
 import { TangledRepositoryForm } from "./tangled-repository-form";
 import { RefreshCwIcon } from "lucide-react";
@@ -301,7 +301,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
             <div>
               <dt className="text-muted-foreground">Repository</dt>
               <dd className="font-medium">
-                {connection.repo_owner}/{connection.repo_name}
+                {repositoryOwnerLabel(connection)}/{connection.repo_name}
               </dd>
             </div>
             <div>
@@ -354,7 +354,7 @@ export function RepoConnectionSection({ projectId }: RepoConnectionSectionProps)
         </CardHeader>
         <CardContent>
           {migrationSource && <>
-            <RepositoryMigrationPreparation source={migrationSource} confirmed={migrationConfirmed} onConfirmedChange={setMigrationConfirmed} />
+            <RepositoryMigrationPreparation source={migrationSource} sourceHandle={connection?.repo_owner === migrationSource.repo_owner ? connection.owner_handle : undefined} confirmed={migrationConfirmed} onConfirmedChange={setMigrationConfirmed} />
             <Button className="mb-4" variant="outline" disabled={connectMutation.isPending || tangledPending} onClick={() => { setShowForm(false); setMigrationSource(undefined); setMigrationConfirmed(false); setConnectError(null); }}>Cancel migration</Button>
           </>}
           {!migrationSource && <div className="mb-4 flex gap-2" role="group" aria-label="Repository provider">
