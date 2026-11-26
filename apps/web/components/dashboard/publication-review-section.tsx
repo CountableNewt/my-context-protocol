@@ -12,9 +12,8 @@ export function PublicationReviewSection({ projectId, reviewRequest = 0 }: { pro
   const [conflict, setConflict] = useState<PublicationConflict | null>(null);
   const [discardConsent, setDiscardConsent] = useState(false);
   const [review, setReview] = useState<PublicationReview | null>(null);
-  const [pages, setPages] = useState<string[]>([]);
-  const [consent, setConsent] = useState(false);
-  const [telemetry, setTelemetry] = useState(false);
+  const [publication, setPublication] = useState<{ review: PublicationReview; telemetry: boolean } | null>(null);
+  const publishButton = useRef<HTMLButtonElement | null>(null);
   const [includeTelemetry, setIncludeTelemetry] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<PublicationProgress | null>(null);
@@ -42,64 +41,52 @@ export function PublicationReviewSection({ projectId, reviewRequest = 0 }: { pro
     catch (error) { report(error, action.signal); }
     finally { if (!action.signal.aborted) setBusy(false); }
   }
-  const loadInitialReview = useCallback(async () => {
-    const action = begin();
-    try {
-      const next = await fetchPublicationReview(projectId, 0, action.signal, includeTelemetry);
-      if (action.signal.aborted) return;
-      setReview(next); setPages([next.entries_json]); setConsent(false); setTelemetry(false); setProgress(null);
-    } catch (error) { report(error, action.signal); }
-    finally { if (!action.signal.aborted) setBusy(false); }
-  }, [projectId, includeTelemetry, begin, report]);
   useEffect(() => {
     if (!reviewRequest) return;
-    let canceled = false;
-    queueMicrotask(() => {
-      if (canceled) return;
-      void loadInitialReview();
-      document.getElementById("atproto-records")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-    });
-    return () => { canceled = true; };
-  }, [reviewRequest, loadInitialReview]);
-  async function load(more = false) {
-    if (!more) return loadInitialReview();
-    const action = begin();
-    try {
-      const next = await fetchPublicationReview(projectId, review?.next_cursor, action.signal, includeTelemetry);
-      if (action.signal.aborted) return;
-      if (more && review && next.digest !== review.digest) {
-        setReview(null); setPages([]); setConsent(false); setTelemetry(false); setProgress(null); setMessage("Project data changed during review. Load a fresh review before consenting."); return;
-      }
-      setReview(next); setPages((prior) => more ? [...prior, next.entries_json] : [next.entries_json]);
-      if (!more) { setConsent(false); setTelemetry(false); setProgress(null); }
-    } catch (error) { report(error, action.signal); }
-    finally { if (!action.signal.aborted) setBusy(false); }
-  }
+    document.getElementById("atproto-records")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    publishButton.current?.focus({ preventScroll: true });
+  }, [reviewRequest]);
   async function publish() {
-    if (!review || !consent || review.next_cursor !== undefined || (review.has_telemetry && !telemetry)) return;
     const action = begin();
+    let active = publication;
     try {
-      // Each bounded response confirms canonical progress. Continue with the
-      // same reviewed digest and consent; interrupted requests remain resumable.
-      for (let i = 0; i < 20 && !action.signal.aborted; i++) {
-        const next = await publishProjectReview(projectId, review.digest, telemetry, action.signal);
+      if (!active) {
+        const next = await fetchPublicationReview(projectId, 0, action.signal, includeTelemetry);
+        if (action.signal.aborted) return;
+        if (next.project_id !== projectId || (!includeTelemetry && next.has_telemetry)) throw new Error("Publication returned an unexpected scope");
+        active = { review: next, telemetry: includeTelemetry };
+        setReview(next); setPublication(active); setProgress(null);
+      }
+      // The click authorizes this publication scope. Keep its digest across
+      // bounded requests and retries so partial writes remain resumable.
+      while (!action.signal.aborted) {
+        const next = await publishProjectReview(projectId, active.review.digest, active.telemetry, action.signal);
         if (action.signal.aborted) return;
         setProgress(next);
-        if (next.digest !== review.digest) { setConsent(false); setMessage("The publication digest changed. Load a fresh review before continuing."); return; }
-        if (next.status !== "pending") {
+        if (next.digest !== active.review.digest) {
+          setPublication(null); setProgress(null);
+          setMessage("Project data changed. Select Publish records to try again with the current data.");
+          return;
+        }
+        if (next.status === "complete") {
+          setPublication(null);
           void client.invalidateQueries({ queryKey: ["project", projectId] });
           void client.invalidateQueries({ queryKey: ["projects"] });
           void client.invalidateQueries({ queryKey: ["repo-connection", projectId] });
-          if (next.status === "complete") {
-            const result = await verifyWithAction(action);
-            if (result?.status === "verified") setMessage("ATProto migration complete. Project records published and verified.");
-            else if (!action.signal.aborted) setMessage("Publication finished, but verification has not passed. Check the result and retry verification.");
-          }
+          const result = await verifyWithAction(action);
+          if (result?.status === "verified") setMessage("ATProto migration complete. Project records published and verified.");
+          else if (!action.signal.aborted) setMessage("Publication finished, but verification has not passed. Check the result and retry verification.");
+          return;
+        }
+        if (next.status !== "pending") {
+          setMessage("Publication has not completed. Retry to continue safely.");
           return;
         }
       }
-    } catch (error) { if (error instanceof ApiError && error.status === 409) { setConsent(false); setReview(null); setPages([]); } report(error, action.signal); }
-    finally { if (request.current === action) setVerifying(false); if (!action.signal.aborted) setBusy(false); }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) { setPublication(null); setReview(null); setProgress(null); }
+      report(error, action.signal);
+    } finally { if (request.current === action) setVerifying(false); if (!action.signal.aborted) setBusy(false); }
   }
   async function inspectConflict() {
     const action = begin();
@@ -112,7 +99,7 @@ export function PublicationReviewSection({ projectId, reviewRequest = 0 }: { pro
     const action = begin();
     try {
       const next = await discardPublicationConflict(projectId, conflict.intent_id, conflict.current_manifest_cid, action.signal);
-      if (!action.signal.aborted) { setMessage(`Conflict resolution: ${next.status}. Reload the publication review before writing again.`); setConflict(null); setDiscardConsent(false); setConsent(false); setReview(null); setPages([]); }
+      if (!action.signal.aborted) { setMessage(`Conflict resolution: ${next.status}. Reload the publication review before writing again.`); setConflict(null); setDiscardConsent(false); setPublication(null); setReview(null); setProgress(null); }
     } catch (error) { setDiscardConsent(false); report(error, action.signal); }
     finally { if (!action.signal.aborted) setBusy(false); }
   }
@@ -122,30 +109,32 @@ export function PublicationReviewSection({ projectId, reviewRequest = 0 }: { pro
     catch (error) { report(error, action.signal); }
     finally { if (!action.signal.aborted) setBusy(false); }
   }
-  return <Card id="atproto-records"><CardHeader><CardTitle>ATProto records</CardTitle><CardDescription>Review and authorize publication of durable project data to your account’s PDS.</CardDescription></CardHeader>
+  return <Card id="atproto-records"><CardHeader><CardTitle>ATProto records</CardTitle><CardDescription>Publish project metadata to your ATProto account.</CardDescription></CardHeader>
     <CardContent className="space-y-4">
-      <p className="text-sm">These records are public. Review metadata and feedback for sensitive information, especially for private repositories. Git files and private operational credentials remain private. Deleting a record cannot recall copies already replicated by others.</p>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={includeTelemetry} disabled={busy} onChange={(event) => { setIncludeTelemetry(event.target.checked); setReview(null); setPages([]); setConsent(false); setTelemetry(false); setProgress(null); setVerification(null); }} />Include existing telemetry in the publication review</label>
-      <p className="text-muted-foreground text-sm">Review project metadata before authorizing its public publication. Telemetry is excluded by default.</p>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={verify}>{verifying ? "Verifying records…" : "Verify records"}</Button><Button variant="outline" disabled={busy} onClick={() => load()}>Review publication</Button><Button variant="outline" disabled={busy} onClick={reconcile}>Reconcile owner records</Button><Button variant="outline" disabled={busy} onClick={inspectConflict}>Inspect publication conflict</Button></div>
-      {verification?.project_id === projectId && <PublicationVerificationResult result={verification} />}
-      {conflict && <div className="space-y-3 rounded-md border p-3">
-        <p>Conflict status: {conflict.status}</p>{conflict.status === "resumable" && <p className="text-sm">This mutation can still resume safely. Continue the original operation instead of discarding it.</p>}
-        {conflict.status !== "none" && <><pre className="overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(conflict, null, 2)}</pre><p className="text-sm">Discarding abandons this pending local mutation and retains the current owner records. Inspect both digests before proceeding.</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={discardConsent} disabled={busy} onChange={(event) => setDiscardConsent(event.target.checked)} />I reviewed this conflict and want to discard this pending mutation.</label><Button variant="destructive" disabled={busy || conflict.status !== "superseded" || !discardConsent || !conflict.intent_id || !conflict.current_manifest_cid} onClick={discardConflict}>Discard reviewed pending mutation</Button></>}
-      </div>}
-      {review && <>
-        <p className="text-sm">{review.entry_count} records for <span className="break-all">{review.owner_did}</span>. Review digest: <code className="break-all">{review.digest}</code></p>
-        {review.warnings.map((warning, i) => <p key={`${i}-${warning}`} className="text-sm">{warning}</p>)}
-        <details><summary className="cursor-pointer">Review record values ({pages.length} pages loaded)</summary>{pages.map((page, i) => <pre key={i} className="my-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md border p-3 text-xs">{page}</pre>)}</details>
-        {review.next_cursor !== undefined ? <Button variant="outline" disabled={busy} onClick={() => load(true)}>Load next review page</Button> : <>
-          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent} disabled={busy} onChange={(event) => setConsent(event.target.checked)} />I reviewed this data and authorize its public publication to my ATProto account.</label>
-          {review.has_telemetry && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={telemetry} disabled={busy} onChange={(event) => setTelemetry(event.target.checked)} />I separately consent to publishing existing telemetry publicly. Prior telemetry opt-in does not grant this permission.</label>}
-          <Button disabled={!consent || busy || (review.has_telemetry && !telemetry)} onClick={publish}>{progress?.status === "pending" ? "Continue publication" : "Publish reviewed records"}</Button>
-        </>}
-      </>}
+      <p className="text-sm">Publishing creates public MCP records in your account’s PDS. Git files and credentials stay private. Telemetry is excluded by default.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button ref={publishButton} disabled={busy} onClick={publish}>{busy && !verifying ? "Publishing records…" : publication ? "Continue publication" : "Publish records"}</Button>
+        <Button variant="outline" disabled={busy} onClick={verify}>{verifying ? "Verifying records…" : "Verify records"}</Button>
+      </div>
       {progress && <p role="status">Publication: {progress.status}{progress.total !== undefined ? ` (${progress.completed ?? 0}/${progress.total})` : ""}.</p>}
+      {verification?.project_id === projectId && <PublicationVerificationResult result={verification} />}
       {message && <p role="status" className="text-sm">{message}</p>}
-      {busy && <Button variant="outline" onClick={() => { request.current?.abort(); setBusy(false); setVerifying(false); setMessage(verifying ? (progress?.status === "complete" ? "Verification canceled. Publication remains complete; verify records again to finish confirmation." : "Verification canceled. No records were published by this check.") : "Paused locally. Published records remain durable; use the same review to continue."); }}>{verifying ? "Cancel verification" : "Pause requests"}</Button>}
+      {busy && <Button variant="outline" onClick={() => { request.current?.abort(); setBusy(false); setVerifying(false); setMessage(verifying ? (progress?.status === "complete" ? "Verification canceled. Publication remains complete; verify records again to finish confirmation." : "Verification canceled. No records were published by this check.") : "Publication paused. Select the publish action to resume safely."); }}>{verifying ? "Cancel verification" : "Pause publication"}</Button>}
+      <details className="space-y-3">
+        <summary className="cursor-pointer text-sm">Advanced</summary>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={includeTelemetry} disabled={busy || publication !== null} onChange={(event) => { setIncludeTelemetry(event.target.checked); setReview(null); setProgress(null); setVerification(null); }} />Publish existing telemetry publicly with this project</label>
+        <p className="text-muted-foreground text-sm">Without telemetry publication, runtime telemetry is disabled and existing history stays private. Public records may be replicated by others.</p>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={reconcile}>Reconcile owner records</Button><Button variant="outline" disabled={busy} onClick={inspectConflict}>Inspect publication conflict</Button></div>
+        {conflict && <div className="space-y-3 rounded-md border p-3">
+          <p>Conflict status: {conflict.status}</p>{conflict.status === "resumable" && <p className="text-sm">This mutation can still resume safely. Continue the original operation instead of discarding it.</p>}
+          {conflict.status !== "none" && <><pre className="overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(conflict, null, 2)}</pre><p className="text-sm">Discarding abandons this pending local mutation and retains the current owner records. Inspect both digests before proceeding.</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={discardConsent} disabled={busy} onChange={(event) => setDiscardConsent(event.target.checked)} />I reviewed this conflict and want to discard this pending mutation.</label><Button variant="destructive" disabled={busy || conflict.status !== "superseded" || !discardConsent || !conflict.intent_id || !conflict.current_manifest_cid} onClick={discardConflict}>Discard reviewed pending mutation</Button></>}
+        </div>}
+        {review && <details><summary className="cursor-pointer text-sm">Publication details</summary>
+          <p className="text-sm">{review.entry_count} records for <span className="break-all">{review.owner_did}</span>. Digest: <code className="break-all">{review.digest}</code></p>
+          {review.warnings.map((warning, i) => <p key={`${i}-${warning}`} className="text-sm">{warning}</p>)}
+          <pre className="my-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md border p-3 text-xs">{review.entries_json}</pre>
+        </details>}
+      </details>
     </CardContent>
   </Card>;
 }

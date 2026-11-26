@@ -11,21 +11,61 @@ const review = { owner_did: "did:plc:owner", project_id: "project", digest: "rev
 beforeEach(async () => { host=document.createElement("div"); document.body.append(host);root=createRoot(host);client=new QueryClient();vi.mocked(fetchPublicationReview).mockResolvedValue(review);vi.mocked(verifyProjectRecords).mockResolvedValue(verification);await act(async()=>root.render(<QueryClientProvider client={client}><PublicationReviewSection projectId="project" /></QueryClientProvider>)); });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();client.clear();vi.resetAllMocks();});
 async function click(text:string) {const button=[...host.querySelectorAll("button")].find(b=>b.textContent===text);expect(button).toBeDefined();await act(async()=>button!.click());}
-it("requires every metadata review page and renewed public consent before publishing and verification", async()=>{
- vi.mocked(fetchPublicationReview).mockResolvedValueOnce({...review,next_cursor:25}).mockResolvedValueOnce(review);
- vi.mocked(publishProjectReview).mockResolvedValueOnce({status:"pending",digest:review.digest,completed:1,total:2}).mockResolvedValueOnce({status:"complete",digest:review.digest,completed:2,total:2});
- await click("Review publication");expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
- await click("Load next review page");const inputs=host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');expect(inputs).toHaveLength(2);expect(inputs[0].checked).toBe(false);expect(inputs[1].checked).toBe(false);
- const publish=[...host.querySelectorAll("button")].find(b=>b.textContent==="Publish reviewed records");expect(publish?.disabled).toBe(true);expect(publishProjectReview).not.toHaveBeenCalled();
- await act(async()=>inputs[1].click());await click("Publish reviewed records");expect(publishProjectReview).toHaveBeenCalledTimes(2);expect(publishProjectReview).toHaveBeenCalledWith("project",review.digest,false,expect.any(AbortSignal));expect(host.textContent).toContain("complete (2/2)");expect(verifyProjectRecords).toHaveBeenCalledTimes(1);expect(host.textContent).toContain("ATProto migration complete");
- await click("Review publication");expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+it("publishes and verifies from one click without requiring review pagination", async () => {
+  vi.mocked(fetchPublicationReview).mockResolvedValue({ ...review, next_cursor: 25 });
+  vi.mocked(publishProjectReview).mockResolvedValueOnce({ status: "pending", digest: review.digest, completed: 1, total: 2 }).mockResolvedValueOnce({ status: "complete", digest: review.digest, completed: 2, total: 2 });
+  await click("Publish records");
+  expect(fetchPublicationReview).toHaveBeenCalledExactlyOnceWith("project", 0, expect.any(AbortSignal), false);
+  expect(publishProjectReview).toHaveBeenCalledTimes(2);
+  expect(publishProjectReview).toHaveBeenCalledWith("project", review.digest, false, expect.any(AbortSignal));
+  expect(host.textContent).toContain("complete (2/2)");
+  expect(verifyProjectRecords).toHaveBeenCalledTimes(1);
+  expect(host.textContent).toContain("ATProto migration complete");
+  expect(host.textContent).not.toContain("Load next review page");
 });
-it("invalidates stale review when a later page has a changed digest",async()=>{
- vi.mocked(fetchPublicationReview).mockResolvedValueOnce({...review,next_cursor:25}).mockResolvedValueOnce({...review,digest:"changed"});
- await click("Review publication");await click("Load next review page");expect(host.textContent).toContain("Project data changed during review");expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);expect(publishProjectReview).not.toHaveBeenCalled();
+it("continues all pending batches without an arbitrary request limit", async () => {
+  let batches = 0;
+  vi.mocked(publishProjectReview).mockImplementation(async () => ({ status: ++batches < 24 ? "pending" : "complete", digest: review.digest }));
+  await click("Publish records");
+  expect(publishProjectReview).toHaveBeenCalledTimes(24);
+  expect(host.textContent).toContain("ATProto migration complete");
 });
-it("keeps bounded pending publication resumable under the same explicit consent",async()=>{
- vi.mocked(publishProjectReview).mockResolvedValue({status:"pending",digest:review.digest});await click("Review publication");await act(async()=>host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].click());await click("Publish reviewed records");expect(publishProjectReview).toHaveBeenCalledTimes(20);vi.mocked(publishProjectReview).mockResolvedValueOnce({status:"complete",digest:review.digest});await click("Continue publication");expect(publishProjectReview).toHaveBeenCalledTimes(21);
+it("stops if publication returns a different digest", async () => {
+  vi.mocked(publishProjectReview).mockResolvedValue({ status: "pending", digest: "changed" });
+  await click("Publish records");
+  expect(publishProjectReview).toHaveBeenCalledTimes(1);
+  expect(verifyProjectRecords).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("Project data changed");
+});
+it("retains the digest on a failed request and resumes without loading a new review", async () => {
+  vi.mocked(publishProjectReview).mockResolvedValueOnce({ status: "pending", digest: review.digest, completed: 1, total: 2 }).mockRejectedValueOnce(new Error("Offline"));
+  await click("Publish records");
+  expect(host.textContent).toContain("The operation could not finish");
+  vi.mocked(publishProjectReview).mockResolvedValueOnce({ status: "complete", digest: review.digest, completed: 2, total: 2 });
+  await click("Continue publication");
+  expect(fetchPublicationReview).toHaveBeenCalledTimes(1);
+  expect(publishProjectReview).toHaveBeenLastCalledWith("project", review.digest, false, expect.any(AbortSignal));
+  expect(host.textContent).toContain("ATProto migration complete");
+});
+it("does not publish when preparing the publication fails", async () => {
+  vi.mocked(fetchPublicationReview).mockRejectedValueOnce(new Error("Offline"));
+  await click("Publish records");
+  expect(publishProjectReview).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("The operation could not finish");
+});
+it("pauses publication, ignores late responses and resumes the same digest", async () => {
+  let finish!: (result: { status: string; digest: string }) => void;
+  vi.mocked(publishProjectReview).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await click("Publish records");
+  await click("Pause publication");
+  expect(vi.mocked(publishProjectReview).mock.calls[0][3]?.aborted).toBe(true);
+  await act(async () => finish({ status: "complete", digest: review.digest }));
+  expect(verifyProjectRecords).not.toHaveBeenCalled();
+  expect(host.textContent).not.toContain("ATProto migration complete");
+  vi.mocked(publishProjectReview).mockResolvedValueOnce({ status: "complete", digest: review.digest });
+  await click("Continue publication");
+  expect(fetchPublicationReview).toHaveBeenCalledTimes(1);
+  expect(host.textContent).toContain("ATProto migration complete");
 });
 it("offers owner reconciliation without granting publication consent",async()=>{vi.mocked(reconcileProjectRecords).mockResolvedValue({status:"complete"});await click("Reconcile owner records");expect(reconcileProjectRecords).toHaveBeenCalledWith("project",expect.any(AbortSignal));expect(publishProjectReview).not.toHaveBeenCalled();});
 
@@ -86,34 +126,34 @@ it("rejects a verification result belonging to a different project", async () =>
   expect(host.textContent).toContain("The operation could not finish");
 });
 
-it("opens metadata-only review when the migration requests it without granting publication consent", async () => {
+it("focuses publishing after a migration without reading or writing records automatically", async () => {
   await act(async () => root.render(<QueryClientProvider client={client}><PublicationReviewSection projectId="project" reviewRequest={1} /></QueryClientProvider>));
-  expect(fetchPublicationReview).toHaveBeenCalledWith("project", 0, expect.any(AbortSignal), false);
-  expect(host.textContent).toContain("30 records for");
+  expect(fetchPublicationReview).not.toHaveBeenCalled();
   expect(publishProjectReview).not.toHaveBeenCalled();
-  expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Publish reviewed records")?.disabled).toBe(true);
+  expect(document.activeElement?.textContent).toBe("Publish records");
 });
-it("requires both a telemetry-inclusive review and separate telemetry consent", async () => {
+it("includes public telemetry only after an explicit advanced opt-in", async () => {
   vi.mocked(fetchPublicationReview).mockResolvedValue({ ...review, has_telemetry: true });
   vi.mocked(publishProjectReview).mockResolvedValue({ status: "complete", digest: review.digest });
   await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
-  await click("Review publication");
+  await click("Publish records");
   expect(fetchPublicationReview).toHaveBeenCalledWith("project", 0, expect.any(AbortSignal), true);
-  const inputs = host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-  expect(inputs).toHaveLength(3);
-  await act(async () => inputs[1].click());
-  expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Publish reviewed records")?.disabled).toBe(true);
-  expect(publishProjectReview).not.toHaveBeenCalled();
-  await act(async () => inputs[2].click());
-  await click("Publish reviewed records");
   expect(publishProjectReview).toHaveBeenCalledWith("project", review.digest, true, expect.any(AbortSignal));
+});
+it("does not publish an unexpected telemetry-inclusive metadata response", async () => {
+  vi.mocked(fetchPublicationReview).mockResolvedValue({ ...review, has_telemetry: true });
+  await click("Publish records");
+  expect(publishProjectReview).not.toHaveBeenCalled();
+});
+it("does not publish a review belonging to another project", async () => {
+  vi.mocked(fetchPublicationReview).mockResolvedValue({ ...review, project_id: "another-project" });
+  await click("Publish records");
+  expect(publishProjectReview).not.toHaveBeenCalled();
 });
 it("does not claim migration is complete when post-publication verification fails", async () => {
   vi.mocked(publishProjectReview).mockResolvedValue({ status: "complete", digest: review.digest });
   vi.mocked(verifyProjectRecords).mockResolvedValue({ ...verification, status: "missing" });
-  await click("Review publication");
-  await act(async () => host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].click());
-  await click("Publish reviewed records");
+  await click("Publish records");
   expect(host.textContent).toContain("Publication finished, but verification has not passed");
   expect(host.textContent).not.toContain("ATProto migration complete");
 });
