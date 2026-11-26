@@ -295,8 +295,8 @@ describe("RepoConnectionSection GitHub access", () => {
     vi.mocked(fetchRepoConnection).mockResolvedValue({ project_id: "project-1", provider: "tangled", repo_owner: "did:plc:owner", repo_name: "skills", default_branch: "main", auth_type: "atproto", atproto_publication_completed: false });
     await render(reviewPublication);
     await waitFor(() => expect(host.textContent).toContain("Finish ATProto migration"));
-    await click("Review and publish project records");
-    expect(reviewPublication).toHaveBeenCalledOnce();
+    expect(host.textContent).toContain("Select Publish records below");
+    expect(reviewPublication).not.toHaveBeenCalled();
     expect(connectRepo).not.toHaveBeenCalled();
   });
 
