@@ -117,6 +117,7 @@ func main() {
 		cfg.ConnectRepository = hub.ConnectRepository
 		cfg.Writeback = hub.Writeback
 		cfg.ListTangledRepositories = hub.ListRepositories
+		cfg.ResolveOwnerHandle = platform.Accounts.ResolveHandle
 		cfg.ExtraMaintenance = func(ctx context.Context) (map[string]any, error) {
 			records, err := platform.Records.Maintenance(ctx, 1, 25, time.Now())
 			if err != nil {

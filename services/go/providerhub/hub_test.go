@@ -21,6 +21,8 @@ const nativeRepo = "did:plc:bbbbbbbbbbbbbbbbbbbbbbbb"
 const cid = "bafyreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 type fakeTangled struct {
+	listCursor                   string
+	listRows                     []tangled.RepositoryView
 	head                         string
 	public                       bool
 	lookupError                  error
@@ -38,7 +40,11 @@ func (f *fakeTangled) LookupRepository(_ context.Context, actor, owner, name str
 func (f *fakeTangled) IsPublicRepository(context.Context, string, string, string) (bool, error) {
 	return f.public, nil
 }
-func (f *fakeTangled) ListRepositories(context.Context, string, string, string, int) (tangled.RepositoryPage, error) {
+func (f *fakeTangled) ListRepositories(_ context.Context, _, _, cursor string, _ int) (tangled.RepositoryPage, error) {
+	f.listCursor = cursor
+	if f.listRows != nil {
+		return tangled.RepositoryPage{Repositories: f.listRows, Cursor: "next-page"}, nil
+	}
 	return tangled.RepositoryPage{Repositories: []tangled.RepositoryView{{RepositoryDID: nativeRepo, OwnerDID: did, Name: "repo"}}}, nil
 }
 func (f *fakeTangled) Snapshot(context.Context, string, string) (reposync.Outcome, error) {
@@ -356,5 +362,41 @@ func TestTangledDocumentedAliasesRetainPrivateSelection(t *testing.T) {
 	}
 	if result["repo_owner"] != did || result["repo_name"] != "exact-repository" || result["is_private"] != true {
 		t.Fatal(result)
+	}
+}
+
+func TestRepositoryListEnrichesHandleOnceAndPreservesCursorAndDIDs(t *testing.T) {
+	h, _, fake := fixture(t)
+	fake.listRows = []tangled.RepositoryView{{RepositoryDID: nativeRepo, OwnerDID: did, Name: "one"}, {RepositoryDID: nativeRepo, OwnerDID: did, Name: "two"}}
+	calls := 0
+	h.cfg.ResolveOwnerHandle = func(ctx context.Context, owner string) (string, error) {
+		calls++
+		if owner != did {
+			t.Fatal("wrong DID")
+		}
+		if _, ok := ctx.Deadline(); !ok {
+			t.Fatal("missing timeout")
+		}
+		return "owner.example.com", nil
+	}
+	result, err := h.ListRepositories(context.Background(), "account", "prior-page")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result["repositories"].([]tangled.RepositoryView)
+	if calls != 1 || fake.listCursor != "prior-page" || result["cursor"] != "next-page" {
+		t.Fatalf("bad list result %+v calls %d", result, calls)
+	}
+	for _, r := range rows {
+		if r.OwnerHandle != "owner.example.com" || r.OwnerDID != did {
+			t.Fatal("owner identity modified", r)
+		}
+	}
+	// New request retries the mutable display label but never blocks repository selection.
+	fake.listRows = []tangled.RepositoryView{{RepositoryDID: nativeRepo, OwnerDID: did, Name: "one"}}
+	h.cfg.ResolveOwnerHandle = func(context.Context, string) (string, error) { return "", errors.New("offline") }
+	result, err = h.ListRepositories(context.Background(), "account", "")
+	if err != nil || result["repositories"].([]tangled.RepositoryView)[0].OwnerHandle != "" {
+		t.Fatalf("lookup failure was not fail-soft %+v %v", result, err)
 	}
 }

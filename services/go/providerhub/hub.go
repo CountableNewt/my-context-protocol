@@ -43,14 +43,15 @@ type TangledAPI interface {
 	SubmitPatch(context.Context, tangled.PatchProposal, string) (tangled.ProposalReference, error)
 }
 type Config struct {
-	DB              Database
-	Tangled         TangledAPI
-	Identity        func(context.Context, string) (string, error)
-	Attestor        func(context.Context, string) (tangled.Attestor, error)
-	GitHubConnect   func(context.Context, string, string, map[string]json.RawMessage) (map[string]any, error)
-	GitHubWriteback func(context.Context, string, string, string, string) (map[string]any, error)
-	Sync            func(context.Context, string) (map[string]any, error)
-	Now             func() time.Time
+	ResolveOwnerHandle func(context.Context, string) (string, error)
+	DB                 Database
+	Tangled            TangledAPI
+	Identity           func(context.Context, string) (string, error)
+	Attestor           func(context.Context, string) (tangled.Attestor, error)
+	GitHubConnect      func(context.Context, string, string, map[string]json.RawMessage) (map[string]any, error)
+	GitHubWriteback    func(context.Context, string, string, string, string) (map[string]any, error)
+	Sync               func(context.Context, string) (map[string]any, error)
+	Now                func() time.Time
 }
 type Hub struct{ cfg Config }
 type PublicError struct {
@@ -302,7 +303,7 @@ func (h *Hub) ResolveRepositoryCommit(ctx context.Context, c syncservice.Connect
 	}
 	return h.cfg.Tangled.ResolveAuthenticatedBranch(ctx, b.ActorDID, b.RepositoryDID, b.Branch)
 }
-func (h *Hub) ListRepositories(ctx context.Context, account string) (map[string]any, error) {
+func (h *Hub) ListRepositories(ctx context.Context, account, cursor string) (map[string]any, error) {
 	if h.cfg.Tangled == nil {
 		return nil, problem(501, "Tangled repository integration is not configured")
 	}
@@ -310,9 +311,22 @@ func (h *Hub) ListRepositories(ctx context.Context, account string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	page, err := h.cfg.Tangled.ListRepositories(ctx, actor, actor, "", 100)
+	page, err := h.cfg.Tangled.ListRepositories(ctx, actor, actor, cursor, 100)
 	if err != nil {
 		return nil, err
+	}
+	if len(page.Repositories) > 0 && h.cfg.ResolveOwnerHandle != nil {
+		lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		handle, lookupErr := h.cfg.ResolveOwnerHandle(lookupCtx, actor)
+		parsed, parseErr := syntax.ParseHandle(handle)
+		if lookupErr == nil && parseErr == nil && !parsed.IsInvalidHandle() {
+			for i := range page.Repositories {
+				if page.Repositories[i].OwnerDID == actor {
+					page.Repositories[i].OwnerHandle = parsed.Normalize().String()
+				}
+			}
+		}
 	}
 	return map[string]any{"provider": "tangled", "repositories": page.Repositories, "cursor": page.Cursor, "private_repository_selection": "owner_and_name"}, nil
 }
