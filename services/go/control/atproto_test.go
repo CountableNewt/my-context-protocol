@@ -2,13 +2,20 @@ package control
 
 import (
 	"context"
+	"errors"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/CountableNewt/my-context-protocol/services/go/atproto"
 	"github.com/CountableNewt/my-context-protocol/services/go/domainrecords"
 	"github.com/CountableNewt/my-context-protocol/services/go/recordservice"
+	"github.com/CountableNewt/my-context-protocol/services/go/turso"
 )
 
 type recordController struct {
+	engineCall                                func(context.Context, string, func(context.Context, string, *domainrecords.Engine) error) error
 	scopes, engines, inspections, resolutions int
 	account, project                          string
 }
@@ -19,8 +26,11 @@ func (f *recordController) Scope(ctx context.Context, a, p string) (context.Cont
 	f.project = p
 	return ctx, nil
 }
-func (f *recordController) WithEngine(context.Context, string, func(context.Context, string, *domainrecords.Engine) error) error {
+func (f *recordController) WithEngine(ctx context.Context, account string, apply func(context.Context, string, *domainrecords.Engine) error) error {
 	f.engines++
+	if f.engineCall != nil {
+		return f.engineCall(ctx, account, apply)
+	}
 	return domainrecords.ErrConsent
 }
 func (f *recordController) IsCanonical(context.Context, string, string) (bool, error) {
@@ -181,5 +191,99 @@ func TestExplicitRepairAuditsBeforeNormalReadinessAndNativeResume(t *testing.T) 
 	expectStatus(t, call(t, s, "POST", path, ownerCookie, "{}", "https://app.example.com"), 200)
 	if records.scopes != 0 || records.reconciles != 1 || records.engines != 2 {
 		t.Fatal("validated repair did not resume projection", records)
+	}
+}
+
+func TestVerificationRemainsReadOnlyAndOwnerScoped(t *testing.T) {
+	s, _ := fixture(t)
+	records := &recordController{}
+	s.cfg.Records = records
+	path := "/projects/" + projectID + "/atproto/verify"
+	expectStatus(t, call(t, s, "POST", path, "", "{}", "https://app.example.com"), 401)
+	expectStatus(t, call(t, s, "POST", path, otherCookie, "{}", "https://app.example.com"), 404)
+	mustExec(t, s, "UPDATE accounts SET is_admin=1 WHERE id=?", otherID)
+	expectStatus(t, call(t, s, "POST", path, otherCookie, "{}", "https://app.example.com"), 404)
+	expectStatus(t, call(t, s, "GET", path, ownerCookie, "", ""), 404)
+	if records.scopes != 0 || records.engines != 0 {
+		t.Fatal("verification bypassed ownership/method checks", records)
+	}
+	for _, check := range []struct {
+		err    error
+		status string
+	}{{errors.New("private session failure"), "unavailable"}, {context.DeadlineExceeded, "incomplete"}} {
+		records.engineCall = func(ctx context.Context, account string, _ func(context.Context, string, *domainrecords.Engine) error) error {
+			if account != ownerID {
+				t.Fatal("wrong owner")
+			}
+			deadline, ok := ctx.Deadline()
+			if !ok || time.Until(deadline) > 55*time.Second {
+				t.Fatal("unbounded verification")
+			}
+			return check.err
+		}
+		response := call(t, s, "POST", path, ownerCookie, "{}", "https://app.example.com")
+		expectStatus(t, response, 200)
+		report := object(t, response)
+		if report["status"] != check.status || report["project_id"] != projectID || strings.Contains(response.Body.String(), "private session failure") || strings.Contains(response.Body.String(), `"collections":null`) || strings.Contains(response.Body.String(), `"issues":null`) {
+			t.Fatal(response.Body.String())
+		}
+	}
+	if records.scopes != 0 {
+		t.Fatal("verification reconciled or resumed publication")
+	}
+}
+func TestVerificationRequiresConfiguredRecords(t *testing.T) {
+	s, _ := fixture(t)
+	expectStatus(t, call(t, s, "POST", "/projects/"+projectID+"/atproto/verify", ownerCookie, "{}", "https://app.example.com"), 501)
+}
+
+type verificationReadOnlyDB struct{ DB }
+
+func (d verificationReadOnlyDB) Execute(ctx context.Context, query turso.Statement) (*turso.Result, error) {
+	if !strings.HasPrefix(query.SQL, "SELECT ") {
+		return nil, errors.New("verification attempted projection write")
+	}
+	return d.DB.Execute(ctx, query)
+}
+func (d verificationReadOnlyDB) Batch(context.Context, []turso.Statement) ([]turso.Result, error) {
+	return nil, errors.New("verification attempted projection batch")
+}
+
+type missingVerificationRecords struct{}
+
+func (missingVerificationRecords) Get(context.Context, atproto.Mutation) (atproto.Record, error) {
+	return atproto.Record{}, atproto.ErrNotFound
+}
+func (missingVerificationRecords) Put(context.Context, atproto.Mutation) (atproto.Reference, error) {
+	panic("verification attempted publication")
+}
+func TestVerificationReportsUnpublishedAcrossRESTAndXRPCWithoutScope(t *testing.T) {
+	principal := principalFor(ownerID, false, "publication.verifyProject")
+	s := xrpcFixture(t, &principal)
+	for _, sql := range strings.Split(domainrecords.MigrationSQL, ";") {
+		if strings.TrimSpace(sql) != "" {
+			mustExec(t, s, sql)
+		}
+	}
+	did := "did:plc:aaaaaaaaaaaaaaaaaaaaaaaa"
+	mustExec(t, s, "CREATE TABLE account_atproto_identities(account_id TEXT,did TEXT)")
+	mustExec(t, s, "INSERT INTO account_atproto_identities VALUES(?,?)", ownerID, did)
+	records := &recordController{}
+	records.engineCall = func(ctx context.Context, account string, apply func(context.Context, string, *domainrecords.Engine) error) error {
+		if account != ownerID {
+			t.Fatal("wrong account")
+		}
+		return apply(ctx, did, &domainrecords.Engine{DB: verificationReadOnlyDB{s.db}, Records: missingVerificationRecords{}})
+	}
+	s.cfg.Records = records
+	for _, response := range []*httptest.ResponseRecorder{call(t, s, "POST", "/projects/"+projectID+"/atproto/verify", ownerCookie, "{}", "https://app.example.com"), apiCall(t, s, "POST", "publication.verifyProject", `{"project_id":"`+projectID+`"}`)} {
+		expectStatus(t, response, 200)
+		report := object(t, response)
+		if report["status"] != "not_published" || report["owner_did"] != did || report["project_id"] != projectID || report["checked_records"] != float64(0) {
+			t.Fatal(response.Body.String())
+		}
+	}
+	if records.scopes != 0 || records.engines != 2 {
+		t.Fatal("verification did not remain independent", records)
 	}
 }

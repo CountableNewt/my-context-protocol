@@ -21,7 +21,10 @@ export function ProjectConnectionSummary({ project }: { project: Project }) {
   }
   return (
     <div className="min-w-0 space-y-1.5 text-sm" aria-label="Repository connection">
-      <Badge variant="outline">{repositoryProviderLabel(connection.provider)}</Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline">{repositoryProviderLabel(connection.provider)}</Badge>
+        {connection.provider === "tangled" && project.atproto_publication_completed === false && <Badge variant="secondary">Records not published</Badge>}
+      </div>
       <p className="break-all font-medium">{repositoryOwnerLabel(connection)}/{connection.repo_name}</p>
       <p className="text-muted-foreground break-all">Branch: {connection.default_branch}</p>
     </div>

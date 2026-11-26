@@ -41,6 +41,9 @@
         },
         "mcp_oauth_enabled": {
           "type": "boolean"
+        },
+        "atproto_publication_completed": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -575,6 +578,9 @@
           "type": "boolean"
         },
         "is_private": {
+          "type": "boolean"
+        },
+        "atproto_publication_completed": {
           "type": "boolean"
         }
       },

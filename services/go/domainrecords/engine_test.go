@@ -173,7 +173,7 @@ func TestReviewChangesAndTelemetryConsentCannotBeBypassed(t *testing.T) {
 		t.Fatal(err)
 	}
 	review.HasTelemetry = false
-	if _, err = e.Publish(ctx, account, review, Consent{ReviewDigest: review.Digest, Public: true}); !errors.Is(err, ErrConsent) || records.puts != 0 {
+	if _, err = e.Publish(ctx, account, review, Consent{ReviewDigest: review.Digest, Public: true}); !errors.Is(err, ErrChanged) || records.puts != 0 {
 		t.Fatalf("telemetry consent bypass: %v", err)
 	}
 }

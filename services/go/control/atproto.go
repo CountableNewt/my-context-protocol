@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/CountableNewt/my-context-protocol/services/go/domainrecords"
 	"github.com/CountableNewt/my-context-protocol/services/go/recordservice"
@@ -56,6 +57,36 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 		}
 		return nil, 0, missing("Not found")
 	}
+
+	// Verification deliberately bypasses Scope: it must not resume publication,
+	// reconcile private projections or change readiness merely to inspect records.
+	if len(parts) == 1 && parts[0] == "verify" {
+		if r.Method != "POST" {
+			return nil, 0, missing("Not found")
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+		defer cancel()
+		report := domainrecords.VerificationReport{Status: "unavailable", ProjectID: project, Collections: []domainrecords.VerificationCollection{}, Issues: []domainrecords.VerificationIssue{}}
+		err := s.cfg.Records.WithEngine(ctx, account, func(ctx context.Context, owner string, e *domainrecords.Engine) error {
+			report.OwnerDID = owner
+			result, err := e.VerifyReport(ctx, account, owner, project)
+			if err == nil {
+				report = result
+			}
+			return err
+		})
+		if err != nil {
+			report.Status = "unavailable"
+			issue := domainrecords.VerificationIssue{Code: "RepositoryUnavailable", Message: "The linked repository could not be checked. Retry or reconnect the ATProto account."}
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				report.Status = "incomplete"
+				issue = domainrecords.VerificationIssue{Code: "VerificationInterrupted", Message: "Verification did not finish. Retry to check the complete record graph."}
+			}
+			report.Issues = []domainrecords.VerificationIssue{issue}
+		}
+		return report, 200, nil
+	}
+
 	// Reconciliation must remain available while an audit blocks normal reads.
 	// Complete the owner repair audit before resuming any durable native intent.
 	if len(parts) == 1 && parts[0] == "reconcile" && r.Method == "POST" {
@@ -86,7 +117,25 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 		if len(parts) != 1 || parts[0] != "publication" {
 			return missing("Not found")
 		}
-		review, err := e.Inventory(ctx, account, owner, project)
+		includeTelemetry := false
+		var consent domainrecords.Consent
+		if r.Method == "GET" {
+			if raw := r.URL.Query().Get("include_telemetry"); raw != "" {
+				value, err := strconv.ParseBool(raw)
+				if err != nil {
+					return bad("Invalid telemetry review option")
+				}
+				includeTelemetry = value
+			}
+		} else if r.Method == "POST" {
+			if err := decode(r, &consent); err != nil {
+				return err
+			}
+			includeTelemetry = consent.Telemetry
+		} else {
+			return missing("Not found")
+		}
+		review, err := e.PublicationReview(ctx, account, owner, project, includeTelemetry)
 		if err != nil {
 			return err
 		}
@@ -120,10 +169,6 @@ func (s *Service) publication(r *http.Request, account, project string, parts []
 		}
 		if r.Method != "POST" {
 			return missing("Not found")
-		}
-		var consent domainrecords.Consent
-		if err := decode(r, &consent); err != nil {
-			return err
 		}
 		ref, err := e.Publish(ctx, account, review, consent)
 		var pending *domainrecords.PendingError

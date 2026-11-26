@@ -72,8 +72,8 @@ describe("RepoConnectionSection GitHub access", () => {
     vi.restoreAllMocks();
     sessionStorage.clear();
   });
-  async function render() {
-    await act(async () => root.render(<QueryClientProvider client={client}><RepoConnectionSection projectId="project-1"/></QueryClientProvider>));
+  async function render(onReviewPublication?: () => void) {
+    await act(async () => root.render(<QueryClientProvider client={client}><RepoConnectionSection projectId="project-1" onReviewPublication={onReviewPublication}/></QueryClientProvider>));
     await waitFor(() => expect(host.textContent).not.toBe(""));
   }
   async function click(label: string) {
@@ -239,7 +239,7 @@ describe("RepoConnectionSection GitHub access", () => {
     window.history.replaceState({}, "", "/projects/project-1?github_app_installed=1");
     sessionStorage.setItem("pendingRepoConnect:project-1", JSON.stringify({ full_name: repo.full_name, branch: "release", migrate_from: source }));
     await render();
-    await waitFor(() => expect(host.textContent).toContain("Migrate Repository Connection"));
+    await waitFor(() => expect(host.textContent).toContain("Step 1: Connect destination repository"));
     await waitFor(() => expect(host.querySelector<HTMLSelectElement>("select")?.value).toBe(repo.full_name));
     expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Migrate to GitHub")?.disabled).toBe(true);
     expect(host.querySelector<HTMLInputElement>("#branch")?.value).toBe("release");
@@ -261,7 +261,7 @@ describe("RepoConnectionSection GitHub access", () => {
     root = createRoot(host);
     window.history.replaceState({}, "", "/projects/project-1?github_app_installed=1");
     await render();
-    await waitFor(() => expect(host.textContent).toContain("Migrate Repository Connection"));
+    await waitFor(() => expect(host.textContent).toContain("Step 1: Connect destination repository"));
     expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
     expect(host.textContent).toContain("did:plc:owner/original");
     expect(connectRepo).not.toHaveBeenCalled();
@@ -288,6 +288,16 @@ describe("RepoConnectionSection GitHub access", () => {
     await waitFor(() => expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Cancel migration")?.disabled).toBe(true));
     await act(async () => reject(new Error("Destination unavailable")));
     await waitFor(() => expect([...host.querySelectorAll("button")].find((b) => b.textContent === "Cancel migration")?.disabled).toBe(false));
+  });
+
+  it("offers publication completion for a Tangled repository whose records were never published", async () => {
+    const reviewPublication = vi.fn();
+    vi.mocked(fetchRepoConnection).mockResolvedValue({ project_id: "project-1", provider: "tangled", repo_owner: "did:plc:owner", repo_name: "skills", default_branch: "main", auth_type: "atproto", atproto_publication_completed: false });
+    await render(reviewPublication);
+    await waitFor(() => expect(host.textContent).toContain("Finish ATProto migration"));
+    await click("Review and publish project records");
+    expect(reviewPublication).toHaveBeenCalledOnce();
+    expect(connectRepo).not.toHaveBeenCalled();
   });
 
 });

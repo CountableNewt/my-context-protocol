@@ -71,6 +71,11 @@ type sqlFixture struct {
 
 func fixtureSQL(t *testing.T, compiled bool) *sqlFixture {
 	t.Helper()
+	return fixtureSQLTelemetry(t, compiled, true)
+}
+
+func fixtureSQLTelemetry(t *testing.T, compiled, telemetry bool) *sqlFixture {
+	t.Helper()
 	db := sqlitetest.New(t, migrations.BaselineSQL+domainrecords.MigrationSQL+atproto.MigrationSQL+providerhub.MigrationSQL+MigrationSQL+`CREATE TABLE account_atproto_identities(did TEXT PRIMARY KEY,account_id TEXT);CREATE TABLE private_switch(id TEXT PRIMARY KEY,value INTEGER NOT NULL);CREATE TABLE mcp_catalog_revisions(project_id TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0);`)
 	statements := []turso.Statement{
 		{SQL: `INSERT INTO accounts(id,github_id,login) VALUES('account',1,'owner'),('other',2,'other')`},
@@ -91,11 +96,16 @@ func fixtureSQL(t *testing.T, compiled bool) *sqlFixture {
 	}
 	pds := &memoryPDS{records: map[string]atproto.Record{}}
 	engine := domainrecords.Engine{DB: db, Records: pds, Publisher: atproto.Publisher{Records: pds, Journal: atproto.SQLJournal{DB: db}}, WorkLimit: 100}
-	review, err := engine.Inventory(context.Background(), "account", testOwner, "project")
+	if !telemetry {
+		if _, err := db.Execute(context.Background(), turso.Statement{SQL: `INSERT INTO request_logs(id,project_id,method,status) VALUES('private-log','project','tools/list','success')`}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	review, err := engine.PublicationReview(context.Background(), "account", testOwner, "project", telemetry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = engine.Publish(context.Background(), "account", review, domainrecords.Consent{ReviewDigest: review.Digest, Public: true, Telemetry: true}); err != nil {
+	if _, err = engine.Publish(context.Background(), "account", review, domainrecords.Consent{ReviewDigest: review.Digest, Public: true, Telemetry: telemetry}); err != nil {
 		t.Fatal(err)
 	}
 	service := &Service{DB: db}
@@ -456,5 +466,30 @@ func TestNativeUnchangedPublicStateCompletesPrivateAndNoopCommands(t *testing.T)
 				t.Fatal("private credential update lost")
 			}
 		})
+	}
+}
+
+func TestNativeUpdateAfterMetadataOnlyPublicationPreservesPrivateTelemetry(t *testing.T) {
+	f := fixtureSQLTelemetry(t, false, false)
+	ctx := f.ctx(t)
+	sc := ctx.Value(scopeKey{}).(scope)
+	sc.telemetry = false
+	ctx = context.WithValue(ctx, scopeKey{}, sc)
+	if _, err := f.bridge.Execute(ctx, turso.Statement{SQL: "UPDATE projects SET name='Metadata only update' WHERE id='project'"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.value(t, "SELECT name FROM projects WHERE id='project'"); got != "Metadata only update" {
+		t.Fatalf("name=%s", got)
+	}
+	if got := f.value(t, "SELECT COUNT(*) FROM request_logs WHERE id='private-log'"); got != "1" {
+		t.Fatalf("private history count=%s", got)
+	}
+	if _, err := f.engine.Verify(context.Background(), "account", testOwner, "project"); err != nil {
+		t.Fatal(err)
+	}
+	for uri := range f.pds.records {
+		if strings.Contains(uri, ".requestLog/") {
+			t.Fatalf("private log published: %s", uri)
+		}
 	}
 }

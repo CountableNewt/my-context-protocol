@@ -195,6 +195,12 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 		switch r.Method {
 		case "GET":
 			rows, e := s.query(r.Context(), projectSelect+" WHERE p.account_id=? ORDER BY p.created_at ASC,p.id ASC", account.ID)
+			if e != nil {
+				return nil, 0, e
+			}
+			if err := s.addPublicationCompletions(r.Context(), account.ID, rows); err != nil {
+				return nil, 0, err
+			}
 			out := []row{}
 			for _, p := range rows {
 				out = append(out, s.projectResponseWithOwner(p, handles))
@@ -232,6 +238,11 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 		}
 		if project == nil {
 			return nil, 0, missing("Project not found")
+		}
+	}
+	if len(parts) == 2 || len(parts) == 3 && parts[2] == "set-active" {
+		if err := s.addPublicationCompletion(r.Context(), account.ID, pid, project); err != nil {
+			return nil, 0, err
 		}
 	}
 	if len(parts) == 2 {
@@ -293,6 +304,9 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 				return nil, 0, missing("No repository connection")
 			}
 			if v != nil {
+				if err := s.addPublicationCompletion(r.Context(), account.ID, pid, v); err != nil {
+					return nil, 0, err
+				}
 				v["github_installation_configured"] = boolean(v["github_installation_configured"])
 				if str(v["provider"]) == "tangled" {
 					if handle := handles.get(str(v["repo_owner"])); handle != "" {

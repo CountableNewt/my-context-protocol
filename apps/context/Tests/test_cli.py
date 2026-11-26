@@ -398,6 +398,7 @@ class CLITests(unittest.TestCase):
             for command, method, path, data in [
                 ("review", "GET", "/api/projects/project/atproto/publication", None),
                 ("publish", "POST", "/api/projects/project/atproto/publication", '{"review_digest":"reviewed","public":true,"telemetry":false}'),
+                ("verify", "POST", "/api/projects/project/atproto/verify", None),
                 ("reconcile", "POST", "/api/projects/project/atproto/reconcile", None),
                 ("conflict", "GET", "/api/projects/project/atproto/conflict", None),
                 ("discard", "POST", "/api/projects/project/atproto/conflict", '{"intent_id":"reviewed-intent","expected_current_cid":"current","action":"discard"}'),

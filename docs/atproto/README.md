@@ -1,6 +1,6 @@
 # ATProto and Tangled integration
 
-The dashboard and Swift CLI support ATProto OAuth alongside GitHub. Accounts use
+The dashboard and Go CLI support ATProto OAuth alongside GitHub. Accounts use
 DIDs as identity; linking proves the existing session and a fresh ATProto grant.
 Handles and PDS locations are resolved again when sessions are used. Existing
 projects retain legacy storage until their owner explicitly reviews and publishes
@@ -44,13 +44,13 @@ capabilities; adopting Spaces requires its own capability review and migration.
 
 ## XRPC and schemas
 
-`lexicons/operations.json` inventories **61** product and administrative operations,
+`lexicons/operations.json` inventories **62** product and administrative operations,
 their owning services, authorization and native protocol exceptions. Every operation
 has a typed query/procedure, generated TypeScript bindings and a service invoker.
 REST and XRPC invoke the same application operations. Admin contracts retain admin
 checks; project operations retain ownership checks even for administrators.
 
-The **96** checked-in schemas include shared views, record families and capability
+The **97** checked-in schemas include shared views, record families and capability
 permission sets. Permission sets inherit the selected deployment audience, stay
 within their namespace group and separate administrator operations. They do not
 grant account privileges merely by being published. Until public resolution is
@@ -97,6 +97,31 @@ After an explicitly linked authority grant, run `cmd/lexicon --publish --account
 schema directory. Only independently verified public receipts justify changing
 operation publication status. `scripts/check-lexicons.py --require-complete` is
 the rollout gate; it intentionally fails while public publication is pending.
+
+## Verify published records
+
+In a project, open **Repo → ATProto records → Verify records**. The check reads
+its published manifest, every referenced shard and metadata record, validates
+identity/content/CIDs, and compares the reconstructed metadata with the current
+project. Results include checked counts by collection and the first failing
+record URI/CID. Collections unused by that project are not treated as missing.
+
+Verification never publishes records or reconciles project state. An unpublished
+project reports `not_published`; missing records, invalid records, local drift,
+PDS unavailability and interrupted checks have distinct statuses. Only
+`verified` means the complete check passed. The request is bounded to 55 seconds;
+an interrupted check reports `incomplete`, never success, and does not retain a
+partial verification checkpoint. Verification remains available from the error
+view when a canonical audit blocks normal project reads.
+
+```sh
+myctx publication verify --project PROJECT_ID --timeout 60s
+```
+
+Native XRPC clients use `dev.mycontextprotocol.publication.verifyProject` and need
+the corresponding method permission; its declaration is included in the generated
+publication capability bundle. Existing cookie-based CLI sessions use the REST
+compatibility route.
 
 ## Explicit migration and recovery
 

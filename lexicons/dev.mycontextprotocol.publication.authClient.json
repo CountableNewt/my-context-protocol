@@ -15,6 +15,7 @@
             "dev.mycontextprotocol.publication.getReview",
             "dev.mycontextprotocol.publication.publishReview",
             "dev.mycontextprotocol.publication.reconcileProject",
+            "dev.mycontextprotocol.publication.verifyProject",
             "dev.mycontextprotocol.publication.getConflict",
             "dev.mycontextprotocol.publication.resolveConflict"
           ]

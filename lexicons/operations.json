@@ -643,6 +643,17 @@
     },
     {
       "service": "control",
+      "method": "POST",
+      "path": "/projects/{project_id}/atproto/verify",
+      "nsid": "dev.mycontextprotocol.publication.verifyProject",
+      "source": "services/go/control/service.go",
+      "authorization": "account",
+      "contract": "draft",
+      "runtime": "implemented",
+      "publication": "pending"
+    },
+    {
+      "service": "control",
       "method": "GET",
       "path": "/repositories/tangled",
       "nsid": "dev.mycontextprotocol.repository.listTangledRepositories",

@@ -254,7 +254,7 @@ func (e Engine) Publish(ctx context.Context, account string, review Review, cons
 	if !consent.Public || consent.ReviewDigest != review.Digest || review.HasTelemetry && !consent.Telemetry {
 		return atproto.Reference{}, ErrConsent
 	}
-	current, err := e.Inventory(ctx, account, review.OwnerDID, review.ProjectID)
+	current, err := e.PublicationReview(ctx, account, review.OwnerDID, review.ProjectID, consent.Telemetry)
 	if err != nil {
 		return atproto.Reference{}, err
 	}
@@ -275,7 +275,7 @@ func (e Engine) Publish(ctx context.Context, account string, review Review, cons
 		return prior, nil
 	}
 	return e.publish(ctx, account, current, consent, prior, func() error {
-		latest, err := e.Inventory(ctx, account, review.OwnerDID, review.ProjectID)
+		latest, err := e.PublicationReview(ctx, account, review.OwnerDID, review.ProjectID, consent.Telemetry)
 		if err != nil {
 			return err
 		}
@@ -543,7 +543,7 @@ func (e Engine) Update(ctx context.Context, account, owner, project string, chan
 		if local.CID != e.ExpectedPriorCID {
 			return atproto.Reference{}, atproto.ErrConflict
 		}
-		base, err := e.Inventory(ctx, account, owner, project)
+		base, err := e.PublicationReview(ctx, account, owner, project, consent.Telemetry)
 		if err != nil {
 			return atproto.Reference{}, err
 		}
@@ -583,7 +583,7 @@ func (e Engine) Update(ctx context.Context, account, owner, project string, chan
 		if err = e.finishActivation(ctx, account, project, prior); err != nil {
 			return atproto.Reference{}, err
 		}
-		review, err = e.Inventory(ctx, account, owner, project)
+		review, err = e.PublicationReview(ctx, account, owner, project, consent.Telemetry)
 		if err == nil && review.Digest != remote.Digest {
 			err = errors.New("local canonical projection drift requires explicit reconcile")
 		}

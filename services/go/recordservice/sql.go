@@ -232,7 +232,7 @@ func (d *SQLProjection) Batch(ctx context.Context, statements []turso.Statement)
 		}
 	}
 	preview := domainrecords.Engine{DB: d.Raw}
-	base, err := preview.Inventory(ctx, sc.account, sc.owner, sc.project)
+	base, err := preview.PublicationReview(ctx, sc.account, sc.owner, sc.project, sc.telemetry)
 	if err != nil {
 		return nil, err
 	}

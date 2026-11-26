@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api";
+import { fetchProject } from "@/lib/projects-api";
 import { ProjectDetailPageClient } from "./project-detail-page-client";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
@@ -45,6 +47,27 @@ it("mounts the repository picker on an installation callback without a tab or pe
     expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("Repo");
   }
   finally {
+    await act(async () => root.unmount());
+    host.remove();
+    client.clear();
+  }
+});
+
+it("keeps record verification available when a canonical audit blocks normal project reads", async () => {
+  vi.mocked(fetchProject).mockRejectedValueOnce(new ApiError("Unavailable", 503, { reason: "Canonical records are missing or invalid" }));
+  window.history.replaceState({}, "", "/projects/project-broken");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}><ProjectDetailPageClient projectId="project-broken" /></QueryClientProvider>));
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+      expect(host.textContent).toContain("Failed to load project.");
+      expect([...host.querySelectorAll("button")].some((button) => button.textContent === "Verify records")).toBe(true);
+    });
+  } finally {
     await act(async () => root.unmount());
     host.remove();
     client.clear();

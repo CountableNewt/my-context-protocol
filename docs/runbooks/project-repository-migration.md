@@ -42,3 +42,20 @@ Finish running syncs and pending sync publication before migrating.
 
 Changing repository providers does not authorize new public ATProto publication;
 publication consent continues through the separate ATProto records review flow.
+
+## Finish ATProto record publication
+
+Connecting Tangled completes the repository step. For a project that has not
+published its MCP records, the dashboard opens the publication review and keeps
+**Finish ATProto migration** visible until publication completes. Already-switched
+projects can use **Review and publish project records** to finish this step.
+
+Review the record values, then explicitly authorize public publication. Telemetry
+is excluded by default: this disables runtime telemetry in the published settings
+and retains existing telemetry history privately. Including telemetry requires a
+new review and separate telemetry consent.
+
+After publication, the dashboard verifies records against the owner's PDS and
+only reports migration complete when verification passes. **Verify records** can
+be run again without publishing or repairing anything. A stored publication receipt
+indicates prior publication; it does not replace a current verification result.
