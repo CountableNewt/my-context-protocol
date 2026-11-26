@@ -1,0 +1,128 @@
+.landing {
+  min-height: 100svh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+}
+
+.container {
+  width: min(100% - 96px, 1180px);
+  margin-inline: auto;
+}
+
+.header {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wordmark { font-size: 17px; letter-spacing: -.04em; }
+.navigation { display: flex; align-items: center; gap: 32px; font-size: 14px; }
+.signIn { padding: 10px 18px; border-radius: 10px; }
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.08fr 1fr;
+  align-items: center;
+  gap: 64px;
+  min-height: 560px;
+  padding-block: 100px 88px;
+}
+
+.introduction h1 {
+  font-size: clamp(36px, 4.2vw, 58px);
+  line-height: 1.16;
+  font-weight: 400;
+  letter-spacing: -.065em;
+  margin: 0 0 28px;
+}
+
+.introduction h1 span { color: var(--muted-foreground); }
+.introduction > p { max-width: 510px; font-size: 16px; line-height: 1.8; color: var(--muted-foreground); }
+.introduction code { color: var(--foreground); }
+
+.getStarted {
+  display: inline-flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 46px;
+  margin-top: 28px;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 15px;
+  font-weight: 500;
+  transition: opacity .15s;
+}
+
+.getStarted:hover { opacity: .82; }
+.preview { position: relative; isolation: isolate; min-width: 0; }
+.preview::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -24px 35px;
+  border-radius: 50%;
+  background: var(--foreground);
+  opacity: .12;
+  filter: blur(50px);
+  pointer-events: none;
+}
+
+.skill { margin: 0; border-radius: 16px; overflow: hidden; }
+.preview .skill {
+  border-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+  background: color-mix(in oklab, var(--background) 65%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--foreground) 12%, transparent), 0 16px 48px #0000000a;
+}
+.skill figcaption { padding: 20px 26px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.skill pre { padding: 28px 26px; margin: 0; font: inherit; font-size: 16px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.skill > p { border-top: 1px solid var(--border); margin: 0; padding: 16px 26px; font-size: 12px; line-height: 1.7; color: var(--muted-foreground); }
+
+.workflow { display: grid; grid-template-columns: 1fr 2fr; gap: 40px; padding-block: 48px 56px; border-top: 1px solid var(--border); }
+.workflow h2 { font-size: 14px; font-weight: 400; color: var(--muted-foreground); padding-top: 4px; }
+.workflowHeadline { font-size: clamp(18px, 2vw, 24px); line-height: 1.5; letter-spacing: -.045em; }
+.workflowDescription { margin-top: 14px; font-size: 14px; line-height: 1.9; color: var(--muted-foreground); }
+.footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 28px 36px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
+.footer a { display: inline-flex; align-items: center; gap: 10px; text-underline-offset: 5px; text-decoration: underline; }
+.navigation a:hover, .footer a:hover { color: var(--foreground); }
+.landing a:focus-visible { outline: 2px solid var(--foreground); outline-offset: 5px; }
+
+@media (max-width: 1000px) {
+  .container { width: calc(100% - 64px); }
+  .hero { gap: 32px; padding-block: 80px; }
+  .introduction h1 { font-size: clamp(32px, 4.4vw, 44px); }
+  .introduction > p { font-size: 14px; }
+  .skill figcaption, .skill pre { padding-inline: 20px; font-size: 12px; }
+  .skill > p { padding-inline: 20px; font-size: 11px; }
+}
+
+@media (max-width: 700px) {
+  .container { width: calc(100% - 40px); }
+  .header { min-height: 80px; gap: 16px; }
+  .wordmark { font-size: 13px; }
+  .navigation { gap: 16px; font-size: 12px; }
+  .signIn { padding: 8px 12px; }
+  .hero { grid-template-columns: 1fr; gap: 52px; padding-block: 64px 52px; }
+  .introduction h1 { font-size: clamp(32px, 7.3vw, 48px); }
+  .introduction > p { max-width: 490px; }
+  .skill figcaption, .skill pre { font-size: 13px; }
+  .workflow { grid-template-columns: 1fr; gap: 18px; padding-block: 32px; }
+  .workflowDescription { font-size: 13px; }
+  .footer { align-items: flex-start; flex-direction: column; gap: 16px; }
+}
+
+@media (max-width: 360px) {
+  .container { width: calc(100% - 32px); }
+  .navigation { gap: 12px; }
+  .navigation > a:first-child { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .getStarted { transition: none; }
+}
