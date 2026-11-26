@@ -1,10 +1,14 @@
 import { Badge } from "@/components/ui/badge";
-import type { Project } from "@/lib/types";
+import type { Project, RepoConnection } from "@/lib/types";
 
 export function repositoryProviderLabel(provider: string) {
   if (provider === "github") return "GitHub";
   if (provider === "tangled") return "ATProto · Tangled";
   return provider;
+}
+
+export function repositoryOwnerLabel(connection: Pick<RepoConnection, "provider" | "repo_owner" | "owner_handle">) {
+  return connection.provider === "tangled" ? connection.owner_handle || connection.repo_owner : connection.repo_owner;
 }
 
 export function ProjectConnectionSummary({ project }: { project: Project }) {
@@ -18,7 +22,7 @@ export function ProjectConnectionSummary({ project }: { project: Project }) {
   return (
     <div className="min-w-0 space-y-1.5 text-sm" aria-label="Repository connection">
       <Badge variant="outline">{repositoryProviderLabel(connection.provider)}</Badge>
-      <p className="break-all font-medium">{connection.repo_owner}/{connection.repo_name}</p>
+      <p className="break-all font-medium">{repositoryOwnerLabel(connection)}/{connection.repo_name}</p>
       <p className="text-muted-foreground break-all">Branch: {connection.default_branch}</p>
     </div>
   );

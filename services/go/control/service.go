@@ -37,7 +37,8 @@ type DomainProvider interface {
 	Verify(context.Context, string) (map[string]any, error)
 }
 type Config struct {
-	ListTangledRepositories func(context.Context, string) (map[string]any, error)
+	ResolveOwnerHandle      func(context.Context, string) (string, error)
+	ListTangledRepositories func(context.Context, string, string) (map[string]any, error)
 	Records                 CanonicalRecords
 	// XRPCVerifier explicitly enables verified API authorization; nil keeps XRPC disabled.
 	XRPCVerifier          xrpc.Verifier
@@ -162,6 +163,8 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(value)
 }
 func (s *Service) serve(r *http.Request) (any, int, error) {
+	handles := &ownerHandleLookup{ctx: r.Context(), lookup: s.cfg.ResolveOwnerHandle, values: map[string]string{}}
+	defer handles.close()
 	account, err := s.account(r)
 	if err != nil {
 		return nil, 0, err
@@ -173,7 +176,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) == 2 && parts[0] == "repositories" && parts[1] == "tangled" && r.Method == "GET" && s.cfg.ListTangledRepositories != nil {
-		value, e := s.cfg.ListTangledRepositories(r.Context(), account.ID)
+		value, e := s.cfg.ListTangledRepositories(r.Context(), account.ID, r.URL.Query().Get("cursor"))
 		return value, 200, e
 	}
 	if parts[0] == "admin" {
@@ -194,7 +197,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 			rows, e := s.query(r.Context(), projectSelect+" WHERE p.account_id=? ORDER BY p.created_at ASC,p.id ASC", account.ID)
 			out := []row{}
 			for _, p := range rows {
-				out = append(out, s.projectResponse(p))
+				out = append(out, s.projectResponseWithOwner(p, handles))
 			}
 			return out, 200, e
 		case "POST":
@@ -233,7 +236,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 	}
 	if len(parts) == 2 {
 		if r.Method == "GET" {
-			return s.projectResponse(project), 200, nil
+			return s.projectResponseWithOwner(project, handles), 200, nil
 		}
 		if r.Method == "PATCH" {
 			var body struct {
@@ -248,7 +251,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 			}
 			_, e := s.exec(r.Context(), "UPDATE projects SET name=? WHERE id=? AND account_id=?", name, pid, account.ID)
 			project["name"] = name
-			return s.projectResponse(project), 200, e
+			return s.projectResponseWithOwner(project, handles), 200, e
 		}
 		return nil, 0, missing("Not found")
 	}
@@ -264,7 +267,7 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 				args = append(args, pid)
 			}
 			_, e := s.exec(r.Context(), query, args...)
-			return s.projectResponse(project), 200, e
+			return s.projectResponseWithOwner(project, handles), 200, e
 		}
 	case "api-keys":
 		return s.keys(r, project, parts[3:])
@@ -291,6 +294,11 @@ func (s *Service) serve(r *http.Request) (any, int, error) {
 			}
 			if v != nil {
 				v["github_installation_configured"] = boolean(v["github_installation_configured"])
+				if str(v["provider"]) == "tangled" {
+					if handle := handles.get(str(v["repo_owner"])); handle != "" {
+						v["owner_handle"] = handle
+					}
+				}
 				if v["provider"] == "tangled" && s.cfg.ListTangledRepositories != nil {
 					binding, e := s.one(r.Context(), "SELECT b.repository_did,b.owner_did,b.is_private FROM atproto_repo_bindings b JOIN repo_connections r ON r.id=b.connection_id WHERE r.project_id=?", pid)
 					if e != nil {

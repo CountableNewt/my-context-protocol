@@ -30,7 +30,11 @@
       ],
       "parameters": {
         "type": "params",
-        "properties": {}
+        "properties": {
+          "cursor": {
+            "type": "string"
+          }
+        }
       },
       "output": {
         "encoding": "application/json",
@@ -49,6 +53,9 @@
                     "type": "string"
                   },
                   "owner_did": {
+                    "type": "string"
+                  },
+                  "owner_handle": {
                     "type": "string"
                   },
                   "name": {

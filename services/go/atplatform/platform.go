@@ -111,7 +111,7 @@ func (p *Platform) Repositories(connect func(context.Context, string, string, ma
 	if p.Tangled != nil {
 		client = *p.Tangled
 	}
-	return providerhub.New(providerhub.Config{DB: p.DB, Tangled: client, GitHubConnect: connect, GitHubWriteback: writeback, Sync: sync, Identity: func(ctx context.Context, account string) (string, error) {
+	return providerhub.New(providerhub.Config{DB: p.DB, ResolveOwnerHandle: p.Accounts.ResolveHandle, Tangled: client, GitHubConnect: connect, GitHubWriteback: writeback, Sync: sync, Identity: func(ctx context.Context, account string) (string, error) {
 		linked, err := p.Accounts.Identities.ATProtoIdentity(ctx, account)
 		if err != nil {
 			return "", err

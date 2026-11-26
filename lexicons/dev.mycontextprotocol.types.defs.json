@@ -565,6 +565,9 @@
         "owner_did": {
           "type": "string"
         },
+        "owner_handle": {
+          "type": "string"
+        },
         "knot_url": {
           "type": "string"
         },

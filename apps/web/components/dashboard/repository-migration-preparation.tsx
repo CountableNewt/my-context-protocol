@@ -5,15 +5,16 @@ import type { RepositoryMigrationSource } from "@/lib/projects-api";
 import { Button } from "@/components/ui/button";
 import { repositoryProviderLabel } from "./project-connection-summary";
 
-export function RepositoryMigrationPreparation({ source, confirmed, onConfirmedChange }: {
+export function RepositoryMigrationPreparation({ source, sourceHandle, confirmed, onConfirmedChange }: {
   source: RepositoryMigrationSource;
+  sourceHandle?: string;
   confirmed: boolean;
   onConfirmedChange: (confirmed: boolean) => void;
 }) {
   const [mode, setMode] = useState<"existing" | "copy">("existing");
   const toTangled = source.provider === "github";
   return <div className="mb-6 space-y-4 rounded-md border p-4">
-    <p className="break-all text-sm">From {repositoryProviderLabel(source.provider)}: <strong>{source.repo_owner}/{source.repo_name}</strong> ({source.default_branch})</p>
+    <p className="break-all text-sm">From {repositoryProviderLabel(source.provider)}: <strong>{sourceHandle || source.repo_owner}/{source.repo_name}</strong> ({source.default_branch})</p>
     <div className="flex flex-wrap gap-2" role="group" aria-label="Migration method">
       <Button type="button" variant={mode === "existing" ? "default" : "outline"} aria-pressed={mode === "existing"} onClick={() => { setMode("existing"); onConfirmedChange(false); }}>Use existing repository</Button>
       <Button type="button" variant={mode === "copy" ? "default" : "outline"} aria-pressed={mode === "copy"} onClick={() => { setMode("copy"); onConfirmedChange(false); }}>Create and copy repository</Button>

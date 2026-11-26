@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api";
 
-export interface TangledRepository { repository_did: string; owner_did: string; name: string; default_branch: string; uri: string; cid: string }
+export interface TangledRepository { repository_did: string; owner_did: string; owner_handle?: string; name: string; default_branch: string; uri: string; cid: string }
 export interface TangledRepositories { provider: "tangled"; repositories: TangledRepository[]; cursor?: string; private_repository_selection: string }
 export function fetchTangledRepositories(cursor?: string) {
   return apiFetch<TangledRepositories>(`/repositories/tangled${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);

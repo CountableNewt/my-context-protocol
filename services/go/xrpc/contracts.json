@@ -567,6 +567,9 @@
             "owner_did": {
               "type": "string"
             },
+            "owner_handle": {
+              "type": "string"
+            },
             "knot_url": {
               "type": "string"
             },
@@ -5872,7 +5875,11 @@
           ],
           "parameters": {
             "type": "params",
-            "properties": {}
+            "properties": {
+              "cursor": {
+                "type": "string"
+              }
+            }
           },
           "output": {
             "encoding": "application/json",
@@ -5891,6 +5898,9 @@
                         "type": "string"
                       },
                       "owner_did": {
+                        "type": "string"
+                      },
+                      "owner_handle": {
                         "type": "string"
                       },
                       "name": {
@@ -8657,7 +8667,11 @@
       "envelope": "",
       "input": {
         "type": "params",
-        "properties": {}
+        "properties": {
+          "cursor": {
+            "type": "string"
+          }
+        }
       },
       "output": {
         "type": "object",
@@ -8674,6 +8688,9 @@
                   "type": "string"
                 },
                 "owner_did": {
+                  "type": "string"
+                },
+                "owner_handle": {
                   "type": "string"
                 },
                 "name": {

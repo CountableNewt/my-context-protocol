@@ -80,6 +80,7 @@ func decodeResponse(resp *http.Response, method string, out any) error {
 }
 
 type RepositoryView struct {
+	OwnerHandle   string `json:"owner_handle,omitempty"`
 	RepositoryDID string `json:"repository_did"`
 	OwnerDID      string `json:"owner_did"`
 	Name          string `json:"name"`
@@ -163,7 +164,7 @@ func manifestView(value manifestResponse, owner, name string) (RepositoryView, e
 	if _, err = syntax.ParseCID(value.CID); err != nil {
 		return RepositoryView{}, ErrInvalidRepository
 	}
-	return RepositoryView{did.String(), owner, value.Value.Declaration.Name, value.Git.DefaultBranch, value.URI, value.CID}, nil
+	return RepositoryView{RepositoryDID: did.String(), OwnerDID: owner, Name: value.Value.Declaration.Name, DefaultBranch: value.Git.DefaultBranch, URI: value.URI, CID: value.CID}, nil
 }
 
 // LookupRepository performs authenticated discovery. The manifest identifies

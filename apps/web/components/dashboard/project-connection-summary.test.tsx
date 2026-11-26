@@ -18,4 +18,12 @@ describe("ProjectConnectionSummary", () => {
     expect(renderToStaticMarkup(<ProjectConnectionSummary project={{ ...project, repo_connection: null }} />)).toContain("No repository connected");
     expect(renderToStaticMarkup(<ProjectConnectionSummary project={project} />)).toContain("Repository connection unavailable");
   });
+  it("uses the Tangled handle for display without changing the source owner DID", () => {
+    const connection = { provider: "tangled", repo_owner: "did:plc:owner", owner_handle: "samclemente.me", repo_name: "skills", default_branch: "main" };
+    const markup = renderToStaticMarkup(<ProjectConnectionSummary project={{ ...project, repo_connection: connection }} />);
+    expect(markup).toContain("samclemente.me/skills");
+    expect(markup).not.toContain("did:plc:owner");
+    expect(connection.repo_owner).toBe("did:plc:owner");
+  });
+
 });

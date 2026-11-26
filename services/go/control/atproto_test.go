@@ -46,13 +46,18 @@ func (f *recordController) ResolveConflict(_ context.Context, a, p, i, c, action
 func TestTangledRepositoryDiscoveryUsesAuthenticatedAccount(t *testing.T) {
 	s, _ := fixture(t)
 	accounts := []string{}
-	s.cfg.ListTangledRepositories = func(_ context.Context, account string) (map[string]any, error) {
+	cursors := []string{}
+	s.cfg.ListTangledRepositories = func(_ context.Context, account, cursor string) (map[string]any, error) {
 		accounts = append(accounts, account)
+		cursors = append(cursors, cursor)
 		return map[string]any{"provider": "tangled", "repositories": []any{}}, nil
 	}
 	expectStatus(t, call(t, s, "GET", "/repositories/tangled", "", "", ""), 401)
 	expectStatus(t, call(t, s, "GET", "/repositories/tangled?account_id="+ownerID, otherCookie, "", ""), 200)
-	expectStatus(t, call(t, s, "GET", "/repositories/tangled", ownerCookie, "", ""), 200)
+	expectStatus(t, call(t, s, "GET", "/repositories/tangled?cursor=next-page", ownerCookie, "", ""), 200)
+	if len(cursors) != 2 || cursors[1] != "next-page" {
+		t.Fatal("repository cursor not forwarded", cursors)
+	}
 	if len(accounts) != 2 || accounts[0] != otherID || accounts[1] != ownerID {
 		t.Fatal("request supplied account overrode authenticated identity", accounts)
 	}

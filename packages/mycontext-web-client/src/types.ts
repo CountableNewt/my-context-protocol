@@ -8,7 +8,7 @@ export interface Project {
   subdomain: string;
   created_at: string;
   /** Repository used to sync this project's skills; null when disconnected. */
-  repo_connection?: Pick<RepoConnection, "provider" | "repo_owner" | "repo_name" | "default_branch"> | null;
+  repo_connection?: Pick<RepoConnection, "provider" | "repo_owner" | "repo_name" | "default_branch" | "owner_handle"> | null;
   custom_domain?: string | null;
   custom_domain_verified_at?: string | null;
   /** Release currently serving MCP traffic. */
@@ -22,6 +22,8 @@ export interface Project {
 }
 
 export interface RepoConnection {
+  /** Verified current Tangled owner handle, for display only. */
+  owner_handle?: string;
   repository_did?: string;
   owner_did?: string;
   is_private?: boolean;
